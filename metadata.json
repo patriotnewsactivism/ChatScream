@@ -1,0 +1,9 @@
+{
+  "name": "StreamHub Pro",
+  "description": "A browser-based multi-streaming studio allowing users to broadcast to multiple destinations simultaneously with advanced layout and media controls.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
