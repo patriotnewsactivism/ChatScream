@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Destination, Platform } from '../types';
-import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info } from 'lucide-react';
+import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff } from 'lucide-react';
 
 interface DestinationManagerProps {
   destinations: Destination[];
@@ -21,6 +21,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);
   const [newName, setNewName] = useState('');
   const [newKey, setNewKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
 
   const handleAdd = () => {
     if (!newName || !newKey) return;
@@ -75,7 +76,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             <select 
               value={newPlatform} 
               onChange={(e) => setNewPlatform(e.target.value as Platform)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white"
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
             >
               {Object.values(Platform).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
@@ -84,18 +85,27 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               placeholder="Account Name (e.g. Personal YT)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white"
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
             />
-            <input 
-              type="password" 
-              placeholder="Stream Key"
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white"
-            />
+            <div className="relative">
+                <input 
+                type={showKey ? "text" : "password"}
+                placeholder="Stream Key"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white pr-8 focus:border-brand-500 outline-none"
+                />
+                <button 
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-2 top-2 text-gray-400 hover:text-white"
+                >
+                    {showKey ? <EyeOff size={14}/> : <Eye size={14}/>}
+                </button>
+            </div>
+            
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowAddForm(false)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
-              <button onClick={handleAdd} className="text-xs bg-brand-600 px-3 py-1 rounded text-white">Save</button>
+              <button onClick={handleAdd} className="text-xs bg-brand-600 px-3 py-1 rounded text-white hover:bg-brand-500">Save</button>
             </div>
           </div>
         )}
@@ -106,20 +116,21 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
         {destinations.map(dest => (
           <div key={dest.id} className="flex items-center justify-between bg-dark-900 p-3 rounded border border-gray-800 hover:border-gray-600 transition-colors">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               {getIcon(dest.platform)}
-              <div>
-                <div className="text-sm font-medium">{dest.name}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate" title={dest.name}>{dest.name}</div>
                 <div className="text-xs text-gray-500 flex items-center gap-1">
                   {dest.status === 'live' ? (
                     <span className="text-red-500 font-bold animate-pulse">● LIVE</span>
                   ) : (
                     <span className="capitalize">{dest.status}</span>
                   )}
+                  {isStreaming && dest.status === 'connecting' && <span className="animate-spin ml-1">⟳</span>}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button 
                 onClick={() => onToggleDestination(dest.id)}
                 disabled={isStreaming} // Cannot toggle during stream
