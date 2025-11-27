@@ -52,3 +52,21 @@ export interface AppState {
   isRecording: boolean;
   streamDuration: number;
 }
+
+export interface Scene {
+  id: string;
+  name: string;
+  createdAt: number;
+  layout: LayoutMode;
+  branding: BrandingSettings;
+  activeBackgroundId: string | null;
+  activeBackgroundUrl: string | null;
+  // Audio settings
+  micVolume: number;
+  musicVolume: number;
+  videoVolume: number;
+  // Active media IDs
+  activeImageId: string | null;
+  activeVideoId: string | null;
+  activeAudioId: string | null;
+}

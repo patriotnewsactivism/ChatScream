@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Destination, 
-  LayoutMode, 
-  Platform, 
+import {
+  Destination,
+  LayoutMode,
+  Platform,
   AppState,
   MediaAsset,
   MediaType,
-  BrandingSettings
+  BrandingSettings,
+  Scene
 } from './types';
 import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
 import DestinationManager from './components/DestinationManager';
@@ -15,21 +16,28 @@ import MediaBin from './components/MediaBin';
 import AudioMixer from './components/AudioMixer';
 import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundSelector';
 import BrandingPanel from './components/BrandingPanel';
+import SceneManager from './components/SceneManager';
 import { generateStreamMetadata } from './services/geminiService';
-import { 
-  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles, 
-  Play, Square, AlertCircle, Camera, Sliders, ArrowRight, 
-  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown
+import {
+  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles,
+  Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
+  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, Pause
 } from 'lucide-react';
 
 type MobilePanel = 'none' | 'media' | 'graphics' | 'destinations' | 'mixer';
 
 const App = () => {
   // --- State ---
-  const [destinations, setDestinations] = useState<Destination[]>([
-    { id: '1', platform: Platform.YOUTUBE, name: 'Main Channel', streamKey: '****', isEnabled: true, status: 'offline' },
-    { id: '2', platform: Platform.FACEBOOK, name: 'Personal FB', streamKey: '****', isEnabled: false, status: 'offline' }
-  ]);
+  const [destinations, setDestinations] = useState<Destination[]>(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_destinations');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      { id: '1', platform: Platform.YOUTUBE, name: 'Main Channel', streamKey: '****', isEnabled: true, status: 'offline' },
+      { id: '2', platform: Platform.FACEBOOK, name: 'Personal FB', streamKey: '****', isEnabled: false, status: 'offline' }
+    ];
+  });
   
   const [layout, setLayout] = useState<LayoutMode>(LayoutMode.FULL_CAM);
   const [appState, setAppState] = useState<AppState>({
@@ -46,10 +54,38 @@ const App = () => {
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   // Audio Mixer State
-  const [micVolume, setMicVolume] = useState(1.0);
-  const [musicVolume, setMusicVolume] = useState(0.3);
-  const [videoVolume, setVideoVolume] = useState(0.8);
+  const [micVolume, setMicVolume] = useState(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_volumes');
+      if (saved) return JSON.parse(saved).micVolume ?? 1.0;
+    } catch {}
+    return 1.0;
+  });
+  const [musicVolume, setMusicVolume] = useState(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_volumes');
+      if (saved) return JSON.parse(saved).musicVolume ?? 0.3;
+    } catch {}
+    return 0.3;
+  });
+  const [videoVolume, setVideoVolume] = useState(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_volumes');
+      if (saved) return JSON.parse(saved).videoVolume ?? 0.8;
+    } catch {}
+    return 0.8;
+  });
   const [showMixerDesktop, setShowMixerDesktop] = useState(false);
+
+  // Recording Quality
+  const [recordingQuality, setRecordingQuality] = useState<'low' | 'medium' | 'high' | 'ultra'>(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_recordingQuality');
+      if (saved) return saved as any;
+    } catch {}
+    return 'high';
+  });
+  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
   // Media Bin Assets
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
@@ -60,14 +96,20 @@ const App = () => {
   // Backgrounds & Branding
   const [activeBackgroundId, setActiveBackgroundId] = useState<string | null>(null);
   const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(null);
-  const [branding, setBranding] = useState<BrandingSettings>({
+  const [branding, setBranding] = useState<BrandingSettings>(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_branding');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
       showLowerThird: true,
       showTicker: true,
-      primaryColor: '#0284c7', // Brand 600
-      accentColor: '#ef4444', // Red 500
+      primaryColor: '#0284c7',
+      accentColor: '#ef4444',
       presenterName: 'Alex Streamer',
       presenterTitle: 'Live Host',
       tickerText: 'Welcome to the live stream! Don\'t forget to like and subscribe for more content.'
+    };
   });
 
   // UI State
@@ -81,14 +123,38 @@ const App = () => {
   const [generatedInfo, setGeneratedInfo] = useState<{title: string, description: string} | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Scene Management
+  const [scenes, setScenes] = useState<Scene[]>(() => {
+    try {
+      const saved = localStorage.getItem('streamhub_scenes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [currentSceneId, setCurrentSceneId] = useState<string | null>(null);
+
   const canvasRef = useRef<CanvasRef>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(new Audio());
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
   
-  // Audio Mixer Refs (Web Audio API)
+  // Audio Mixer Refs (Web Audio API) - Persistent for real-time mixing
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
+  const musicGainRef = useRef<GainNode | null>(null);
+  const videoGainRef = useRef<GainNode | null>(null);
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const musicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const videoSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+
+  // Audio level monitoring
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const musicAnalyserRef = useRef<AnalyserNode | null>(null);
+  const videoAnalyserRef = useRef<AnalyserNode | null>(null);
+  const [audioLevels, setAudioLevels] = useState({ mic: 0, music: 0, video: 0 });
+  const audioLevelInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // --- Effects ---
 
@@ -120,6 +186,152 @@ const App = () => {
       }
   }, [musicVolume]);
 
+  // Initialize persistent audio context for real-time mixing
+  useEffect(() => {
+      const initAudioContext = () => {
+          try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              audioContextRef.current = audioCtx;
+
+              // Create destination for mixed audio
+              const dest = audioCtx.createMediaStreamDestination();
+              audioDestRef.current = dest;
+
+              // Create gain nodes for each source
+              micGainRef.current = audioCtx.createGain();
+              musicGainRef.current = audioCtx.createGain();
+              videoGainRef.current = audioCtx.createGain();
+
+              // Create analysers for level monitoring
+              micAnalyserRef.current = audioCtx.createAnalyser();
+              musicAnalyserRef.current = audioCtx.createAnalyser();
+              videoAnalyserRef.current = audioCtx.createAnalyser();
+
+              // Configure analysers
+              [micAnalyserRef.current, musicAnalyserRef.current, videoAnalyserRef.current].forEach(analyser => {
+                  if (analyser) {
+                      analyser.fftSize = 256;
+                      analyser.smoothingTimeConstant = 0.8;
+                  }
+              });
+
+              // Set initial volumes
+              micGainRef.current.gain.value = micVolume;
+              musicGainRef.current.gain.value = musicVolume;
+              videoGainRef.current.gain.value = videoVolume;
+
+              console.log('✅ Audio context initialized for real-time mixing');
+          } catch (e) {
+              console.error('Failed to initialize audio context:', e);
+          }
+      };
+
+      initAudioContext();
+
+      // Cleanup
+      return () => {
+          if (audioLevelInterval.current) {
+              clearInterval(audioLevelInterval.current);
+          }
+          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+              audioContextRef.current.close();
+          }
+      };
+  }, []);
+
+  // Start audio level monitoring
+  useEffect(() => {
+      const monitorAudioLevels = () => {
+          const getLevel = (analyser: AnalyserNode | null): number => {
+              if (!analyser) return 0;
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              analyser.getByteFrequencyData(dataArray);
+              const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+              return Math.min(100, (average / 255) * 100);
+          };
+
+          setAudioLevels({
+              mic: getLevel(micAnalyserRef.current),
+              music: getLevel(musicAnalyserRef.current),
+              video: getLevel(videoAnalyserRef.current)
+          });
+      };
+
+      audioLevelInterval.current = setInterval(monitorAudioLevels, 100);
+
+      return () => {
+          if (audioLevelInterval.current) {
+              clearInterval(audioLevelInterval.current);
+          }
+      };
+  }, []);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+      const handleKeyPress = (e: KeyboardEvent) => {
+          // Ignore if user is typing in an input field
+          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+              return;
+          }
+
+          // Ctrl/Cmd + S: Save scene (prevent default browser save)
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+              e.preventDefault();
+              const sceneName = prompt('Enter scene name:');
+              if (sceneName) handleSaveScene(sceneName);
+              return;
+          }
+
+          // Prevent default for other shortcuts
+          const shortcuts = ['m', 'v', 'r', 'p', 'l', ' ', '1', '2', '3', '4', '5'];
+          if (shortcuts.includes(e.key.toLowerCase())) {
+              e.preventDefault();
+          }
+
+          switch (e.key.toLowerCase()) {
+              case 'm': // Toggle mic
+                  toggleMic();
+                  break;
+              case 'v': // Toggle camera
+                  toggleCam();
+                  break;
+              case 'r': // Toggle recording
+                  toggleRecording();
+                  break;
+              case 'p': // Pause/Resume recording
+                  if (appState.isRecording) pauseResumeRecording();
+                  break;
+              case 'l': // Toggle streaming (Live)
+                  toggleStream();
+                  break;
+              case ' ': // Space: Toggle mic (quick mute)
+                  toggleMic();
+                  break;
+              case '1': // Layout: Full Cam
+                  setLayout(LayoutMode.FULL_CAM);
+                  break;
+              case '2': // Layout: Full Screen
+                  setLayout(LayoutMode.FULL_SCREEN);
+                  break;
+              case '3': // Layout: PIP
+                  setLayout(LayoutMode.PIP);
+                  break;
+              case '4': // Layout: Split
+                  setLayout(LayoutMode.SPLIT);
+                  break;
+              case '5': // Layout: Newsroom
+                  setLayout(LayoutMode.NEWSROOM);
+                  break;
+          }
+      };
+
+      window.addEventListener('keydown', handleKeyPress);
+
+      return () => {
+          window.removeEventListener('keydown', handleKeyPress);
+      };
+  }, [cameraStream, isMicMuted, isCamMuted, appState.isRecording, appState.isStreaming]);
+
   // Timer for stream duration
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -130,6 +342,27 @@ const App = () => {
     }
     return () => clearInterval(interval);
   }, [appState.isStreaming, appState.isRecording]);
+
+  // Persist state to localStorage
+  useEffect(() => {
+    localStorage.setItem('streamhub_scenes', JSON.stringify(scenes));
+  }, [scenes]);
+
+  useEffect(() => {
+    localStorage.setItem('streamhub_branding', JSON.stringify(branding));
+  }, [branding]);
+
+  useEffect(() => {
+    localStorage.setItem('streamhub_destinations', JSON.stringify(destinations));
+  }, [destinations]);
+
+  useEffect(() => {
+    localStorage.setItem('streamhub_volumes', JSON.stringify({ micVolume, musicVolume, videoVolume }));
+  }, [micVolume, musicVolume, videoVolume]);
+
+  useEffect(() => {
+    localStorage.setItem('streamhub_recordingQuality', recordingQuality);
+  }, [recordingQuality]);
 
   // Initial Camera Load with Error Handling
   const initCam = async () => {
@@ -177,6 +410,96 @@ const App = () => {
     initCam();
   }, []);
 
+  // Connect microphone to audio mixer
+  useEffect(() => {
+      if (!cameraStream || !audioContextRef.current || !micGainRef.current || !audioDestRef.current) return;
+
+      try {
+          // Disconnect previous source if exists
+          if (micSourceRef.current) {
+              micSourceRef.current.disconnect();
+          }
+
+          const micSource = audioContextRef.current.createMediaStreamSource(cameraStream);
+          micSourceRef.current = micSource;
+
+          // Connect: mic → analyser → gain → destination
+          micSource.connect(micAnalyserRef.current!);
+          micAnalyserRef.current!.connect(micGainRef.current);
+          micGainRef.current.connect(audioDestRef.current);
+
+          console.log('🎤 Microphone connected to audio mixer');
+      } catch (e) {
+          console.error('Failed to connect microphone:', e);
+      }
+
+      return () => {
+          if (micSourceRef.current) {
+              try {
+                  micSourceRef.current.disconnect();
+              } catch (e) {}
+          }
+      };
+  }, [cameraStream]);
+
+  // Connect music/audio player to audio mixer
+  useEffect(() => {
+      if (!activeAudioId || !audioPlayerRef.current || !audioContextRef.current || !musicGainRef.current || !audioDestRef.current) return;
+
+      try {
+          // Disconnect previous source if exists
+          if (musicSourceRef.current) {
+              musicSourceRef.current.disconnect();
+          }
+
+          // @ts-ignore - captureStream is available on HTMLMediaElement
+          const musicStream = audioPlayerRef.current.captureStream ? audioPlayerRef.current.captureStream() : audioPlayerRef.current.mozCaptureStream();
+
+          if (musicStream) {
+              const musicSource = audioContextRef.current.createMediaStreamSource(musicStream);
+              musicSourceRef.current = musicSource;
+
+              // Connect: music → analyser → gain → destination
+              musicSource.connect(musicAnalyserRef.current!);
+              musicAnalyserRef.current!.connect(musicGainRef.current);
+              musicGainRef.current.connect(audioDestRef.current);
+
+              console.log('🎵 Music connected to audio mixer');
+          }
+      } catch (e) {
+          console.error('Failed to connect music:', e);
+      }
+
+      return () => {
+          if (musicSourceRef.current) {
+              try {
+                  musicSourceRef.current.disconnect();
+              } catch (e) {}
+          }
+      };
+  }, [activeAudioId]);
+
+  // Update mic gain in real-time
+  useEffect(() => {
+      if (micGainRef.current) {
+          micGainRef.current.gain.value = isMicMuted ? 0 : micVolume;
+      }
+  }, [micVolume, isMicMuted]);
+
+  // Update music gain in real-time
+  useEffect(() => {
+      if (musicGainRef.current) {
+          musicGainRef.current.gain.value = musicVolume;
+      }
+  }, [musicVolume]);
+
+  // Update video gain in real-time
+  useEffect(() => {
+      if (videoGainRef.current) {
+          videoGainRef.current.gain.value = videoVolume;
+      }
+  }, [videoVolume]);
+
   // --- Handlers ---
 
   const handleContinueWithoutCam = () => {
@@ -204,95 +527,93 @@ const App = () => {
     }
   };
 
+  const getRecordingBitrate = () => {
+    switch (recordingQuality) {
+      case 'low': return 2500000; // 2.5 Mbps
+      case 'medium': return 5000000; // 5 Mbps
+      case 'high': return 8000000; // 8 Mbps
+      case 'ultra': return 15000000; // 15 Mbps
+      default: return 5000000;
+    }
+  };
+
   const toggleRecording = () => {
     if (appState.isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
-      if (audioContextRef.current) {
-          audioContextRef.current.close();
-          audioContextRef.current = null;
-          audioDestRef.current = null;
-      }
       setAppState(prev => ({ ...prev, isRecording: false, streamDuration: prev.isStreaming ? prev.streamDuration : 0 }));
+      setIsRecordingPaused(false);
     } else {
       try {
-        if (!canvasRef.current) return;
-        
+        if (!canvasRef.current || !audioDestRef.current) {
+            alert("Audio mixer not ready. Please wait a moment and try again.");
+            return;
+        }
+
+        // Get canvas video stream
         const canvasStream = canvasRef.current.getStream();
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = audioCtx;
-        const dest = audioCtx.createMediaStreamDestination();
-        audioDestRef.current = dest;
 
-        if (cameraStream && !isMicMuted) {
-             const micSource = audioCtx.createMediaStreamSource(cameraStream);
-             const micGain = audioCtx.createGain();
-             micGain.gain.value = micVolume;
-             micSource.connect(micGain).connect(dest);
-        }
-
-        if (activeAudioId && audioPlayerRef.current) {
-            try {
-                // @ts-ignore
-                const musicStream = audioPlayerRef.current.captureStream ? audioPlayerRef.current.captureStream() : audioPlayerRef.current.mozCaptureStream();
-                if (musicStream) {
-                    const musicSource = audioCtx.createMediaStreamSource(musicStream);
-                    const musicGain = audioCtx.createGain();
-                    musicGain.gain.value = musicVolume;
-                    musicSource.connect(musicGain).connect(dest);
-                }
-            } catch (e) { console.warn("Could not mix music", e); }
-        }
-
-        const videoElement = canvasRef.current.getVideoElement();
-        if (videoElement && !videoElement.paused) {
-             try {
-                 // @ts-ignore
-                 const videoStream = videoElement.captureStream ? videoElement.captureStream() : videoElement.mozCaptureStream();
-                 if (videoStream) {
-                     const vidSource = audioCtx.createMediaStreamSource(videoStream);
-                     const vidGain = audioCtx.createGain();
-                     vidGain.gain.value = 1.0; 
-                     vidSource.connect(vidGain).connect(dest);
-                 }
-             } catch (e) { console.warn("Could not mix video clip", e); }
-        }
-
+        // Use the already-mixed audio from our persistent audio context!
         const combinedStream = new MediaStream([
             ...canvasStream.getVideoTracks(),
-            ...dest.stream.getAudioTracks()
+            ...audioDestRef.current.stream.getAudioTracks()
         ]);
 
-        const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9' });
-        
+        // Create recorder with quality settings
+        const options = {
+            mimeType: 'video/webm;codecs=vp9,opus',
+            videoBitsPerSecond: getRecordingBitrate()
+        };
+
+        // Fallback to default if not supported
+        const recorder = MediaRecorder.isTypeSupported(options.mimeType)
+            ? new MediaRecorder(combinedStream, options)
+            : new MediaRecorder(combinedStream);
+
         recorder.ondataavailable = (event) => {
           if (event.data && event.data.size > 0) {
             recordedChunks.current.push(event.data);
           }
         };
-        
+
         recorder.onstop = () => {
           const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.style.display = 'none';
           a.href = url;
-          a.download = `recording-${new Date().toISOString()}.webm`;
+          a.download = `streamhub-${recordingQuality}-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
           document.body.appendChild(a);
           a.click();
           window.URL.revokeObjectURL(url);
           recordedChunks.current = []; // Reset
+          console.log(`✅ Recording saved successfully (${recordingQuality} quality)`);
         };
-        
-        recorder.start(1000); 
+
+        recorder.start(1000); // Capture in 1-second chunks
         mediaRecorderRef.current = recorder;
         setAppState(prev => ({ ...prev, isRecording: true }));
-        
+        console.log(`🔴 Recording started with mixed audio (${recordingQuality} quality, ${getRecordingBitrate() / 1000000}Mbps)`);
+
       } catch (e) {
         console.error("Recording failed", e);
         alert("Could not start recording. Browser might not support this format.");
       }
+    }
+  };
+
+  const pauseResumeRecording = () => {
+    if (!mediaRecorderRef.current) return;
+
+    if (mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.pause();
+      setIsRecordingPaused(true);
+      console.log('⏸️ Recording paused');
+    } else if (mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsRecordingPaused(false);
+      console.log('▶️ Recording resumed');
     }
   };
 
@@ -394,6 +715,56 @@ const App = () => {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Scene Management Handlers
+  const handleSaveScene = (name: string) => {
+    const newScene: Scene = {
+      id: Date.now().toString(),
+      name,
+      createdAt: Date.now(),
+      layout,
+      branding: { ...branding },
+      activeBackgroundId,
+      activeBackgroundUrl,
+      micVolume,
+      musicVolume,
+      videoVolume,
+      activeImageId,
+      activeVideoId,
+      activeAudioId
+    };
+
+    setScenes(prev => [...prev, newScene]);
+    setCurrentSceneId(newScene.id);
+    console.log('✅ Scene saved:', name);
+  };
+
+  const handleLoadScene = (sceneId: string) => {
+    const scene = scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+
+    setLayout(scene.layout);
+    setBranding({ ...scene.branding });
+    setActiveBackgroundId(scene.activeBackgroundId);
+    setActiveBackgroundUrl(scene.activeBackgroundUrl);
+    setMicVolume(scene.micVolume);
+    setMusicVolume(scene.musicVolume);
+    setVideoVolume(scene.videoVolume);
+    setActiveImageId(scene.activeImageId);
+    setActiveVideoId(scene.activeVideoId);
+    setActiveAudioId(scene.activeAudioId);
+    setCurrentSceneId(sceneId);
+
+    console.log('✅ Scene loaded:', scene.name);
+  };
+
+  const handleDeleteScene = (sceneId: string) => {
+    setScenes(prev => prev.filter(s => s.id !== sceneId));
+    if (currentSceneId === sceneId) {
+      setCurrentSceneId(null);
+    }
+    console.log('✅ Scene deleted');
+  };
+
   // derived active URLs
   const activeImageUrl = activeImageId ? mediaAssets.find(a => a.id === activeImageId)?.url || null : null;
   const activeVideoUrl = activeVideoId ? mediaAssets.find(a => a.id === activeVideoId)?.url || null : null;
@@ -486,13 +857,36 @@ const App = () => {
             )}
             
             <div className="flex items-center gap-2">
-                <button 
+                {/* Recording Quality Indicator (desktop) */}
+                {appState.isRecording && (
+                  <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-xs text-gray-400">
+                    <span className="text-brand-400 font-bold uppercase">{recordingQuality}</span>
+                  </div>
+                )}
+
+                {/* Pause/Resume Button (only shown when recording) */}
+                {appState.isRecording && (
+                  <button
+                    onClick={pauseResumeRecording}
+                    className={`w-9 h-9 md:w-10 md:h-10 rounded-full font-bold transition-all border flex items-center justify-center
+                      ${isRecordingPaused
+                        ? 'bg-yellow-600 border-yellow-500 text-white'
+                        : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400'
+                      }`}
+                    title="Pause/Resume Recording (P)"
+                  >
+                    <Pause size={18} />
+                  </button>
+                )}
+
+                <button
                   onClick={toggleRecording}
                   className={`w-9 h-9 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
                     ${appState.isRecording
-                      ? 'bg-gray-800 border-red-500 text-red-500' 
+                      ? 'bg-gray-800 border-red-500 text-red-500'
                       : 'bg-dark-900 border-gray-600 text-gray-300 hover:border-gray-400'
                     }`}
+                  title="Start/Stop Recording (R)"
                 >
                   <Disc size={18} className={appState.isRecording ? 'animate-pulse' : ''} />
                   <span className="hidden md:inline">REC</span>
@@ -540,7 +934,18 @@ const App = () => {
 
         {/* CANVAS AREA */}
         <main className="flex-1 flex flex-col min-w-0 bg-black relative">
-            
+
+            {/* Scene Manager */}
+            <SceneManager
+              scenes={scenes}
+              currentSceneId={currentSceneId}
+              onSaveScene={handleSaveScene}
+              onLoadScene={handleLoadScene}
+              onDeleteScene={handleDeleteScene}
+              recordingQuality={recordingQuality}
+              onRecordingQualityChange={setRecordingQuality}
+            />
+
             {/* Viewport */}
             <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-0 md:p-8">
                  {/* Canvas maintains aspect ratio */}
@@ -606,13 +1011,14 @@ const App = () => {
                     {mobilePanel === 'destinations' && renderDestinationsPanel()}
                     {mobilePanel === 'mixer' && (
                         <div className="p-6 flex items-center justify-center h-full">
-                             <AudioMixer 
+                             <AudioMixer
                                 micVolume={micVolume}
                                 musicVolume={musicVolume}
                                 videoVolume={videoVolume}
                                 onMicVolumeChange={setMicVolume}
                                 onMusicVolumeChange={setMusicVolume}
                                 onVideoVolumeChange={setVideoVolume}
+                                audioLevels={audioLevels}
                             />
                         </div>
                     )}
@@ -661,13 +1067,14 @@ const App = () => {
                         {/* Desktop Popover Mixer */}
                         {showMixerDesktop && (
                             <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 animate-fade-in shadow-2xl">
-                                <AudioMixer 
+                                <AudioMixer
                                     micVolume={micVolume}
                                     musicVolume={musicVolume}
                                     videoVolume={videoVolume}
                                     onMicVolumeChange={setMicVolume}
                                     onMusicVolumeChange={setMusicVolume}
                                     onVideoVolumeChange={setVideoVolume}
+                                    audioLevels={audioLevels}
                                 />
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-8 border-transparent border-t-dark-800" />
                             </div>
