@@ -21,21 +21,24 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);
   const [newName, setNewName] = useState('');
   const [newKey, setNewKey] = useState('');
+  const [newServerUrl, setNewServerUrl] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   const handleAdd = () => {
-    if (!newName || !newKey) return;
+    if (!newName || !newKey || (newPlatform === Platform.CUSTOM_RTMP && !newServerUrl)) return;
     const newDest: Destination = {
       id: Date.now().toString(),
       platform: newPlatform,
       name: newName,
       streamKey: newKey,
+      serverUrl: newPlatform === Platform.CUSTOM_RTMP ? newServerUrl : undefined,
       isEnabled: true,
       status: 'offline'
     };
     onAddDestination(newDest);
     setNewName('');
     setNewKey('');
+    setNewServerUrl('');
     setShowAddForm(false);
   };
 
@@ -80,6 +83,17 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             >
               {Object.values(Platform).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
+            
+            {newPlatform === Platform.CUSTOM_RTMP && (
+                <input 
+                    type="text" 
+                    placeholder="RTMP Server URL (e.g. rtmp://my.server/app)"
+                    value={newServerUrl}
+                    onChange={(e) => setNewServerUrl(e.target.value)}
+                    className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
+                />
+            )}
+
             <input 
               type="text" 
               placeholder="Account Name (e.g. Personal YT)"

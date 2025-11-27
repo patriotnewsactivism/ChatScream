@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Destination,
-  LayoutMode,
-  Platform,
+import { 
+  Destination, 
+  LayoutMode, 
+  Platform, 
   AppState,
   MediaAsset,
   MediaType,
-  BrandingSettings,
-  Scene
+  BrandingSettings
 } from './types';
 import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
 import DestinationManager from './components/DestinationManager';
@@ -16,28 +15,22 @@ import MediaBin from './components/MediaBin';
 import AudioMixer from './components/AudioMixer';
 import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundSelector';
 import BrandingPanel from './components/BrandingPanel';
-import SceneManager from './components/SceneManager';
 import { generateStreamMetadata } from './services/geminiService';
-import {
-  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles,
-  Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
-  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, Pause
+import { RTMPSender } from './services/RTMPSender';
+import { 
+  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles, 
+  Play, Square, AlertCircle, Camera, Sliders, ArrowRight, 
+  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 type MobilePanel = 'none' | 'media' | 'graphics' | 'destinations' | 'mixer';
 
 const App = () => {
   // --- State ---
-  const [destinations, setDestinations] = useState<Destination[]>(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_destinations');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      { id: '1', platform: Platform.YOUTUBE, name: 'Main Channel', streamKey: '****', isEnabled: true, status: 'offline' },
-      { id: '2', platform: Platform.FACEBOOK, name: 'Personal FB', streamKey: '****', isEnabled: false, status: 'offline' }
-    ];
-  });
+  const [destinations, setDestinations] = useState<Destination[]>([
+    { id: '1', platform: Platform.YOUTUBE, name: 'Main Channel', streamKey: '****', isEnabled: true, status: 'offline' },
+    { id: '2', platform: Platform.FACEBOOK, name: 'Personal FB', streamKey: '****', isEnabled: false, status: 'offline' }
+  ]);
   
   const [layout, setLayout] = useState<LayoutMode>(LayoutMode.FULL_CAM);
   const [appState, setAppState] = useState<AppState>({
@@ -54,38 +47,10 @@ const App = () => {
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   // Audio Mixer State
-  const [micVolume, setMicVolume] = useState(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_volumes');
-      if (saved) return JSON.parse(saved).micVolume ?? 1.0;
-    } catch {}
-    return 1.0;
-  });
-  const [musicVolume, setMusicVolume] = useState(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_volumes');
-      if (saved) return JSON.parse(saved).musicVolume ?? 0.3;
-    } catch {}
-    return 0.3;
-  });
-  const [videoVolume, setVideoVolume] = useState(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_volumes');
-      if (saved) return JSON.parse(saved).videoVolume ?? 0.8;
-    } catch {}
-    return 0.8;
-  });
+  const [micVolume, setMicVolume] = useState(1.0);
+  const [musicVolume, setMusicVolume] = useState(0.3);
+  const [videoVolume, setVideoVolume] = useState(0.8);
   const [showMixerDesktop, setShowMixerDesktop] = useState(false);
-
-  // Recording Quality
-  const [recordingQuality, setRecordingQuality] = useState<'low' | 'medium' | 'high' | 'ultra'>(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_recordingQuality');
-      if (saved) return saved as any;
-    } catch {}
-    return 'high';
-  });
-  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
   // Media Bin Assets
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
@@ -96,20 +61,14 @@ const App = () => {
   // Backgrounds & Branding
   const [activeBackgroundId, setActiveBackgroundId] = useState<string | null>(null);
   const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(null);
-  const [branding, setBranding] = useState<BrandingSettings>(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_branding');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
+  const [branding, setBranding] = useState<BrandingSettings>({
       showLowerThird: true,
       showTicker: true,
-      primaryColor: '#0284c7',
-      accentColor: '#ef4444',
+      primaryColor: '#0284c7', // Brand 600
+      accentColor: '#ef4444', // Red 500
       presenterName: 'Alex Streamer',
       presenterTitle: 'Live Host',
       tickerText: 'Welcome to the live stream! Don\'t forget to like and subscribe for more content.'
-    };
   });
 
   // UI State
@@ -117,46 +76,58 @@ const App = () => {
   
   // Mobile Specific UI State
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('none');
+  const [isLandscape, setIsLandscape] = useState(false);
 
   // AI Content
   const [streamTopic, setStreamTopic] = useState('');
   const [generatedInfo, setGeneratedInfo] = useState<{title: string, description: string} | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Scene Management
-  const [scenes, setScenes] = useState<Scene[]>(() => {
-    try {
-      const saved = localStorage.getItem('streamhub_scenes');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [currentSceneId, setCurrentSceneId] = useState<string | null>(null);
-
   const canvasRef = useRef<CanvasRef>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(new Audio());
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
+  const rtmpSenderRef = useRef<RTMPSender | null>(null);
   
-  // Audio Mixer Refs (Web Audio API) - Persistent for real-time mixing
+  // Audio Mixer Refs (Web Audio API)
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const micGainRef = useRef<GainNode | null>(null);
-  const musicGainRef = useRef<GainNode | null>(null);
-  const videoGainRef = useRef<GainNode | null>(null);
-  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const musicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const videoSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-
-  // Audio level monitoring
-  const micAnalyserRef = useRef<AnalyserNode | null>(null);
-  const musicAnalyserRef = useRef<AnalyserNode | null>(null);
-  const videoAnalyserRef = useRef<AnalyserNode | null>(null);
-  const [audioLevels, setAudioLevels] = useState({ mic: 0, music: 0, video: 0 });
-  const audioLevelInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   
+  // Source & Gain Nodes
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
+  
+  const musicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const musicGainRef = useRef<GainNode | null>(null);
+  
+  const videoSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const videoGainRef = useRef<GainNode | null>(null);
+  const videoAnalyserRef = useRef<AnalyserNode | null>(null); // For future visualizers
+
   // --- Effects ---
+
+  // Handle Orientation Changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight && window.innerWidth < 1024);
+    };
+    handleResize(); // Init
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Initialize RTMPSender
+  useEffect(() => {
+    const statusUpdater = (id: string, status: Destination['status']) => {
+        setDestinations(prev => prev.map(d => d.id === id ? { ...d, status } : d));
+    };
+    
+    rtmpSenderRef.current = new RTMPSender(statusUpdater);
+    
+    return () => {
+        rtmpSenderRef.current?.disconnect();
+    };
+  }, []);
 
   // Audio Player Logic (Background Music)
   useEffect(() => {
@@ -170,7 +141,8 @@ const App = () => {
             if (!audio.src.includes(path)) {
                 audio.src = path;
                 audio.loop = true;
-                audio.play().catch(e => console.error("Audio play failed", e));
+                // Attempt play, but might fail if no user interaction yet
+                audio.play().catch(e => console.debug("Audio autoplay deferred", e));
             }
         }
     } else {
@@ -184,153 +156,22 @@ const App = () => {
       if (audioPlayerRef.current) {
           audioPlayerRef.current.volume = musicVolume;
       }
+      if (musicGainRef.current) {
+          musicGainRef.current.gain.value = 1.0; 
+      }
   }, [musicVolume]);
 
-  // Initialize persistent audio context for real-time mixing
   useEffect(() => {
-      const initAudioContext = () => {
-          try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              audioContextRef.current = audioCtx;
+      if (micGainRef.current) {
+          micGainRef.current.gain.value = micVolume;
+      }
+  }, [micVolume]);
 
-              // Create destination for mixed audio
-              const dest = audioCtx.createMediaStreamDestination();
-              audioDestRef.current = dest;
-
-              // Create gain nodes for each source
-              micGainRef.current = audioCtx.createGain();
-              musicGainRef.current = audioCtx.createGain();
-              videoGainRef.current = audioCtx.createGain();
-
-              // Create analysers for level monitoring
-              micAnalyserRef.current = audioCtx.createAnalyser();
-              musicAnalyserRef.current = audioCtx.createAnalyser();
-              videoAnalyserRef.current = audioCtx.createAnalyser();
-
-              // Configure analysers
-              [micAnalyserRef.current, musicAnalyserRef.current, videoAnalyserRef.current].forEach(analyser => {
-                  if (analyser) {
-                      analyser.fftSize = 256;
-                      analyser.smoothingTimeConstant = 0.8;
-                  }
-              });
-
-              // Set initial volumes
-              micGainRef.current.gain.value = micVolume;
-              musicGainRef.current.gain.value = musicVolume;
-              videoGainRef.current.gain.value = videoVolume;
-
-              console.log('✅ Audio context initialized for real-time mixing');
-          } catch (e) {
-              console.error('Failed to initialize audio context:', e);
-          }
-      };
-
-      initAudioContext();
-
-      // Cleanup
-      return () => {
-          if (audioLevelInterval.current) {
-              clearInterval(audioLevelInterval.current);
-          }
-          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-              audioContextRef.current.close();
-          }
-      };
-  }, []);
-
-  // Start audio level monitoring
   useEffect(() => {
-      const monitorAudioLevels = () => {
-          const getLevel = (analyser: AnalyserNode | null): number => {
-              if (!analyser) return 0;
-              const dataArray = new Uint8Array(analyser.frequencyBinCount);
-              analyser.getByteFrequencyData(dataArray);
-              const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-              return Math.min(100, (average / 255) * 100);
-          };
-
-          setAudioLevels({
-              mic: getLevel(micAnalyserRef.current),
-              music: getLevel(musicAnalyserRef.current),
-              video: getLevel(videoAnalyserRef.current)
-          });
-      };
-
-      audioLevelInterval.current = setInterval(monitorAudioLevels, 100);
-
-      return () => {
-          if (audioLevelInterval.current) {
-              clearInterval(audioLevelInterval.current);
-          }
-      };
-  }, []);
-
-  // Keyboard Shortcuts
-  useEffect(() => {
-      const handleKeyPress = (e: KeyboardEvent) => {
-          // Ignore if user is typing in an input field
-          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-              return;
-          }
-
-          // Ctrl/Cmd + S: Save scene (prevent default browser save)
-          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-              e.preventDefault();
-              const sceneName = prompt('Enter scene name:');
-              if (sceneName) handleSaveScene(sceneName);
-              return;
-          }
-
-          // Prevent default for other shortcuts
-          const shortcuts = ['m', 'v', 'r', 'p', 'l', ' ', '1', '2', '3', '4', '5'];
-          if (shortcuts.includes(e.key.toLowerCase())) {
-              e.preventDefault();
-          }
-
-          switch (e.key.toLowerCase()) {
-              case 'm': // Toggle mic
-                  toggleMic();
-                  break;
-              case 'v': // Toggle camera
-                  toggleCam();
-                  break;
-              case 'r': // Toggle recording
-                  toggleRecording();
-                  break;
-              case 'p': // Pause/Resume recording
-                  if (appState.isRecording) pauseResumeRecording();
-                  break;
-              case 'l': // Toggle streaming (Live)
-                  toggleStream();
-                  break;
-              case ' ': // Space: Toggle mic (quick mute)
-                  toggleMic();
-                  break;
-              case '1': // Layout: Full Cam
-                  setLayout(LayoutMode.FULL_CAM);
-                  break;
-              case '2': // Layout: Full Screen
-                  setLayout(LayoutMode.FULL_SCREEN);
-                  break;
-              case '3': // Layout: PIP
-                  setLayout(LayoutMode.PIP);
-                  break;
-              case '4': // Layout: Split
-                  setLayout(LayoutMode.SPLIT);
-                  break;
-              case '5': // Layout: Newsroom
-                  setLayout(LayoutMode.NEWSROOM);
-                  break;
-          }
-      };
-
-      window.addEventListener('keydown', handleKeyPress);
-
-      return () => {
-          window.removeEventListener('keydown', handleKeyPress);
-      };
-  }, [cameraStream, isMicMuted, isCamMuted, appState.isRecording, appState.isStreaming]);
+      if (videoGainRef.current) {
+          videoGainRef.current.gain.value = 1.0; // Volume controlled by element in compositor, gain is unity
+      }
+  }, [videoVolume]);
 
   // Timer for stream duration
   useEffect(() => {
@@ -343,32 +184,9 @@ const App = () => {
     return () => clearInterval(interval);
   }, [appState.isStreaming, appState.isRecording]);
 
-  // Persist state to localStorage
-  useEffect(() => {
-    localStorage.setItem('streamhub_scenes', JSON.stringify(scenes));
-  }, [scenes]);
-
-  useEffect(() => {
-    localStorage.setItem('streamhub_branding', JSON.stringify(branding));
-  }, [branding]);
-
-  useEffect(() => {
-    localStorage.setItem('streamhub_destinations', JSON.stringify(destinations));
-  }, [destinations]);
-
-  useEffect(() => {
-    localStorage.setItem('streamhub_volumes', JSON.stringify({ micVolume, musicVolume, videoVolume }));
-  }, [micVolume, musicVolume, videoVolume]);
-
-  useEffect(() => {
-    localStorage.setItem('streamhub_recordingQuality', recordingQuality);
-  }, [recordingQuality]);
-
   // Initial Camera Load with Error Handling
   const initCam = async () => {
     setPermissionError(null);
-    
-    // Check if API is supported
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.warn("MediaDevices API not supported. Starting in No-Camera mode.");
         setCameraStream(null);
@@ -388,14 +206,12 @@ const App = () => {
       }
     } catch (err: any) {
       console.warn("Camera initialization failed:", err);
-      
       if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.message?.includes('no tracks')) {
           setCameraStream(null);
           setIsMicMuted(true);
           setIsCamMuted(true);
           return;
       }
-
       let msg = "Could not access camera/microphone.";
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           msg = "Permission denied. Please check your browser settings.";
@@ -410,192 +226,228 @@ const App = () => {
     initCam();
   }, []);
 
-  // Connect microphone to audio mixer
-  useEffect(() => {
-      if (!cameraStream || !audioContextRef.current || !micGainRef.current || !audioDestRef.current) return;
+  // Initialize/Connect Audio Graph
+  const ensureAudioContext = () => {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      
+      if (!audioContextRef.current) {
+          audioContextRef.current = new AudioContextClass();
+      }
 
-      try {
-          // Disconnect previous source if exists
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+          ctx.resume();
+      }
+
+      if (audioDestRef.current) return; // Already setup
+
+      const dest = ctx.createMediaStreamDestination();
+      audioDestRef.current = dest;
+
+      // Mic Node
+      const micGain = ctx.createGain();
+      micGain.gain.value = micVolume;
+      micGain.connect(dest);
+      micGainRef.current = micGain;
+
+      if (cameraStream) {
+          try {
+              const micSrc = ctx.createMediaStreamSource(cameraStream);
+              micSrc.connect(micGain);
+              micSourceRef.current = micSrc;
+          } catch(e) { console.warn("Could not connect mic source", e); }
+      }
+
+      // Music Node
+      const musicGain = ctx.createGain();
+      musicGain.gain.value = 1.0; 
+      musicGain.connect(dest);
+      musicGainRef.current = musicGain;
+
+      if (audioPlayerRef.current) {
+          try {
+              // @ts-ignore
+              const musicSrc = ctx.createMediaElementSource(audioPlayerRef.current);
+              musicSrc.connect(musicGain);
+              musicSourceRef.current = musicSrc;
+          } catch (e) { console.warn("Could not connect music source", e); }
+      }
+
+      // Video Node
+      const vidGain = ctx.createGain();
+      vidGain.gain.value = 1.0; 
+      vidGain.connect(dest);
+      videoGainRef.current = vidGain;
+      
+      const vidAnalyser = ctx.createAnalyser();
+      vidAnalyser.fftSize = 256;
+      videoAnalyserRef.current = vidAnalyser;
+  };
+
+  // Connect video player audio to audio mixer dynamically
+  useEffect(() => {
+    const videoElement = canvasRef.current?.getVideoElement();
+    const isPlayingVideo = activeVideoId && videoElement && videoElement.src;
+
+    if (!audioContextRef.current || !videoGainRef.current || !audioDestRef.current || !videoAnalyserRef.current) return;
+
+    // Disconnect previous video source if exists
+    if (videoSourceRef.current) {
+        try {
+            videoSourceRef.current.disconnect();
+            videoSourceRef.current = null;
+        } catch (e) {
+            console.error('Failed to disconnect previous video source:', e);
+        }
+    }
+
+    if (isPlayingVideo) {
+        try {
+            // @ts-ignore - captureStream is available on HTMLMediaElement
+            const videoStream = videoElement.captureStream ? videoElement.captureStream() : videoElement.mozCaptureStream();
+
+            if (videoStream.getAudioTracks().length > 0) {
+                const videoSource = audioContextRef.current.createMediaStreamSource(videoStream);
+                videoSourceRef.current = videoSource;
+
+                // Connect: video → analyser → gain → destination
+                videoSource.connect(videoAnalyserRef.current);
+                videoAnalyserRef.current.connect(videoGainRef.current);
+                videoGainRef.current.connect(audioDestRef.current);
+
+                console.log('🎬 Video Clip audio connected to mixer');
+            } else {
+                 console.log('🎬 Video Clip has no audio track.');
+            }
+        } catch (e) {
+            console.error('Failed to connect video audio track:', e);
+        }
+    }
+
+    return () => {
+        if (videoSourceRef.current) {
+            try {
+                videoSourceRef.current.disconnect();
+                videoSourceRef.current = null;
+            } catch (e) {}
+        }
+    };
+  }, [activeVideoId]);
+
+  // Re-connect mic if camera stream changes
+  useEffect(() => {
+      if (audioContextRef.current && micGainRef.current && cameraStream) {
           if (micSourceRef.current) {
               micSourceRef.current.disconnect();
           }
-
-          const micSource = audioContextRef.current.createMediaStreamSource(cameraStream);
-          micSourceRef.current = micSource;
-
-          // Connect: mic → analyser → gain → destination
-          micSource.connect(micAnalyserRef.current!);
-          micAnalyserRef.current!.connect(micGainRef.current);
-          micGainRef.current.connect(audioDestRef.current);
-
-          console.log('🎤 Microphone connected to audio mixer');
-      } catch (e) {
-          console.error('Failed to connect microphone:', e);
+          try {
+              const micSrc = audioContextRef.current.createMediaStreamSource(cameraStream);
+              micSrc.connect(micGainRef.current);
+              micSourceRef.current = micSrc;
+          } catch(e) { console.warn("Could not reconnect mic", e); }
       }
-
-      return () => {
-          if (micSourceRef.current) {
-              try {
-                  micSourceRef.current.disconnect();
-              } catch (e) {}
-          }
-      };
   }, [cameraStream]);
 
-  // Connect music/audio player to audio mixer
-  useEffect(() => {
-      if (!activeAudioId || !audioPlayerRef.current || !audioContextRef.current || !musicGainRef.current || !audioDestRef.current) return;
-
-      try {
-          // Disconnect previous source if exists
-          if (musicSourceRef.current) {
-              musicSourceRef.current.disconnect();
-          }
-
-          // @ts-ignore - captureStream is available on HTMLMediaElement
-          const musicStream = audioPlayerRef.current.captureStream ? audioPlayerRef.current.captureStream() : audioPlayerRef.current.mozCaptureStream();
-
-          if (musicStream) {
-              const musicSource = audioContextRef.current.createMediaStreamSource(musicStream);
-              musicSourceRef.current = musicSource;
-
-              // Connect: music → analyser → gain → destination
-              musicSource.connect(musicAnalyserRef.current!);
-              musicAnalyserRef.current!.connect(musicGainRef.current);
-              musicGainRef.current.connect(audioDestRef.current);
-
-              console.log('🎵 Music connected to audio mixer');
-          }
-      } catch (e) {
-          console.error('Failed to connect music:', e);
-      }
-
-      return () => {
-          if (musicSourceRef.current) {
-              try {
-                  musicSourceRef.current.disconnect();
-              } catch (e) {}
-          }
-      };
-  }, [activeAudioId]);
-
-  // Update mic gain in real-time
-  useEffect(() => {
-      if (micGainRef.current) {
-          micGainRef.current.gain.value = isMicMuted ? 0 : micVolume;
-      }
-  }, [micVolume, isMicMuted]);
-
-  // Update music gain in real-time
-  useEffect(() => {
-      if (musicGainRef.current) {
-          musicGainRef.current.gain.value = musicVolume;
-      }
-  }, [musicVolume]);
-
-  // Update video gain in real-time
-  useEffect(() => {
-      if (videoGainRef.current) {
-          videoGainRef.current.gain.value = videoVolume;
-      }
-  }, [videoVolume]);
-
   // --- Handlers ---
+
+  const handleInteraction = () => {
+      // Ensure AudioContext is resumed on first interaction
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+      }
+  };
 
   const handleContinueWithoutCam = () => {
       setPermissionError(null);
       setCameraStream(null);
       setIsMicMuted(true);
       setIsCamMuted(true);
+      handleInteraction();
   };
 
   const toggleStream = () => {
+    handleInteraction();
+    if (!rtmpSenderRef.current) return;
+    ensureAudioContext();
+
     if (appState.isStreaming) {
+      rtmpSenderRef.current.disconnect();
       setAppState({ ...appState, isStreaming: false, streamDuration: appState.isRecording ? appState.streamDuration : 0 });
-      setDestinations(prev => prev.map(d => ({ ...d, status: 'offline' })));
     } else {
       const enabled = destinations.filter(d => d.isEnabled);
       if (enabled.length === 0) {
         alert("Please enable at least one destination!");
         return;
       }
-      setAppState({ ...appState, isStreaming: true });
-      setDestinations(prev => prev.map(d => d.isEnabled ? { ...d, status: 'connecting' } : d));
-      setTimeout(() => {
-        setDestinations(prev => prev.map(d => d.isEnabled ? { ...d, status: 'live' } : d));
-      }, 2000);
-    }
-  };
 
-  const getRecordingBitrate = () => {
-    switch (recordingQuality) {
-      case 'low': return 2500000; // 2.5 Mbps
-      case 'medium': return 5000000; // 5 Mbps
-      case 'high': return 8000000; // 8 Mbps
-      case 'ultra': return 15000000; // 15 Mbps
-      default: return 5000000;
+      const canvasStream = canvasRef.current?.getStream();
+      const combinedAudioStream = audioDestRef.current?.stream;
+      
+      if (!canvasStream || !combinedAudioStream) {
+          alert("Cannot start stream: Canvas or Audio Mixer not ready.");
+          return;
+      }
+
+      const combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...combinedAudioStream.getAudioTracks()
+      ]);
+
+      rtmpSenderRef.current.connect(combinedStream, enabled);
+      setAppState({ ...appState, isStreaming: true });
     }
   };
 
   const toggleRecording = () => {
+    handleInteraction();
     if (appState.isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
       setAppState(prev => ({ ...prev, isRecording: false, streamDuration: prev.isStreaming ? prev.streamDuration : 0 }));
-      setIsRecordingPaused(false);
     } else {
       try {
-        if (!canvasRef.current || !audioDestRef.current) {
-            alert("Audio mixer not ready. Please wait a moment and try again.");
+        if (!canvasRef.current) return;
+        ensureAudioContext();
+        
+        const canvasStream = canvasRef.current.getStream();
+        const combinedAudioStream = audioDestRef.current?.stream;
+        
+        if (!combinedAudioStream) {
+            alert("Audio mixer not ready.");
             return;
         }
 
-        // Get canvas video stream
-        const canvasStream = canvasRef.current.getStream();
-
-        // Use the already-mixed audio from our persistent audio context!
         const combinedStream = new MediaStream([
             ...canvasStream.getVideoTracks(),
-            ...audioDestRef.current.stream.getAudioTracks()
+            ...combinedAudioStream.getAudioTracks()
         ]);
 
-        // Create recorder with quality settings
-        const options = {
-            mimeType: 'video/webm;codecs=vp9,opus',
-            videoBitsPerSecond: getRecordingBitrate()
-        };
-
-        // Fallback to default if not supported
-        const recorder = MediaRecorder.isTypeSupported(options.mimeType)
-            ? new MediaRecorder(combinedStream, options)
-            : new MediaRecorder(combinedStream);
-
+        const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9' });
+        
         recorder.ondataavailable = (event) => {
           if (event.data && event.data.size > 0) {
             recordedChunks.current.push(event.data);
           }
         };
-
+        
         recorder.onstop = () => {
           const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.style.display = 'none';
           a.href = url;
-          a.download = `streamhub-${recordingQuality}-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+          a.download = `recording-${new Date().toISOString()}.webm`;
           document.body.appendChild(a);
           a.click();
           window.URL.revokeObjectURL(url);
-          recordedChunks.current = []; // Reset
-          console.log(`✅ Recording saved successfully (${recordingQuality} quality)`);
+          recordedChunks.current = [];
         };
-
-        recorder.start(1000); // Capture in 1-second chunks
+        
+        recorder.start(1000); 
         mediaRecorderRef.current = recorder;
         setAppState(prev => ({ ...prev, isRecording: true }));
-        console.log(`🔴 Recording started with mixed audio (${recordingQuality} quality, ${getRecordingBitrate() / 1000000}Mbps)`);
-
+        
       } catch (e) {
         console.error("Recording failed", e);
         alert("Could not start recording. Browser might not support this format.");
@@ -603,21 +455,8 @@ const App = () => {
     }
   };
 
-  const pauseResumeRecording = () => {
-    if (!mediaRecorderRef.current) return;
-
-    if (mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      setIsRecordingPaused(true);
-      console.log('⏸️ Recording paused');
-    } else if (mediaRecorderRef.current.state === 'paused') {
-      mediaRecorderRef.current.resume();
-      setIsRecordingPaused(false);
-      console.log('▶️ Recording resumed');
-    }
-  };
-
   const toggleScreenShare = async () => {
+    handleInteraction();
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
       setScreenStream(null);
@@ -630,28 +469,19 @@ const App = () => {
 
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         setScreenStream(stream);
+        if (layout === LayoutMode.FULL_CAM) setLayout(LayoutMode.PIP);
         
-        if (layout === LayoutMode.FULL_CAM) {
-            setLayout(LayoutMode.PIP);
-        }
-        
-        stream.getVideoTracks()[0].onended = () => {
-          setScreenStream(null);
-        };
+        stream.getVideoTracks()[0].onended = () => setScreenStream(null);
       } catch (err: any) {
-        console.error("Screen share error", err);
         if (err.name !== 'NotAllowedError') {
-            if (err.message.includes('denied by permission policy')) {
-               alert("Screen sharing is blocked by the browser's permission policy.");
-            } else {
-               alert("Failed to start screen share: " + err.message);
-            }
+             alert(err.message.includes('permission') ? "Screen sharing blocked by permission policy." : "Failed to start screen share.");
         }
       }
     }
   };
 
   const toggleMic = () => {
+    handleInteraction();
     if (cameraStream) {
       cameraStream.getAudioTracks().forEach(track => track.enabled = !isMicMuted);
       setIsMicMuted(!isMicMuted);
@@ -659,6 +489,7 @@ const App = () => {
   };
 
   const toggleCam = () => {
+    handleInteraction();
     if (cameraStream) {
       cameraStream.getVideoTracks().forEach(track => track.enabled = !isCamMuted);
       setIsCamMuted(!isCamMuted);
@@ -675,26 +506,19 @@ const App = () => {
 
   const handleMediaUpload = (file: File, type: MediaType) => {
       const url = URL.createObjectURL(file);
-      const newAsset: MediaAsset = {
-          id: Date.now().toString(),
-          type,
-          url,
-          name: file.name
-      };
+      const newAsset: MediaAsset = { id: Date.now().toString(), type, url, name: file.name };
       setMediaAssets(prev => [...prev, newAsset]);
-      
       if (type === 'image' && !activeImageId) setActiveImageId(newAsset.id);
       if (type === 'video' && !activeVideoId) setActiveVideoId(newAsset.id);
   };
 
   const handleToggleAsset = (id: string, type: MediaType) => {
+      handleInteraction();
       if (type === 'image') {
           setActiveImageId(prev => prev === id ? null : id);
       } else if (type === 'video') {
           setActiveVideoId(prev => prev === id ? null : id);
-          if (activeVideoId !== id && layout === LayoutMode.FULL_CAM) {
-               setLayout(LayoutMode.FULL_SCREEN);
-          }
+          if (activeVideoId !== id && layout === LayoutMode.FULL_CAM) setLayout(LayoutMode.FULL_SCREEN);
       } else if (type === 'audio') {
           setActiveAudioId(prev => prev === id ? null : id);
       }
@@ -703,9 +527,7 @@ const App = () => {
   const handleBackgroundSelect = (url: string | null, id: string) => {
       setActiveBackgroundUrl(url);
       setActiveBackgroundId(id);
-      if (id !== 'default' && layout === LayoutMode.FULL_CAM) {
-          setLayout(LayoutMode.NEWSROOM);
-      }
+      if (id !== 'default' && layout === LayoutMode.FULL_CAM) setLayout(LayoutMode.NEWSROOM);
   };
 
   const formatTime = (seconds: number) => {
@@ -713,56 +535,6 @@ const App = () => {
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Scene Management Handlers
-  const handleSaveScene = (name: string) => {
-    const newScene: Scene = {
-      id: Date.now().toString(),
-      name,
-      createdAt: Date.now(),
-      layout,
-      branding: { ...branding },
-      activeBackgroundId,
-      activeBackgroundUrl,
-      micVolume,
-      musicVolume,
-      videoVolume,
-      activeImageId,
-      activeVideoId,
-      activeAudioId
-    };
-
-    setScenes(prev => [...prev, newScene]);
-    setCurrentSceneId(newScene.id);
-    console.log('✅ Scene saved:', name);
-  };
-
-  const handleLoadScene = (sceneId: string) => {
-    const scene = scenes.find(s => s.id === sceneId);
-    if (!scene) return;
-
-    setLayout(scene.layout);
-    setBranding({ ...scene.branding });
-    setActiveBackgroundId(scene.activeBackgroundId);
-    setActiveBackgroundUrl(scene.activeBackgroundUrl);
-    setMicVolume(scene.micVolume);
-    setMusicVolume(scene.musicVolume);
-    setVideoVolume(scene.videoVolume);
-    setActiveImageId(scene.activeImageId);
-    setActiveVideoId(scene.activeVideoId);
-    setActiveAudioId(scene.activeAudioId);
-    setCurrentSceneId(sceneId);
-
-    console.log('✅ Scene loaded:', scene.name);
-  };
-
-  const handleDeleteScene = (sceneId: string) => {
-    setScenes(prev => prev.filter(s => s.id !== sceneId));
-    if (currentSceneId === sceneId) {
-      setCurrentSceneId(null);
-    }
-    console.log('✅ Scene deleted');
   };
 
   // derived active URLs
@@ -797,7 +569,6 @@ const App = () => {
 
   const renderDestinationsPanel = () => (
     <div className="flex flex-col h-full bg-dark-900">
-        {/* AI Assistant */}
         <div className="p-4 border-b border-gray-800 shrink-0 bg-gradient-to-br from-indigo-900/20 to-transparent">
             <h3 className="text-xs font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">
                 <Sparkles size={14} className="text-brand-400"/> AI Assistant
@@ -836,94 +607,64 @@ const App = () => {
     </div>
   );
 
+  // --- Main Render ---
   return (
-    <div className="h-[100dvh] w-full bg-dark-900 text-gray-100 flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full bg-dark-900 text-gray-100 flex flex-col overflow-hidden" onClick={handleInteraction}>
       
       {/* --- HEADER --- */}
-      <header className="h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800 shrink-0 z-30">
+      <header className="h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 z-30 transition-all">
         <div className="flex items-center gap-2">
-            <div className="bg-brand-600 p-1.5 rounded-lg">
+            <div className="bg-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
                 <Monitor size={18} className="text-white"/>
             </div>
             <h1 className="text-lg font-bold tracking-tight hidden xs:block">StreamHub<span className="text-brand-500">Pro</span></h1>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
             {(appState.isStreaming || appState.isRecording) && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-gray-900 border border-gray-700 rounded-full font-mono text-xs shadow-inner">
+                <div className="flex items-center gap-2 px-3 py-1 bg-gray-900/80 border border-gray-700 rounded-full font-mono text-xs shadow-inner">
                     <div className={`w-2 h-2 rounded-full animate-pulse ${appState.isStreaming ? 'bg-red-500' : 'bg-brand-400'}`} />
                     {formatTime(appState.streamDuration)}
                 </div>
             )}
             
-            <div className="flex items-center gap-2">
-                {/* Recording Quality Indicator (desktop) */}
-                {appState.isRecording && (
-                  <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-xs text-gray-400">
-                    <span className="text-brand-400 font-bold uppercase">{recordingQuality}</span>
-                  </div>
-                )}
+            <button 
+                onClick={toggleRecording}
+                className={`w-9 h-9 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
+                ${appState.isRecording
+                    ? 'bg-gray-800 border-red-500 text-red-500' 
+                    : 'bg-dark-900/50 border-gray-600 text-gray-300 hover:border-gray-400 hover:bg-gray-800'
+                }`}
+            >
+                <Disc size={18} className={appState.isRecording ? 'animate-pulse' : ''} />
+                <span className="hidden md:inline">REC</span>
+            </button>
 
-                {/* Pause/Resume Button (only shown when recording) */}
-                {appState.isRecording && (
-                  <button
-                    onClick={pauseResumeRecording}
-                    className={`w-9 h-9 md:w-10 md:h-10 rounded-full font-bold transition-all border flex items-center justify-center
-                      ${isRecordingPaused
-                        ? 'bg-yellow-600 border-yellow-500 text-white'
-                        : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400'
-                      }`}
-                    title="Pause/Resume Recording (P)"
-                  >
-                    <Pause size={18} />
-                  </button>
-                )}
-
-                <button
-                  onClick={toggleRecording}
-                  className={`w-9 h-9 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
-                    ${appState.isRecording
-                      ? 'bg-gray-800 border-red-500 text-red-500'
-                      : 'bg-dark-900 border-gray-600 text-gray-300 hover:border-gray-400'
+            <button 
+                onClick={toggleStream}
+                className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
+                    ${appState.isStreaming 
+                        ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50' 
+                        : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
                     }`}
-                  title="Start/Stop Recording (R)"
-                >
-                  <Disc size={18} className={appState.isRecording ? 'animate-pulse' : ''} />
-                  <span className="hidden md:inline">REC</span>
-                </button>
-
-                <button 
-                    onClick={toggleStream}
-                    className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
-                        ${appState.isStreaming 
-                            ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50' 
-                            : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
-                        }`}
-                >
-                    {appState.isStreaming ? <Square size={16} fill="currentColor"/> : <Play size={16} fill="currentColor" />}
-                    <span className="hidden md:inline">{appState.isStreaming ? 'END STREAM' : 'GO LIVE'}</span>
-                    <span className="md:hidden">{appState.isStreaming ? 'STOP' : 'LIVE'}</span>
-                </button>
-            </div>
+            >
+                {appState.isStreaming ? <Square size={16} fill="currentColor"/> : <Play size={16} fill="currentColor" />}
+                <span className="hidden md:inline">{appState.isStreaming ? 'END STREAM' : 'GO LIVE'}</span>
+                <span className="md:hidden">{appState.isStreaming ? 'STOP' : 'LIVE'}</span>
+            </button>
         </div>
       </header>
 
-      {/* --- MAIN LAYOUT --- */}
+      {/* --- MAIN CONTENT --- */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* DESKTOP SIDEBAR (LEFT) */}
-        <aside className="hidden md:flex w-80 border-r border-gray-800 bg-dark-900 flex-col overflow-hidden">
+        {/* DESKTOP LEFT SIDEBAR */}
+        <aside className="hidden lg:flex w-80 border-r border-gray-800 bg-dark-900 flex-col overflow-hidden z-20">
             <div className="flex border-b border-gray-800 bg-dark-800">
-               <button 
-                  onClick={() => setLeftSidebarTab('media')}
-                  className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'media' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
-                >
+               <button onClick={() => setLeftSidebarTab('media')} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'media' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}>
                   <FolderOpen size={14} /> MEDIA
                </button>
-               <button 
-                  onClick={() => setLeftSidebarTab('graphics')}
-                  className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'graphics' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
-                >
+               <button onClick={() => setLeftSidebarTab('graphics')} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'graphics' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}>
                   <Palette size={14} /> GRAPHICS
                </button>
             </div>
@@ -932,24 +673,14 @@ const App = () => {
             </div>
         </aside>
 
-        {/* CANVAS AREA */}
+        {/* CANVAS & CENTRAL AREA */}
         <main className="flex-1 flex flex-col min-w-0 bg-black relative">
-
-            {/* Scene Manager */}
-            <SceneManager
-              scenes={scenes}
-              currentSceneId={currentSceneId}
-              onSaveScene={handleSaveScene}
-              onLoadScene={handleLoadScene}
-              onDeleteScene={handleDeleteScene}
-              recordingQuality={recordingQuality}
-              onRecordingQualityChange={setRecordingQuality}
-            />
-
-            {/* Viewport */}
-            <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-0 md:p-8">
-                 {/* Canvas maintains aspect ratio */}
-                 <div className="w-full max-w-full aspect-video md:rounded-lg overflow-hidden border-y md:border border-gray-800 shadow-2xl relative">
+            <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-0 md:p-8 overflow-hidden">
+                 
+                 {/* Video Container */}
+                 <div className={`transition-all duration-300 relative shadow-2xl border-gray-800 overflow-hidden bg-black
+                    ${isLandscape && window.innerHeight < 500 ? 'h-full aspect-video border-none' : 'w-full max-w-full aspect-video md:rounded-lg border-y md:border'}
+                 `}>
                     <CanvasCompositor 
                         ref={canvasRef}
                         layout={layout}
@@ -963,72 +694,75 @@ const App = () => {
                     />
                  </div>
 
-                 {/* Permission Error Overlay */}
+                 {/* Error Overlay */}
                  {(!cameraStream && permissionError) && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="bg-dark-800 p-6 rounded-xl border border-red-500/50 max-w-sm w-full text-center shadow-2xl">
+                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+                        <div className="bg-dark-800 p-6 rounded-xl border border-red-500/50 max-w-sm w-full text-center shadow-2xl animate-fade-in">
                             <div className="w-12 h-12 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <AlertCircle className="text-red-500" size={24} />
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">Camera Access Required</h3>
                             <p className="text-gray-400 mb-6 text-sm">{permissionError}</p>
                             <div className="flex flex-col gap-3">
-                                <button onClick={initCam} className="w-full bg-brand-600 text-white px-4 py-3 rounded-lg font-bold">
-                                    Try Again
-                                </button>
-                                <button onClick={handleContinueWithoutCam} className="w-full bg-gray-700 text-gray-200 px-4 py-3 rounded-lg font-semibold">
-                                    Continue without Camera
-                                </button>
+                                <button onClick={initCam} className="w-full bg-brand-600 text-white px-4 py-3 rounded-lg font-bold">Try Again</button>
+                                <button onClick={handleContinueWithoutCam} className="w-full bg-gray-700 text-gray-200 px-4 py-3 rounded-lg font-semibold">Continue without Camera</button>
                             </div>
                         </div>
                     </div>
                  )}
             </div>
 
-            {/* MOBILE BOTTOM SHEETS (Slide Up) */}
-            {mobilePanel !== 'none' && (
+            {/* MOBILE: Landscape Side Panel Logic (Hidden in Portrait) */}
+            {isLandscape && mobilePanel !== 'none' && (
+                <div className="absolute top-0 right-0 bottom-0 w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col">
+                    <div className="flex items-center justify-between p-3 border-b border-gray-700">
+                         <h3 className="text-xs font-bold uppercase">
+                           {mobilePanel === 'media' && 'Media'}
+                           {mobilePanel === 'graphics' && 'Graphics'}
+                           {mobilePanel === 'destinations' && 'Stream'}
+                           {mobilePanel === 'mixer' && 'Audio'}
+                         </h3>
+                         <button onClick={() => setMobilePanel('none')}><X size={18}/></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        {mobilePanel === 'media' && renderMediaPanel()}
+                        {mobilePanel === 'graphics' && renderGraphicsPanel()}
+                        {mobilePanel === 'destinations' && renderDestinationsPanel()}
+                        {mobilePanel === 'mixer' && <AudioMixer micVolume={micVolume} musicVolume={musicVolume} videoVolume={videoVolume} onMicVolumeChange={setMicVolume} onMusicVolumeChange={setMusicVolume} onVideoVolumeChange={setVideoVolume} />}
+                    </div>
+                </div>
+            )}
+
+            {/* MOBILE: Portrait Bottom Sheet */}
+            {!isLandscape && mobilePanel !== 'none' && (
               <div className="absolute inset-x-0 bottom-0 top-auto h-[60%] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
-                 
-                 {/* Drag Handle / Header */}
                  <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0 cursor-pointer" onClick={() => setMobilePanel('none')}>
                     <div className="flex items-center gap-3">
-                        <button onClick={(e) => { e.stopPropagation(); setMobilePanel('none'); }} className="p-1 rounded-full bg-gray-700 text-gray-300">
-                           <ChevronDown size={20} />
-                        </button>
-                        <h3 className="text-sm font-bold uppercase text-gray-200 flex items-center gap-2">
+                        <div className="w-8 h-1 bg-gray-600 rounded-full mx-auto absolute left-0 right-0 top-2" />
+                        <h3 className="text-sm font-bold uppercase text-gray-200 flex items-center gap-2 mt-2">
                            {mobilePanel === 'media' && <><FolderOpen size={16}/> Media Library</>}
                            {mobilePanel === 'graphics' && <><Palette size={16}/> Stream Graphics</>}
                            {mobilePanel === 'destinations' && <><Globe size={16}/> Destinations</>}
                            {mobilePanel === 'mixer' && <><Sliders size={16}/> Audio Mixer</>}
                         </h3>
                     </div>
+                    <button className="mt-2 p-1 bg-gray-700 rounded-full"><ChevronDown size={16}/></button>
                  </div>
-
-                 {/* Content */}
-                 <div className="flex-1 overflow-hidden relative bg-dark-900">
+                 <div className="flex-1 overflow-hidden bg-dark-900 relative">
                     {mobilePanel === 'media' && renderMediaPanel()}
                     {mobilePanel === 'graphics' && renderGraphicsPanel()}
                     {mobilePanel === 'destinations' && renderDestinationsPanel()}
                     {mobilePanel === 'mixer' && (
                         <div className="p-6 flex items-center justify-center h-full">
-                             <AudioMixer
-                                micVolume={micVolume}
-                                musicVolume={musicVolume}
-                                videoVolume={videoVolume}
-                                onMicVolumeChange={setMicVolume}
-                                onMusicVolumeChange={setMusicVolume}
-                                onVideoVolumeChange={setVideoVolume}
-                                audioLevels={audioLevels}
-                            />
+                             <AudioMixer micVolume={micVolume} musicVolume={musicVolume} videoVolume={videoVolume} onMicVolumeChange={setMicVolume} onMusicVolumeChange={setMusicVolume} onVideoVolumeChange={setVideoVolume} />
                         </div>
                     )}
                  </div>
               </div>
             )}
 
-            {/* BOTTOM DECK */}
-            <div className="bg-dark-800 border-t border-gray-700 z-30 shrink-0 flex flex-col pb-safe">
-                
+            {/* CONTROL DECK */}
+            <div className="bg-dark-800 border-t border-gray-700 z-30 shrink-0 flex flex-col pb-safe shadow-2xl">
                 {/* Control Row */}
                 <div className="h-16 md:h-20 flex items-center px-4 md:px-8 gap-3 overflow-x-auto no-scrollbar">
                    {/* Main Toggles */}
@@ -1036,14 +770,14 @@ const App = () => {
                         <button 
                             onClick={toggleMic}
                             disabled={!cameraStream}
-                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all ${isMicMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${isMicMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
                         >
                             {isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
                         </button>
                         <button 
                             onClick={toggleCam}
                             disabled={!cameraStream}
-                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all ${isCamMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${isCamMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
                         >
                             {isCamMuted ? <VideoOff size={20} /> : <Video size={20} />}
                         </button>
@@ -1053,29 +787,20 @@ const App = () => {
                    <div className="relative shrink-0">
                         <button 
                             onClick={() => {
-                                if (window.innerWidth < 768) {
+                                if (window.innerWidth < 1024) {
                                     setMobilePanel(mobilePanel === 'mixer' ? 'none' : 'mixer');
                                 } else {
                                     setShowMixerDesktop(!showMixerDesktop);
                                 }
                             }}
-                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all ${mobilePanel === 'mixer' || showMixerDesktop ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${mobilePanel === 'mixer' || showMixerDesktop ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                         >
                             <Sliders size={20} />
                         </button>
                         
-                        {/* Desktop Popover Mixer */}
                         {showMixerDesktop && (
-                            <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 animate-fade-in shadow-2xl">
-                                <AudioMixer
-                                    micVolume={micVolume}
-                                    musicVolume={musicVolume}
-                                    videoVolume={videoVolume}
-                                    onMicVolumeChange={setMicVolume}
-                                    onMusicVolumeChange={setMusicVolume}
-                                    onVideoVolumeChange={setVideoVolume}
-                                    audioLevels={audioLevels}
-                                />
+                            <div className="hidden lg:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 animate-fade-in shadow-2xl">
+                                <AudioMixer micVolume={micVolume} musicVolume={musicVolume} videoVolume={videoVolume} onMicVolumeChange={setMicVolume} onMusicVolumeChange={setMusicVolume} onVideoVolumeChange={setVideoVolume} />
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-8 border-transparent border-t-dark-800" />
                             </div>
                         )}
@@ -1088,50 +813,29 @@ const App = () => {
                 </div>
 
                 {/* Mobile Tab Bar */}
-                <div className="md:hidden flex border-t border-gray-700 bg-dark-900">
-                   <button 
-                      onClick={() => setMobilePanel(mobilePanel === 'media' ? 'none' : 'media')}
-                      className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 ${mobilePanel === 'media' ? 'text-brand-400 bg-gray-800' : 'text-gray-400 active:bg-gray-800'}`}
-                   >
-                      <FolderOpen size={20} />
-                      <span className="text-[10px] font-bold">MEDIA</span>
+                <div className="lg:hidden flex border-t border-gray-700 bg-dark-900">
+                   <button onClick={() => setMobilePanel(mobilePanel === 'media' ? 'none' : 'media')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'media' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
+                      <FolderOpen size={20} /> <span className="text-[10px] font-bold">MEDIA</span>
                    </button>
-                   <button 
-                      onClick={() => setMobilePanel(mobilePanel === 'graphics' ? 'none' : 'graphics')}
-                      className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 ${mobilePanel === 'graphics' ? 'text-brand-400 bg-gray-800' : 'text-gray-400 active:bg-gray-800'}`}
-                   >
-                      <Palette size={20} />
-                      <span className="text-[10px] font-bold">STYLE</span>
+                   <button onClick={() => setMobilePanel(mobilePanel === 'graphics' ? 'none' : 'graphics')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'graphics' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
+                      <Palette size={20} /> <span className="text-[10px] font-bold">STYLE</span>
                    </button>
-                   <button 
-                      onClick={() => setMobilePanel(mobilePanel === 'destinations' ? 'none' : 'destinations')}
-                      className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 ${mobilePanel === 'destinations' ? 'text-brand-400 bg-gray-800' : 'text-gray-400 active:bg-gray-800'}`}
-                   >
-                      <Globe size={20} />
-                      <span className="text-[10px] font-bold">STREAM</span>
+                   <button onClick={() => setMobilePanel(mobilePanel === 'destinations' ? 'none' : 'destinations')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'destinations' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
+                      <Globe size={20} /> <span className="text-[10px] font-bold">STREAM</span>
                    </button>
                 </div>
             </div>
         </main>
         
-        {/* DESKTOP SIDEBAR (RIGHT) */}
-        <aside className="hidden md:flex w-80 border-l border-gray-800 bg-dark-900 flex-col overflow-hidden">
+        {/* DESKTOP RIGHT SIDEBAR */}
+        <aside className="hidden lg:flex w-80 border-l border-gray-800 bg-dark-900 flex-col overflow-hidden z-20">
              <div className="p-4 border-b border-gray-800 shrink-0 bg-gradient-to-br from-indigo-900/20 to-transparent">
                 <h3 className="text-xs font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">
                     <Sparkles size={14} className="text-brand-400"/> AI Studio Assistant
                 </h3>
                 <div className="space-y-3">
-                    <input 
-                        className="w-full bg-dark-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 outline-none"
-                        placeholder="What's your stream about?"
-                        value={streamTopic}
-                        onChange={(e) => setStreamTopic(e.target.value)}
-                    />
-                    <button 
-                        onClick={handleGenerateAI}
-                        disabled={isGenerating || !streamTopic}
-                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
+                    <input className="w-full bg-dark-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 outline-none" placeholder="What's your stream about?" value={streamTopic} onChange={(e) => setStreamTopic(e.target.value)} />
+                    <button onClick={handleGenerateAI} disabled={isGenerating || !streamTopic} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50">
                         {isGenerating ? 'Generating...' : 'Generate Metadata'}
                     </button>
                     {generatedInfo && (
@@ -1142,15 +846,8 @@ const App = () => {
                     )}
                 </div>
             </div>
-
             <div className="flex-1 overflow-y-auto">
-              <DestinationManager 
-                  destinations={destinations}
-                  onAddDestination={(d) => setDestinations([...destinations, d])}
-                  onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))}
-                  onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))}
-                  isStreaming={appState.isStreaming}
-              />
+              <DestinationManager destinations={destinations} onAddDestination={(d) => setDestinations([...destinations, d])} onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))} onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))} isStreaming={appState.isStreaming} />
             </div>
         </aside>
       </div>

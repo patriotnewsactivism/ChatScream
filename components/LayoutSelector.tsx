@@ -22,7 +22,7 @@ const LayoutSelector: React.FC<LayoutSelectorProps> = ({ currentLayout, onSelect
         <button
           key={item.mode}
           onClick={() => onSelect(item.mode)}
-          className={`flex flex-col items-center gap-1 md:gap-2 p-2 md:p-3 rounded-lg transition-all w-16 md:w-20 shrink-0
+          className={`flex flex-col items-center justify-center gap-1 md:gap-2 p-2 md:p-3 rounded-lg transition-all w-16 md:w-20 shrink-0 active:scale-95
             ${currentLayout === item.mode 
               ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50 scale-105' 
               : 'text-gray-400 hover:bg-gray-700 hover:text-white'
