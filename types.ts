@@ -37,6 +37,16 @@ export interface MediaAsset {
   name: string;
 }
 
+export interface BrandingSettings {
+  showLowerThird: boolean;
+  showTicker: boolean;
+  primaryColor: string;
+  accentColor: string;
+  presenterName: string;
+  presenterTitle: string;
+  tickerText: string;
+}
+
 export interface AppState {
   isStreaming: boolean;
   isRecording: boolean;

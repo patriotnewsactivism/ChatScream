@@ -5,7 +5,8 @@ import {
   Platform, 
   AppState,
   MediaAsset,
-  MediaType
+  MediaType,
+  BrandingSettings
 } from './types';
 import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
 import DestinationManager from './components/DestinationManager';
@@ -13,8 +14,9 @@ import LayoutSelector from './components/LayoutSelector';
 import MediaBin from './components/MediaBin';
 import AudioMixer from './components/AudioMixer';
 import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundSelector';
+import BrandingPanel from './components/BrandingPanel';
 import { generateStreamMetadata } from './services/geminiService';
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles, Play, Square, AlertCircle, Camera, Sliders, ArrowRight } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles, Play, Square, AlertCircle, Camera, Sliders, ArrowRight, Layers, Palette, FolderOpen, Disc } from 'lucide-react';
 
 const App = () => {
   // --- State ---
@@ -49,9 +51,21 @@ const App = () => {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
 
-  // Backgrounds
+  // Backgrounds & Branding
   const [activeBackgroundId, setActiveBackgroundId] = useState<string | null>(null);
   const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(null);
+  const [branding, setBranding] = useState<BrandingSettings>({
+      showLowerThird: true,
+      showTicker: true,
+      primaryColor: '#0284c7', // Brand 600
+      accentColor: '#ef4444', // Red 500
+      presenterName: 'Alex Streamer',
+      presenterTitle: 'Live Host',
+      tickerText: 'Welcome to the live stream! Don\'t forget to like and subscribe for more content.'
+  });
+
+  // UI State
+  const [leftSidebarTab, setLeftSidebarTab] = useState<'media' | 'graphics'>('media');
 
   // AI Content
   const [streamTopic, setStreamTopic] = useState('');
@@ -60,6 +74,8 @@ const App = () => {
 
   const canvasRef = useRef<CanvasRef>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(new Audio());
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunks = useRef<Blob[]>([]);
 
   // --- Effects ---
 
@@ -93,35 +109,51 @@ const App = () => {
   // Timer for stream duration
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
-    if (appState.isStreaming) {
+    if (appState.isStreaming || appState.isRecording) {
       interval = setInterval(() => {
         setAppState(prev => ({ ...prev, streamDuration: prev.streamDuration + 1 }));
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [appState.isStreaming]);
+  }, [appState.isStreaming, appState.isRecording]);
 
   // Initial Camera Load with Error Handling
   const initCam = async () => {
     setPermissionError(null);
     
+    // Check if API is supported
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setPermissionError("Media devices API is not supported in this browser.");
+        console.warn("MediaDevices API not supported. Starting in No-Camera mode.");
+        setCameraStream(null);
+        setIsMicMuted(true);
+        setIsCamMuted(true);
         return;
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setCameraStream(stream);
-      setIsMicMuted(false);
-      setIsCamMuted(false);
+      if (stream.getTracks().length > 0) {
+        setCameraStream(stream);
+        setIsMicMuted(false);
+        setIsCamMuted(false);
+      } else {
+        throw new Error("Stream started but has no tracks.");
+      }
     } catch (err: any) {
-      console.error("Camera access denied", err);
+      console.warn("Camera initialization failed:", err);
+      
+      // If hardware is missing (NotFoundError), we silently fallback to "No Camera" mode
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.message?.includes('no tracks')) {
+          setCameraStream(null);
+          setIsMicMuted(true);
+          setIsCamMuted(true);
+          return;
+      }
+
+      // If Permission was denied, we DO want to show the overlay so they can fix it.
       let msg = "Could not access camera/microphone.";
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          msg = "Permission denied. Please allow camera access in your browser settings (usually in the address bar).";
-      } else if (err.name === 'NotFoundError') {
-          msg = "No camera or microphone found on this device.";
+          msg = "Permission denied. Please check your browser settings.";
       } else if (err.name === 'NotReadableError') {
           msg = "Camera/Mic is currently in use by another application.";
       }
@@ -146,7 +178,7 @@ const App = () => {
   const toggleStream = () => {
     if (appState.isStreaming) {
       // Stop Stream
-      setAppState({ ...appState, isStreaming: false, streamDuration: 0 });
+      setAppState({ ...appState, isStreaming: false, streamDuration: appState.isRecording ? appState.streamDuration : 0 });
       setDestinations(prev => prev.map(d => ({ ...d, status: 'offline' })));
     } else {
       // Start Stream (Simulated)
@@ -161,6 +193,59 @@ const App = () => {
       setTimeout(() => {
         setDestinations(prev => prev.map(d => d.isEnabled ? { ...d, status: 'live' } : d));
       }, 2000);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (appState.isRecording) {
+      // STOP Recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setAppState(prev => ({ ...prev, isRecording: false, streamDuration: prev.isStreaming ? prev.streamDuration : 0 }));
+    } else {
+      // START Recording
+      try {
+        if (!canvasRef.current) return;
+        
+        // 1. Get Visual Stream from Canvas
+        const canvasStream = canvasRef.current.getStream();
+        
+        // 2. Mix in Audio (Ideally use Web Audio API for mix, but for MVP we use Camera Mic)
+        const combinedStream = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...(cameraStream ? cameraStream.getAudioTracks() : [])
+        ]);
+
+        const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9' });
+        
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunks.current.push(event.data);
+          }
+        };
+        
+        recorder.onstop = () => {
+          const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `recording-${new Date().toISOString()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          recordedChunks.current = []; // Reset
+        };
+        
+        recorder.start(1000); // 1s chunks
+        mediaRecorderRef.current = recorder;
+        setAppState(prev => ({ ...prev, isRecording: true }));
+        
+      } catch (e) {
+        console.error("Recording failed", e);
+        alert("Could not start recording. Browser might not support this format.");
+      }
     }
   };
 
@@ -282,23 +367,40 @@ const App = () => {
         </div>
         
         <div className="flex items-center gap-6">
-            {appState.isStreaming && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/50 rounded text-red-500 font-mono">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            {(appState.isStreaming || appState.isRecording) && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 border border-gray-600 rounded font-mono">
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${appState.isStreaming ? 'bg-red-500' : 'bg-brand-400'}`} />
                     {formatTime(appState.streamDuration)}
                 </div>
             )}
-            <button 
-                onClick={toggleStream}
-                className={`px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2
-                    ${appState.isStreaming 
-                        ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50' 
-                        : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
+            
+            <div className="flex items-center gap-2">
+                {/* RECORD BUTTON */}
+                <button 
+                  onClick={toggleRecording}
+                  className={`px-4 py-2 rounded-full font-bold transition-all border flex items-center gap-2
+                    ${appState.isRecording
+                      ? 'bg-gray-700 border-red-500 text-red-500' 
+                      : 'bg-dark-900 border-gray-600 text-gray-300 hover:border-gray-400'
                     }`}
-            >
-                {appState.isStreaming ? <Square size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" />}
-                {appState.isStreaming ? 'END STREAM' : 'GO LIVE'}
-            </button>
+                >
+                  <Disc size={18} className={appState.isRecording ? 'animate-pulse' : ''} />
+                  {appState.isRecording ? 'REC' : 'REC'}
+                </button>
+
+                {/* STREAM BUTTON */}
+                <button 
+                    onClick={toggleStream}
+                    className={`px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2
+                        ${appState.isStreaming 
+                            ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50' 
+                            : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
+                        }`}
+                >
+                    {appState.isStreaming ? <Square size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" />}
+                    {appState.isStreaming ? 'END STREAM' : 'GO LIVE'}
+                </button>
+            </div>
         </div>
       </header>
 
@@ -308,26 +410,45 @@ const App = () => {
         {/* Left Sidebar: Assets & Templates */}
         <aside className="w-80 border-r border-gray-800 bg-dark-900 flex flex-col overflow-hidden">
             
-            {/* Media Bin */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                <div className="px-4 py-2 bg-dark-800 border-b border-gray-700 font-bold text-xs text-gray-400 uppercase">
-                    Media & Overlays
-                </div>
-                <MediaBin 
-                    assets={mediaAssets}
-                    activeAssets={{ image: activeImageId, video: activeVideoId, audio: activeAudioId }}
-                    onUpload={handleMediaUpload}
-                    onDelete={(id) => setMediaAssets(mediaAssets.filter(a => a.id !== id))}
-                    onToggleAsset={handleToggleAsset}
-                />
+            {/* Tab Switcher */}
+            <div className="flex border-b border-gray-800 bg-dark-800">
+               <button 
+                  onClick={() => setLeftSidebarTab('media')}
+                  className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'media' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
+                >
+                  <FolderOpen size={14} /> MEDIA
+               </button>
+               <button 
+                  onClick={() => setLeftSidebarTab('graphics')}
+                  className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${leftSidebarTab === 'graphics' ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
+                >
+                  <Palette size={14} /> GRAPHICS
+               </button>
             </div>
 
-            {/* Backgrounds */}
-            <div className="shrink-0 max-h-[40%] overflow-y-auto border-t border-gray-800 bg-dark-900">
-                 <BackgroundSelector 
-                    currentBackgroundId={activeBackgroundId}
-                    onSelect={handleBackgroundSelect}
-                 />
+            {/* Tab Content */}
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {leftSidebarTab === 'media' ? (
+                  <>
+                     <div className="flex-1 overflow-hidden">
+                        <MediaBin 
+                            assets={mediaAssets}
+                            activeAssets={{ image: activeImageId, video: activeVideoId, audio: activeAudioId }}
+                            onUpload={handleMediaUpload}
+                            onDelete={(id) => setMediaAssets(mediaAssets.filter(a => a.id !== id))}
+                            onToggleAsset={handleToggleAsset}
+                        />
+                     </div>
+                     <div className="shrink-0 max-h-[40%] overflow-y-auto border-t border-gray-800 bg-dark-900">
+                        <BackgroundSelector 
+                            currentBackgroundId={activeBackgroundId}
+                            onSelect={handleBackgroundSelect}
+                        />
+                     </div>
+                  </>
+                ) : (
+                  <BrandingPanel settings={branding} onChange={setBranding} />
+                )}
             </div>
         </aside>
 
@@ -344,6 +465,7 @@ const App = () => {
                     activeVideoUrl={activeVideoUrl}
                     backgroundUrl={activeBackgroundUrl}
                     videoVolume={videoVolume}
+                    branding={branding}
                  />
 
                  {/* Permission Error Overlay */}

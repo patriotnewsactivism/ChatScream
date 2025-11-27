@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { LayoutMode } from '../types';
+import { LayoutMode, BrandingSettings } from '../types';
 
 interface CanvasCompositorProps {
   layout: LayoutMode;
@@ -9,6 +9,7 @@ interface CanvasCompositorProps {
   activeVideoUrl: string | null; // Main Video File
   backgroundUrl: string | null; // Custom Template Background
   videoVolume: number; // 0 to 1
+  branding: BrandingSettings;
 }
 
 export interface CanvasRef {
@@ -22,7 +23,8 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
   activeMediaUrl,
   activeVideoUrl,
   backgroundUrl,
-  videoVolume
+  videoVolume,
+  branding
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const camVideoRef = useRef<HTMLVideoElement>(document.createElement('video'));
@@ -31,13 +33,12 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
   const overlayImgRef = useRef<HTMLImageElement>(new Image());
   const bgImgRef = useRef<HTMLImageElement>(new Image());
   
-  // Initialize video elements
+  // Initialize video elements with correct settings to allow background playback
   useEffect(() => {
     // Camera and Screen should typically be muted in the DOM to avoid feedback loop 
-    // (since we aren't creating a full AudioContext mixer for this demo)
     [camVideoRef, screenVideoRef].forEach(ref => {
         ref.current.autoplay = true;
-        ref.current.muted = true; 
+        ref.current.muted = true; // Essential for autoplay policy
         ref.current.playsInline = true;
     });
 
@@ -50,20 +51,31 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
 
   // Update Media Sources
   useEffect(() => {
-    if (cameraStream) {
-      camVideoRef.current.srcObject = cameraStream;
-      camVideoRef.current.play().catch(e => console.error("Cam play error", e));
+    const video = camVideoRef.current;
+    if (cameraStream && cameraStream.getTracks().length > 0) {
+      // Only attach if different to avoid reloading
+      if (video.srcObject !== cameraStream) {
+        video.srcObject = cameraStream;
+        video.play().catch(e => {
+            // Silently fail if playback is blocked or stream is empty, 
+            // as the canvas will just render the placeholder.
+            console.debug("Cam play suppressed:", e); 
+        });
+      }
     } else {
-      camVideoRef.current.srcObject = null;
+      video.srcObject = null;
     }
   }, [cameraStream]);
 
   useEffect(() => {
-    if (screenStream) {
-      screenVideoRef.current.srcObject = screenStream;
-      screenVideoRef.current.play().catch(e => console.error("Screen play error", e));
+    const video = screenVideoRef.current;
+    if (screenStream && screenStream.getTracks().length > 0) {
+      if (video.srcObject !== screenStream) {
+        video.srcObject = screenStream;
+        video.play().catch(e => console.debug("Screen play suppressed:", e));
+      }
     } else {
-      screenVideoRef.current.srcObject = null;
+      video.srcObject = null;
     }
   }, [screenStream]);
 
@@ -83,7 +95,8 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
   useEffect(() => {
     if (mediaVideoRef.current) {
         mediaVideoRef.current.volume = videoVolume;
-        mediaVideoRef.current.muted = videoVolume === 0;
+        // Mute if volume is very low to ensure browser is happy
+        mediaVideoRef.current.muted = videoVolume < 0.01;
     }
   }, [videoVolume]);
 
@@ -117,6 +130,10 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
 
     canvas.width = 1280;
     canvas.height = 720;
+    
+    // Ticker State
+    let tickerOffset = 1280;
+    const tickerSpeed = 2;
 
     let animationId: number;
 
@@ -140,8 +157,8 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
       const drawCover = (video: HTMLVideoElement, x: number, y: number, targetW: number, targetH: number) => {
         if (!video) return;
 
-        // If video is not ready
-        if (video.readyState < 2) {
+        // If video is not ready or has no dimensions
+        if (video.readyState < 2 || video.videoWidth === 0) {
              // If it's the camera, draw a placeholder
              if (video === camVideoRef.current) {
                  ctx.save();
@@ -182,6 +199,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
       };
 
       // Determine "Content" source (Screen Share OR Video File)
+      // Prioritize video file if active
       const contentVideo = activeVideoUrl ? mediaVideoRef.current : (screenStream ? screenVideoRef.current : null);
       const hasContent = !!contentVideo;
 
@@ -295,12 +313,87 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
 
       // Draw Overlay Media (Logo/Image/Lower Third)
       if (activeMediaUrl && overlayImgRef.current.complete && overlayImgRef.current.naturalWidth > 0) {
+          // Simple heuristic: wide image = lower third or overlay, small square = logo
+          const imgAspect = overlayImgRef.current.naturalWidth / overlayImgRef.current.naturalHeight;
+          
           if (overlayImgRef.current.naturalWidth > 500) {
+              // Full overlay
               ctx.drawImage(overlayImgRef.current, 0, 0, w, h);
           } else {
+              // Corner Logo
               const logoSize = 120;
               ctx.drawImage(overlayImgRef.current, w - logoSize - 30, 30, logoSize, logoSize);
           }
+      }
+
+      // --- BRANDING GRAPHICS ---
+      
+      // 1. Lower Third
+      if (branding.showLowerThird && (branding.presenterName || branding.presenterTitle)) {
+        const startX = 60;
+        const startY = h - 160;
+        
+        // Main Name Bar
+        ctx.fillStyle = branding.primaryColor;
+        ctx.fillRect(startX, startY, 400, 50);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(branding.presenterName, startX + 20, startY + 25);
+        
+        // Title Bar
+        if (branding.presenterTitle) {
+          ctx.fillStyle = branding.accentColor;
+          ctx.fillRect(startX, startY + 50, 300, 30);
+          
+          ctx.fillStyle = 'white';
+          ctx.font = '16px sans-serif';
+          ctx.fillText(branding.presenterTitle, startX + 20, startY + 65);
+        }
+      }
+
+      // 2. Scrolling Ticker
+      if (branding.showTicker && branding.tickerText) {
+          const tickerH = 50;
+          const tickerY = h - tickerH;
+          
+          // Background Strip
+          ctx.fillStyle = branding.primaryColor;
+          ctx.fillRect(0, tickerY, w, tickerH);
+          
+          // Label Box
+          const labelW = 120;
+          ctx.fillStyle = branding.accentColor;
+          ctx.fillRect(0, tickerY, labelW, tickerH);
+          
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 16px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText("NEWS", labelW / 2, tickerY + tickerH / 2);
+          
+          // Moving Text
+          ctx.textAlign = 'left';
+          ctx.font = '20px sans-serif';
+          
+          // Reset if off screen
+          const textWidth = ctx.measureText(branding.tickerText).width;
+          if (tickerOffset < -textWidth) {
+              tickerOffset = w;
+          }
+          
+          // Masking (optional, simple clip)
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(labelW, tickerY, w - labelW, tickerH);
+          ctx.clip();
+          
+          ctx.fillText(branding.tickerText, labelW + 20 + tickerOffset, tickerY + tickerH / 2);
+          ctx.restore();
+          
+          tickerOffset -= tickerSpeed;
       }
 
       animationId = requestAnimationFrame(draw);
@@ -311,7 +404,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>(({
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [layout, cameraStream, screenStream, activeMediaUrl, activeVideoUrl, backgroundUrl, videoVolume]);
+  }, [layout, cameraStream, screenStream, activeMediaUrl, activeVideoUrl, backgroundUrl, videoVolume, branding]);
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-black aspect-video rounded-lg overflow-hidden border border-gray-800 shadow-2xl relative">
