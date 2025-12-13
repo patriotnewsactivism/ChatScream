@@ -1,6 +1,6 @@
 {
-  "name": "StreamHub Pro",
-  "description": "A browser-based multi-streaming studio allowing users to broadcast to multiple destinations simultaneously with advanced layout and media controls.",
+  "name": "ChatScream",
+  "description": "Cloud-powered multi-streaming studio with zero-bandwidth streaming, donation-triggered Chat Screamer alerts, and weekly Scream Leaderboard gamification.",
   "requestFramePermissions": [
     "camera",
     "microphone",
