@@ -18,17 +18,17 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // Initialize Stripe with your secret key
-const stripe = new Stripe(functions.config().stripe?.secret_key || process.env.STRIPE_SECRET_KEY || '', {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 });
 
-const WEBHOOK_SECRET = functions.config().stripe?.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
 
 // Price IDs for plans
 const PRICE_IDS = {
-  starter: functions.config().stripe?.starter_price || 'price_starter',
-  creator: functions.config().stripe?.creator_price || 'price_creator',
-  pro: functions.config().stripe?.pro_price || 'price_pro',
+  starter: process.env.STRIPE_PRICE_STARTER || 'price_starter',
+  creator: process.env.STRIPE_PRICE_CREATOR || 'price_creator',
+  pro: process.env.STRIPE_PRICE_PRO || 'price_pro',
 };
 
 // Chat Screamer tier thresholds
@@ -822,3 +822,4 @@ export const getLeaderboard = functions.https.onRequest(async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
