@@ -49,7 +49,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getLeaderboard = exports.stripeWebhook = exports.awardWeeklyPrize = exports.screamWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = void 0;
-const functions = __importStar(require("firebase-functions"));
+const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
 admin.initializeApp();
