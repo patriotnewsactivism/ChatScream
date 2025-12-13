@@ -17,6 +17,54 @@ import Stripe from 'stripe';
 admin.initializeApp();
 const db = admin.firestore();
 
+// Allowed origins for CORS
+const ALLOWED_ORIGINS = [
+  'https://wtp-apps.web.app',
+  'https://wtp-apps.firebaseapp.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+
+// Helper: Set CORS headers with origin validation
+function setCorsHeaders(req: functions.https.Request, res: functions.Response): boolean {
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+  } else if (origin) {
+    // Reject unknown origins
+    res.status(403).json({ error: 'Origin not allowed' });
+    return false;
+  }
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Allow-Credentials', 'true');
+  return true;
+}
+
+// Helper: Verify Firebase Auth token
+async function verifyAuth(req: functions.https.Request): Promise<{ uid: string; email?: string }> {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  const idToken = authHeader.split('Bearer ')[1];
+  const decodedToken = await admin.auth().verifyIdToken(idToken);
+  return { uid: decodedToken.uid, email: decodedToken.email };
+}
+
+// Helper: Sanitize string input
+function sanitizeString(input: string, maxLength: number): string {
+  if (!input) return '';
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/javascript:/gi, '')
+    .trim()
+    .slice(0, maxLength);
+}
+
 // Stripe configuration - secrets should be set via:
 // firebase functions:secrets:set STRIPE_SECRET_KEY
 // firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
@@ -50,12 +98,11 @@ const LEADERBOARD_PRIZE_VALUE = 59; // $59 Professional tier
 
 /**
  * Create Stripe Checkout Session
+ * REQUIRES AUTHENTICATION
  */
 export const createCheckoutSession = functions.https.onRequest(async (req, res) => {
-  // Enable CORS
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  // Validate CORS
+  if (!setCorsHeaders(req, res)) return;
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -68,15 +115,46 @@ export const createCheckoutSession = functions.https.onRequest(async (req, res) 
   }
 
   try {
-    const { priceId, userId, userEmail, successUrl, cancelUrl, referralCode } = req.body;
+    // REQUIRE AUTHENTICATION - get user from token, not from request body
+    const authUser = await verifyAuth(req);
+    const userId = authUser.uid;
 
-    if (!priceId || !userId || !userEmail) {
-      res.status(400).json({ error: 'Missing required fields' });
+    const { priceId, successUrl, cancelUrl, referralCode } = req.body;
+
+    if (!priceId) {
+      res.status(400).json({ error: 'Price ID is required' });
       return;
     }
 
-    // Check for existing Stripe customer
+    // Check for existing Stripe customer - use authenticated userId
     const userDoc = await db.collection('users').doc(userId).get();
+
+    if (!userDoc.exists) {
+      res.status(404).json({ error: 'User profile not found' });
+      return;
+    }
+
+    const userData = userDoc.data();
+    const userEmail = userData?.email || authUser.email;
+
+    if (!userEmail) {
+      res.status(400).json({ error: 'User email not found' });
+      return;
+    }
+
+    // Validate referral code if provided
+    if (referralCode) {
+      const affiliateDoc = await db.collection('affiliates').doc(referralCode.toUpperCase()).get();
+      if (!affiliateDoc.exists || !affiliateDoc.data()?.isActive) {
+        res.status(400).json({ error: 'Invalid referral code' });
+        return;
+      }
+      // Prevent self-referrals
+      if (affiliateDoc.data()?.ownerId === userId) {
+        res.status(400).json({ error: 'Cannot use your own referral code' });
+        return;
+      }
+    }
     let customerId = userDoc.data()?.subscription?.stripeCustomerId;
 
     if (!customerId) {
@@ -135,18 +213,22 @@ export const createCheckoutSession = functions.https.onRequest(async (req, res) 
 
     res.json({ url: session.url, sessionId: session.id });
   } catch (error: any) {
-    console.error('Checkout session error:', error);
-    res.status(500).json({ error: error.message });
+    if (error.message === 'UNAUTHORIZED') {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    console.error('Checkout session error:', error.code || error.message);
+    res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
 
 /**
  * Create Customer Portal Session
+ * REQUIRES AUTHENTICATION
  */
 export const createPortalSession = functions.https.onRequest(async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  // Validate CORS
+  if (!setCorsHeaders(req, res)) return;
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -159,12 +241,20 @@ export const createPortalSession = functions.https.onRequest(async (req, res) =>
   }
 
   try {
-    const { customerId, returnUrl } = req.body;
+    // REQUIRE AUTHENTICATION
+    const authUser = await verifyAuth(req);
+    const userId = authUser.uid;
+
+    // Get user's Stripe customer ID from their profile
+    const userDoc = await db.collection('users').doc(userId).get();
+    const customerId = userDoc.data()?.subscription?.stripeCustomerId;
 
     if (!customerId) {
-      res.status(400).json({ error: 'Customer ID is required' });
+      res.status(400).json({ error: 'No billing account found. Please subscribe first.' });
       return;
     }
+
+    const { returnUrl } = req.body;
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
@@ -173,19 +263,23 @@ export const createPortalSession = functions.https.onRequest(async (req, res) =>
 
     res.json({ url: session.url });
   } catch (error: any) {
-    console.error('Portal session error:', error);
-    res.status(500).json({ error: error.message });
+    if (error.message === 'UNAUTHORIZED') {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    console.error('Portal session error:', error.code || error.message);
+    res.status(500).json({ error: 'Failed to create portal session' });
   }
 });
 
 /**
  * Process Chat Screamer Donation
  * Creates a Stripe PaymentIntent for one-time donations
+ * PUBLIC endpoint (donations can come from non-logged-in viewers)
  */
 export const createScreamDonation = functions.https.onRequest(async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  // Validate CORS
+  if (!setCorsHeaders(req, res)) return;
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -200,33 +294,58 @@ export const createScreamDonation = functions.https.onRequest(async (req, res) =
   try {
     const { amount, message, donorName, streamerId, donorEmail } = req.body;
 
+    // Validate required fields
     if (!amount || !streamerId) {
       res.status(400).json({ error: 'Amount and streamer ID are required' });
       return;
     }
 
-    // Minimum $5 for Chat Screamer
-    if (amount < 5) {
-      res.status(400).json({ error: 'Minimum donation for Chat Screamer is $5' });
+    // Validate amount range ($5 - $10,000)
+    if (typeof amount !== 'number' || amount < 5 || amount > 10000) {
+      res.status(400).json({ error: 'Donation must be between $5 and $10,000' });
+      return;
+    }
+
+    // Verify streamer exists and can receive donations
+    const streamerDoc = await db.collection('users').doc(streamerId).get();
+    if (!streamerDoc.exists) {
+      res.status(404).json({ error: 'Streamer not found' });
+      return;
+    }
+
+    const streamerData = streamerDoc.data();
+    const status = streamerData?.subscription?.status;
+    if (status !== 'active' && status !== 'trialing') {
+      res.status(400).json({ error: 'This streamer cannot accept donations at this time' });
+      return;
+    }
+
+    // Sanitize user inputs
+    const sanitizedDonorName = sanitizeString(donorName || 'Anonymous', 50);
+    const sanitizedMessage = sanitizeString(message || '', 500);
+
+    // Validate email format if provided
+    if (donorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail)) {
+      res.status(400).json({ error: 'Invalid email address' });
       return;
     }
 
     // Determine scream tier
     const tier = getScreamTier(amount);
 
-    // Create PaymentIntent
+    // Create PaymentIntent with sanitized data
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
       metadata: {
         type: 'chat_screamer',
         streamerId,
-        donorName: donorName || 'Anonymous',
-        message: message || '',
+        donorName: sanitizedDonorName,
+        message: sanitizedMessage,
         screamTier: tier,
       },
-      receipt_email: donorEmail,
-      description: `ChatScream - ${tier} Scream for streamer`,
+      receipt_email: donorEmail || undefined,
+      description: `ChatScream - ${tier} Scream for ${streamerData?.displayName || 'streamer'}`,
     });
 
     res.json({
@@ -234,8 +353,8 @@ export const createScreamDonation = functions.https.onRequest(async (req, res) =
       screamTier: tier,
     });
   } catch (error: any) {
-    console.error('Scream donation error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Scream donation error:', error.code || error.message);
+    res.status(500).json({ error: 'Failed to process donation' });
   }
 });
 
@@ -256,7 +375,7 @@ export const screamWebhook = functions.https.onRequest(async (req, res) => {
     event = stripe.webhooks.constructEvent(req.rawBody, sig, WEBHOOK_SECRET);
   } catch (err: any) {
     console.error('Webhook signature verification failed:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    res.status(400).send('Invalid signature');
     return;
   }
 
@@ -273,7 +392,7 @@ export const screamWebhook = functions.https.onRequest(async (req, res) => {
     res.json({ received: true });
   } catch (error: any) {
     console.error('Scream webhook error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
