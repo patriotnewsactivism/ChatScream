@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "chatscream-prod",
+    "production": "chatscream-prod",
+    "staging": "chatscream-staging"
+  },
+  "targets": {
+    "chatscream-prod": {
+      "hosting": {
+        "production": [
+          "chatscream-prod"
+        ]
+      }
+    }
+  }
+}
