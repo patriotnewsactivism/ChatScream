@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Destination, 
-  LayoutMode, 
-  Platform, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Destination,
+  LayoutMode,
+  Platform,
   AppState,
   MediaAsset,
   MediaType,
@@ -15,17 +16,32 @@ import MediaBin from './components/MediaBin';
 import AudioMixer from './components/AudioMixer';
 import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundSelector';
 import BrandingPanel from './components/BrandingPanel';
-import { generateStreamMetadata } from './services/geminiService';
+import ChatStream from './components/ChatStream';
+import ChatStreamOverlay from './components/ChatStreamOverlay';
+import { generateStreamMetadata } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
-import { 
-  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles, 
-  Play, Square, AlertCircle, Camera, Sliders, ArrowRight, 
-  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, ChevronUp
+import { useAuth } from './contexts/AuthContext';
+import {
+  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles,
+  Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
+  FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, ChevronUp,
+  LogOut, User, CreditCard, MessageSquare
 } from 'lucide-react';
 
 type MobilePanel = 'none' | 'media' | 'graphics' | 'destinations' | 'mixer';
 
+interface BroadcastMessage {
+  id: string;
+  content: string;
+  timestamp: Date;
+}
+
 const App = () => {
+  const navigate = useNavigate();
+  const { user, userProfile, logout } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
+
   // --- State ---
   const [destinations, setDestinations] = useState<Destination[]>([
     { id: '1', platform: Platform.YOUTUBE, name: 'Main Channel', streamKey: '****', isEnabled: true, status: 'offline' },
@@ -504,6 +520,23 @@ const App = () => {
     setIsGenerating(false);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  const handleBroadcast = (message: any) => {
+    setBroadcastMessages(prev => [...prev, {
+      id: message.id,
+      content: message.content,
+      timestamp: message.timestamp,
+    }]);
+  };
+
   const handleMediaUpload = (file: File, type: MediaType) => {
       const url = URL.createObjectURL(file);
       const newAsset: MediaAsset = { id: Date.now().toString(), type, url, name: file.name };
@@ -614,10 +647,15 @@ const App = () => {
       {/* --- HEADER --- */}
       <header className="h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 z-30 transition-all">
         <div className="flex items-center gap-2">
-            <div className="bg-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
+            <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
                 <Monitor size={18} className="text-white"/>
             </div>
-            <h1 className="text-lg font-bold tracking-tight hidden xs:block">StreamHub<span className="text-brand-500">Pro</span></h1>
+            <h1 className="text-lg font-bold tracking-tight hidden xs:block">StreamHub<span className="text-brand-400">Pro</span></h1>
+            {userProfile?.subscription?.status === 'trialing' && (
+              <span className="hidden md:inline-flex px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-xs text-amber-400 font-medium">
+                Trial
+              </span>
+            )}
         </div>
         
         <div className="flex items-center gap-2 md:gap-3">
@@ -640,11 +678,11 @@ const App = () => {
                 <span className="hidden md:inline">REC</span>
             </button>
 
-            <button 
+            <button
                 onClick={toggleStream}
                 className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
-                    ${appState.isStreaming 
-                        ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50' 
+                    ${appState.isStreaming
+                        ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50'
                         : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
                     }`}
             >
@@ -652,8 +690,64 @@ const App = () => {
                 <span className="hidden md:inline">{appState.isStreaming ? 'END STREAM' : 'GO LIVE'}</span>
                 <span className="md:hidden">{appState.isStreaming ? 'STOP' : 'LIVE'}</span>
             </button>
+
+            {/* User Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
+              >
+                {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-dark-800 border border-gray-700 rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
+                  <div className="p-4 border-b border-gray-700">
+                    <p className="font-semibold text-white truncate">{user?.displayName || 'User'}</p>
+                    <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                    {userProfile?.subscription && (
+                      <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        userProfile.subscription.plan === 'pro'
+                          ? 'bg-brand-500/20 text-brand-400'
+                          : userProfile.subscription.plan === 'starter'
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {userProfile.subscription.plan.charAt(0).toUpperCase() + userProfile.subscription.plan.slice(1)} Plan
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2">
+                    <button className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-gray-700/50 rounded-lg transition-colors text-sm">
+                      <User size={16} />
+                      Account Settings
+                    </button>
+                    <button className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-gray-700/50 rounded-lg transition-colors text-sm">
+                      <CreditCard size={16} />
+                      Billing & Plans
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
+                    >
+                      <LogOut size={16} />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
         </div>
       </header>
+
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowUserMenu(false)}
+        />
+      )}
 
       {/* --- MAIN CONTENT --- */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -681,7 +775,7 @@ const App = () => {
                  <div className={`transition-all duration-300 relative shadow-2xl border-gray-800 overflow-hidden bg-black
                     ${isLandscape && window.innerHeight < 500 ? 'h-full aspect-video border-none' : 'w-full max-w-full aspect-video md:rounded-lg border-y md:border'}
                  `}>
-                    <CanvasCompositor 
+                    <CanvasCompositor
                         ref={canvasRef}
                         layout={layout}
                         cameraStream={cameraStream}
@@ -691,6 +785,12 @@ const App = () => {
                         backgroundUrl={activeBackgroundUrl}
                         videoVolume={videoVolume}
                         branding={branding}
+                    />
+                    {/* Chat Stream Overlay */}
+                    <ChatStreamOverlay
+                      messages={broadcastMessages}
+                      style="default"
+                      position="bottom"
                     />
                  </div>
 
@@ -851,6 +951,13 @@ const App = () => {
             </div>
         </aside>
       </div>
+
+      {/* Chat Stream Panel */}
+      <ChatStream
+        streamTopic={streamTopic || 'General'}
+        isStreaming={appState.isStreaming}
+        onBroadcast={handleBroadcast}
+      />
     </div>
   );
 };

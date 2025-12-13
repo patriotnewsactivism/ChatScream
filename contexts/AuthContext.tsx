@@ -1,0 +1,198 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { User } from 'firebase/auth';
+import {
+  auth,
+  onAuthChange,
+  signUpWithEmail,
+  signInWithEmail,
+  signInWithGoogle,
+  logOut,
+  resetPassword,
+  getUserProfile,
+  updateUserProfile,
+  UserProfile,
+} from '../services/firebase';
+
+interface AuthContextType {
+  user: User | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+  signUp: (email: string, password: string, displayName: string, referralCode?: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signInGoogle: (referralCode?: string) => Promise<void>;
+  logout: () => Promise<void>;
+  sendResetEmail: (email: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  clearError: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthChange(async (firebaseUser) => {
+      setUser(firebaseUser);
+
+      if (firebaseUser) {
+        try {
+          const profile = await getUserProfile(firebaseUser.uid);
+          setUserProfile(profile);
+        } catch (err) {
+          console.error('Failed to load user profile:', err);
+        }
+      } else {
+        setUserProfile(null);
+      }
+
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const signUp = async (
+    email: string,
+    password: string,
+    displayName: string,
+    referralCode?: string
+  ): Promise<void> => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signUpWithEmail(email, password, displayName, referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signIn = async (email: string, password: string): Promise<void> => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithEmail(email, password);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInGoogle = async (referralCode?: string): Promise<void> => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithGoogle(referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    setError(null);
+    try {
+      await logOut();
+      setUserProfile(null);
+    } catch (err: any) {
+      setError('Failed to log out. Please try again.');
+      throw err;
+    }
+  };
+
+  const sendResetEmail = async (email: string): Promise<void> => {
+    setError(null);
+    try {
+      await resetPassword(email);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const refreshProfile = async (): Promise<void> => {
+    if (user) {
+      const profile = await getUserProfile(user.uid);
+      setUserProfile(profile);
+    }
+  };
+
+  const clearError = (): void => {
+    setError(null);
+  };
+
+  const value: AuthContextType = {
+    user,
+    userProfile,
+    loading,
+    error,
+    signUp,
+    signIn,
+    signInGoogle,
+    logout,
+    sendResetEmail,
+    refreshProfile,
+    clearError,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+// Helper function to convert Firebase error codes to user-friendly messages
+function getErrorMessage(errorCode: string): string {
+  switch (errorCode) {
+    case 'auth/email-already-in-use':
+      return 'This email is already registered. Please sign in instead.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled. Please contact support.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters long.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Please contact support.';
+    case 'auth/user-not-found':
+      return 'No account found with this email. Please sign up.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please check and try again.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.';
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in cancelled. Please try again.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your connection.';
+    default:
+      return 'An error occurred. Please try again.';
+  }
+}
+
+export default AuthProvider;
