@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Users can update their own profile (except subscription fields)
+      allow update: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['subscription.stripeCustomerId', 'subscription.stripeSubscriptionId']);
+      // Only Cloud Functions can create users (via Admin SDK)
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // Affiliates collection
+    match /affiliates/{affiliateId} {
+      // Anyone can read affiliate codes (for validation)
+      allow read: if true;
+      // Only Cloud Functions can write
+      allow write: if false;
+    }
+
+    // Referrals collection
+    match /referrals/{referralId} {
+      // Only Cloud Functions can access
+      allow read, write: if false;
+    }
+
+    // Affiliate commissions collection
+    match /affiliate_commissions/{commissionId} {
+      // Only Cloud Functions can access
+      allow read, write: if false;
+    }
+
+    // Partners collection (e.g., Mythical Meta)
+    match /partners/{partnerId} {
+      // Only Cloud Functions can access
+      allow read, write: if false;
+    }
+
+    // Stream sessions (for analytics)
+    match /stream_sessions/{sessionId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}
