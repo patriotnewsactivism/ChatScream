@@ -30,6 +30,18 @@
         "function": "stripeWebhook"
       },
       {
+        "source": "/api/scream-webhook",
+        "function": "screamWebhook"
+      },
+      {
+        "source": "/api/create-scream-donation",
+        "function": "createScreamDonation"
+      },
+      {
+        "source": "/api/leaderboard",
+        "function": "getLeaderboard"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

@@ -13,8 +13,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-PROJECT_ID="${GCLOUD_PROJECT_ID:-chatscream-prod}"
+PROJECT_ID="${GCLOUD_PROJECT_ID:-wtp-apps}"
 DEPLOY_TARGET="${1:-all}"  # all, functions, hosting, rules
+
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  ChatScream - Deployment              ${NC}"
@@ -23,9 +27,10 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 echo "Project:    $PROJECT_ID"
 echo "Target:     $DEPLOY_TARGET"
+echo "Directory:  $PROJECT_ROOT"
 echo ""
 
-cd /home/user/StreamMobPro
+cd "$PROJECT_ROOT"
 
 # Ensure we're using the right project
 firebase use "$PROJECT_ID"

@@ -13,12 +13,19 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-PROJECT_ID="${GCLOUD_PROJECT_ID:-chatscream-prod}"
+PROJECT_ID="${GCLOUD_PROJECT_ID:-wtp-apps}"
+
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  ChatScream - Firebase Setup          ${NC}"
 echo -e "${BLUE}  Copyright 2025. Houston, TX          ${NC}"
 echo -e "${BLUE}========================================${NC}"
+echo ""
+echo "Project:    $PROJECT_ID"
+echo "Directory:  $PROJECT_ROOT"
 echo ""
 
 # Check if Firebase CLI is installed
@@ -41,7 +48,7 @@ echo -e "${GREEN}[✓]${NC} Logged into Firebase"
 echo ""
 echo -e "${BLUE}Step 1: Setting up Firebase project${NC}"
 
-cd /home/user/StreamMobPro
+cd "$PROJECT_ROOT"
 
 # Create .firebaserc if it doesn't exist
 if [ ! -f ".firebaserc" ]; then

@@ -1,14 +1,13 @@
 {
   "projects": {
-    "default": "chatscream-prod",
-    "production": "chatscream-prod",
-    "staging": "chatscream-staging"
+    "default": "wtp-apps",
+    "production": "wtp-apps"
   },
   "targets": {
-    "chatscream-prod": {
+    "wtp-apps": {
       "hosting": {
         "production": [
-          "chatscream-prod"
+          "wtp-apps"
         ]
       }
     }

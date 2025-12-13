@@ -46,7 +46,6 @@ var __importStar = (this && this.__importStar) || (function () {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getLeaderboard = exports.stripeWebhook = exports.awardWeeklyPrize = exports.screamWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
@@ -54,16 +53,22 @@ const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
 admin.initializeApp();
 const db = admin.firestore();
-// Initialize Stripe with your secret key
-const stripe = new stripe_1.default(((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key) || process.env.STRIPE_SECRET_KEY || '', {
+// Stripe configuration - secrets should be set via:
+// firebase functions:secrets:set STRIPE_SECRET_KEY
+// firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+if (!STRIPE_SECRET_KEY) {
+    console.error('STRIPE_SECRET_KEY not configured. Set it via: firebase functions:secrets:set STRIPE_SECRET_KEY');
+}
+const stripe = new stripe_1.default(STRIPE_SECRET_KEY || '', {
     apiVersion: '2023-10-16',
 });
-const WEBHOOK_SECRET = ((_b = functions.config().stripe) === null || _b === void 0 ? void 0 : _b.webhook_secret) || process.env.STRIPE_WEBHOOK_SECRET || '';
-// Price IDs for plans
+// Price IDs for plans - set these via environment or Firebase config
 const PRICE_IDS = {
-    starter: ((_c = functions.config().stripe) === null || _c === void 0 ? void 0 : _c.starter_price) || 'price_starter',
-    creator: ((_d = functions.config().stripe) === null || _d === void 0 ? void 0 : _d.creator_price) || 'price_creator',
-    pro: ((_e = functions.config().stripe) === null || _e === void 0 ? void 0 : _e.pro_price) || 'price_pro',
+    starter: process.env.STRIPE_PRICE_STARTER || 'price_starter',
+    creator: process.env.STRIPE_PRICE_CREATOR || 'price_creator',
+    pro: process.env.STRIPE_PRICE_PRO || 'price_pro',
 };
 // Chat Screamer tier thresholds
 const SCREAM_TIERS = {

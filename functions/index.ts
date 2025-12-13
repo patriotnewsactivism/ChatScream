@@ -17,14 +17,21 @@ import Stripe from 'stripe';
 admin.initializeApp();
 const db = admin.firestore();
 
-// Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '', {
+// Stripe configuration - secrets should be set via:
+// firebase functions:secrets:set STRIPE_SECRET_KEY
+// firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+
+if (!STRIPE_SECRET_KEY) {
+  console.error('STRIPE_SECRET_KEY not configured. Set it via: firebase functions:secrets:set STRIPE_SECRET_KEY');
+}
+
+const stripe = new Stripe(STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 });
 
-const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
-
-// Price IDs for plans
+// Price IDs for plans - set these via environment or Firebase config
 const PRICE_IDS = {
   starter: process.env.STRIPE_PRICE_STARTER || 'price_starter',
   creator: process.env.STRIPE_PRICE_CREATOR || 'price_creator',
