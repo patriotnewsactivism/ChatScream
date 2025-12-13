@@ -10,7 +10,8 @@ export interface PricingPlan {
   features: string[];
   limits: {
     destinations: number;
-    streamHours: number;
+    cloudHours: number; // Cloud VM streaming hours
+    localStreaming: boolean; // Unlimited local device streaming
     chatScreams: number;
     storage: number; // GB
   };
@@ -22,44 +23,46 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'free',
     name: 'Free',
-    description: 'Perfect for trying out ChatScream',
+    description: 'Stream from your device',
     price: 0,
     interval: 'month',
     features: [
       '1 streaming destination',
-      '720p streaming quality',
-      '2 hours/month streaming',
-      'Basic overlays',
-      'Watermark on stream',
+      'Unlimited local device streaming',
+      '720p max quality',
+      'ChatScream watermark',
+      'No cloud VM streaming',
     ],
     limits: {
       destinations: 1,
-      streamHours: 2,
+      cloudHours: 0,
+      localStreaming: true,
       chatScreams: 0,
-      storage: 1,
+      storage: 0,
     },
     stripePriceId: 'price_free',
   },
   {
     id: 'starter',
     name: 'Starter',
-    description: 'For creators getting started',
+    description: 'Get started with cloud power',
     price: 19,
     interval: 'month',
     features: [
       '3 streaming destinations',
+      'Unlimited local device streaming',
+      '5 hours/month cloud VM streaming',
       '1080p streaming quality',
-      '20 hours/month streaming',
-      'Basic Chat Screamer alerts',
-      'Cloud storage integration',
       'No watermark',
+      'Basic Chat Screamer alerts',
       'Email support',
     ],
     limits: {
       destinations: 3,
-      streamHours: 20,
-      chatScreams: 50,
-      storage: 25,
+      cloudHours: 5,
+      localStreaming: true,
+      chatScreams: 25,
+      storage: 10,
     },
     stripePriceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID || 'price_starter',
   },
@@ -67,25 +70,27 @@ export const PRICING_PLANS: PricingPlan[] = [
     id: 'creator',
     name: 'Creator',
     description: 'For growing streamers',
-    price: 39,
+    price: 29,
     interval: 'month',
     features: [
       '5 streaming destinations',
-      '1080p/60fps streaming',
-      '50 hours/month streaming',
+      'Unlimited local device streaming',
+      '15 hours/month cloud VM streaming',
+      '1080p/60fps quality',
       'Full Chat Screamer tiers',
-      'Custom Scream sounds/visuals',
-      'Leaderboard participation',
+      'Custom Scream sounds',
+      'Leaderboard eligible',
       'Priority support',
-      'Google Drive & Dropbox sync',
     ],
     limits: {
       destinations: 5,
-      streamHours: 50,
-      chatScreams: 200,
-      storage: 100,
+      cloudHours: 15,
+      localStreaming: true,
+      chatScreams: 100,
+      storage: 50,
     },
     stripePriceId: import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID || 'price_creator',
+    popular: true,
   },
   {
     id: 'pro',
@@ -95,24 +100,24 @@ export const PRICING_PLANS: PricingPlan[] = [
     interval: 'month',
     features: [
       'Unlimited destinations',
+      'Unlimited local device streaming',
+      '50 hours/month cloud VM streaming',
       '4K streaming quality',
-      'Unlimited streaming hours',
       'Maximum Scream customization',
       'Custom TTS voices',
       'Leaderboard priority',
+      'Cloud storage integrations',
       'API access',
-      'White-label options',
       '24/7 priority support',
-      'All cloud integrations',
     ],
     limits: {
       destinations: 999,
-      streamHours: 999,
+      cloudHours: 50,
+      localStreaming: true,
       chatScreams: 999,
-      storage: 500,
+      storage: 200,
     },
     stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
-    popular: true,
   },
 ];
 
@@ -199,13 +204,24 @@ export const formatPrice = (price: number): string => {
 // Check if user has access to feature based on plan
 export const hasFeatureAccess = (
   userPlan: string,
-  feature: 'chatScreams' | 'destinations' | 'streamHours' | 'storage',
+  feature: 'chatScreams' | 'destinations' | 'cloudHours' | 'storage',
   currentUsage: number
 ): boolean => {
   const plan = getPlanById(userPlan);
   if (!plan) return false;
 
   return currentUsage < plan.limits[feature];
+};
+
+// Check remaining cloud hours
+export const getRemainingCloudHours = (
+  userPlan: string,
+  usedHours: number
+): number => {
+  const plan = getPlanById(userPlan);
+  if (!plan) return 0;
+
+  return Math.max(0, plan.limits.cloudHours - usedHours);
 };
 
 // Chat Screamer tier configuration

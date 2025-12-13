@@ -653,7 +653,7 @@ const LandingPage: React.FC = () => {
               <span className="text-brand-400"> Pricing</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Start free, upgrade when you're ready. The Professional tier unlocks advanced Chat Screamer customization.
+              All plans include unlimited local device streaming. Cloud VM hours let you stream without using your bandwidth.
             </p>
             {referralCode && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 rounded-full text-green-400 text-sm font-medium">
@@ -668,14 +668,19 @@ const LandingPage: React.FC = () => {
               <div
                 key={plan.id}
                 className={`relative p-6 rounded-2xl border transition-all ${
-                  plan.id === 'pro'
+                  plan.popular
                     ? 'bg-gradient-to-br from-brand-900/50 to-pink-900/30 border-brand-500/50 shadow-xl shadow-brand-500/10 scale-105 z-10'
                     : 'bg-dark-800/50 border-gray-800 hover:border-gray-700'
                 }`}
               >
-                {plan.id === 'pro' && (
+                {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-brand-500 to-pink-500 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1">
-                    <Crown size={12} /> INFLUENCER TIER
+                    <Star size={12} /> MOST POPULAR
+                  </div>
+                )}
+                {plan.id === 'pro' && !plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1">
+                    <Crown size={12} /> INFLUENCER
                   </div>
                 )}
 
@@ -688,7 +693,7 @@ const LandingPage: React.FC = () => {
                 </div>
 
                 <ul className="space-y-3 mb-6">
-                  {plan.features.slice(0, 6).map((feature, index) => (
+                  {plan.features.slice(0, 7).map((feature, index) => (
                     <li key={index} className="flex items-start gap-2 text-sm text-gray-300">
                       <Check size={16} className="text-brand-400 mt-0.5 flex-shrink-0" />
                       {feature}
@@ -699,8 +704,10 @@ const LandingPage: React.FC = () => {
                 <button
                   onClick={handleGetStarted}
                   className={`w-full py-3 rounded-full font-semibold transition-all ${
-                    plan.id === 'pro'
+                    plan.popular
                       ? 'bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 text-white shadow-lg shadow-brand-600/30'
+                      : plan.id === 'pro'
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white'
                       : 'bg-gray-700 hover:bg-gray-600 text-white'
                   }`}
                 >
