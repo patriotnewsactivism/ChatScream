@@ -3,11 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { PRICING_PLANS, formatPrice } from '../services/stripe';
 import {
-  Megaphone, Play, Zap, Globe, MessageSquare, Shield, ChevronRight,
-  Check, Star, Users, Video, Sparkles, ArrowRight, Menu, X,
-  Youtube, Facebook, Twitch, Radio, Clock, Cloud, BarChart3,
-  DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive,
-  Upload, TrendingUp, Gift, AlertTriangle
+  Megaphone, Play, Zap, Globe, MessageSquare, Shield, ShieldCheck, ChevronRight,
+  Check, CheckCircle2, Star, Users, Video, Sparkles, ArrowRight, Menu, X,
+  Youtube, Facebook, Twitch, Radio, Clock, Cloud, CloudCog, BarChart3,
+  DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive, Server, Database,
+  Upload, TrendingUp, Gift, AlertTriangle, MapPin
 } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
@@ -769,6 +769,102 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Operational Readiness Section */}
+      <section className="py-20 md:py-32 bg-dark-800/70">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600/20 border border-emerald-500/30 rounded-full text-emerald-400 text-sm font-medium mb-6">
+              <ShieldCheck size={16} />
+              <span>Google Cloud Ready</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Deployment Ready out of Houston, TX
+            </h2>
+            <p className="text-gray-400 text-lg max-w-3xl mx-auto">
+              Cloud resources stay linked and validated so you can focus on production testing—no guessing whether the VM or database connections are live.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-gray-300">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/70 border border-gray-800">
+                <Shield size={16} className="text-brand-400" />
+                <span>Copyright 2025</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/70 border border-gray-800">
+                <MapPin size={16} className="text-pink-400" />
+                <span>Based in Houston, TX</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="p-6 rounded-2xl border border-gray-800 bg-dark-900/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-500/30 flex items-center justify-center">
+                    <CloudCog size={24} className="text-cyan-300" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">Google Cloud Link</h3>
+                    <p className="text-sm text-gray-400">Project wiring & IAM verified.</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-1">
+                  <CheckCircle2 size={14} />
+                  Linked
+                </span>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-300 pl-1 list-disc list-inside">
+                <li>Service accounts scoped for streaming and storage access.</li>
+                <li>Audit logging stays on for every rollout checkpoint.</li>
+              </ul>
+            </div>
+
+            <div className="p-6 rounded-2xl border border-gray-800 bg-dark-900/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-green-500/30 flex items-center justify-center">
+                    <Server size={24} className="text-emerald-300" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">Compute Engine VM</h3>
+                    <p className="text-sm text-gray-400">Provisioned and warmed.</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-1">
+                  <CheckCircle2 size={14} />
+                  Ready
+                </span>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-300 pl-1 list-disc list-inside">
+                <li>Streaming image baked with health checks passing.</li>
+                <li>Ingress locked to studio services for secure testing.</li>
+              </ul>
+            </div>
+
+            <div className="p-6 rounded-2xl border border-gray-800 bg-dark-900/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/30 to-orange-500/30 flex items-center justify-center">
+                    <Database size={24} className="text-amber-300" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">Database Links</h3>
+                    <p className="text-sm text-gray-400">Read/write paths mapped.</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-1">
+                  <CheckCircle2 size={14} />
+                  Live
+                </span>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-300 pl-1 list-disc list-inside">
+                <li>Firestore and SQL endpoints reachable from the VPC.</li>
+                <li>Staging data paths pinned for end-to-end QA runs.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 md:py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-brand-900/30 via-pink-900/30 to-brand-900/30" />
@@ -841,7 +937,7 @@ const LandingPage: React.FC = () => {
 
           <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-gray-400 text-sm">
-              © 2024 ChatScream. All rights reserved.
+              © 2025 ChatScream. Based in Houston, TX. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-gray-400 hover:text-white transition-colors">
