@@ -1,0 +1,13 @@
+{
+  "name": "chatscream-db-init",
+  "version": "1.0.0",
+  "description": "ChatScream Firestore database initialization",
+  "main": "init-firestore.js",
+  "scripts": {
+    "init": "node init-firestore.js",
+    "init:emulator": "FIRESTORE_EMULATOR_HOST=localhost:8080 node init-firestore.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0"
+  }
+}
