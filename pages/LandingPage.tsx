@@ -3,9 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { PRICING_PLANS, formatPrice } from '../services/stripe';
 import {
-  Monitor, Play, Zap, Globe, MessageSquare, Shield, ChevronRight,
+  Megaphone, Play, Zap, Globe, MessageSquare, Shield, ChevronRight,
   Check, Star, Users, Video, Sparkles, ArrowRight, Menu, X,
-  Youtube, Facebook, Twitch, Radio, Clock, Cloud, BarChart3
+  Youtube, Facebook, Twitch, Radio, Clock, Cloud, BarChart3,
+  DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive,
+  Upload, TrendingUp, Gift, AlertTriangle
 } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
@@ -14,6 +16,7 @@ const LandingPage: React.FC = () => {
   const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeScreamTier, setActiveScreamTier] = useState(0);
 
   const referralCode = searchParams.get('ref') || '';
 
@@ -25,6 +28,14 @@ const LandingPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Animate through scream tiers for demo
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveScreamTier(prev => (prev + 1) % 3);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleGetStarted = () => {
     if (user) {
       navigate('/studio');
@@ -33,10 +44,14 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const screamTiers = [
+    { amount: '$5', effect: 'Standard Scream', color: 'from-green-500 to-emerald-500', description: 'Visual alert + Text-to-Speech' },
+    { amount: '$10-20', effect: 'Loud Scream', color: 'from-yellow-500 to-orange-500', description: 'Larger overlay, louder SFX, animation' },
+    { amount: '$50+', effect: 'MAXIMUM SCREAM', color: 'from-red-500 to-pink-500', description: 'Screen takeover, chaotic visuals!' },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
-      {/* SEO Meta Tags are in index.html */}
-
       {/* Navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled ? 'bg-dark-900/95 backdrop-blur-lg shadow-xl' : 'bg-transparent'
@@ -45,20 +60,20 @@ const LandingPage: React.FC = () => {
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-2 rounded-xl shadow-lg shadow-brand-500/30">
-                <Monitor size={24} className="text-white" />
+              <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-2 rounded-xl shadow-lg shadow-brand-500/30 animate-glow">
+                <Megaphone size={24} className="text-white" />
               </div>
               <span className="text-xl font-bold">
-                StreamHub<span className="text-brand-400">Pro</span>
+                Chat<span className="text-brand-400">Scream</span>
               </span>
             </div>
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-gray-300 hover:text-white transition-colors">Features</a>
-              <a href="#chat-stream" className="text-gray-300 hover:text-white transition-colors">Chat Stream</a>
+              <a href="#cloud-power" className="text-gray-300 hover:text-white transition-colors">Cloud Power</a>
+              <a href="#chat-screamer" className="text-gray-300 hover:text-white transition-colors">Chat Screamer</a>
+              <a href="#leaderboard" className="text-gray-300 hover:text-white transition-colors">Leaderboard</a>
               <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Pricing</a>
-              <a href="#testimonials" className="text-gray-300 hover:text-white transition-colors">Reviews</a>
             </div>
 
             {/* CTA Buttons */}
@@ -82,7 +97,7 @@ const LandingPage: React.FC = () => {
                     onClick={handleGetStarted}
                     className="px-6 py-2.5 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 rounded-full font-semibold transition-all shadow-lg shadow-brand-600/30 flex items-center gap-2"
                   >
-                    Start Free Trial <ArrowRight size={18} />
+                    Start Screaming <Megaphone size={18} />
                   </button>
                 </>
               )}
@@ -102,10 +117,10 @@ const LandingPage: React.FC = () => {
         {mobileMenuOpen && (
           <div className="md:hidden bg-dark-800/95 backdrop-blur-lg border-t border-gray-800">
             <div className="px-4 py-6 space-y-4">
-              <a href="#features" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Features</a>
-              <a href="#chat-stream" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Chat Stream</a>
+              <a href="#cloud-power" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Cloud Power</a>
+              <a href="#chat-screamer" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Chat Screamer</a>
+              <a href="#leaderboard" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Leaderboard</a>
               <a href="#pricing" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-              <a href="#testimonials" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Reviews</a>
               <div className="pt-4 border-t border-gray-700 space-y-3">
                 {user ? (
                   <button
@@ -126,7 +141,7 @@ const LandingPage: React.FC = () => {
                       onClick={() => { handleGetStarted(); setMobileMenuOpen(false); }}
                       className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
                     >
-                      Start Free Trial
+                      Start Screaming
                     </button>
                   </>
                 )}
@@ -142,29 +157,30 @@ const LandingPage: React.FC = () => {
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse delay-1000" />
+          <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-pink-600/15 rounded-full blur-3xl animate-pulse delay-500" />
         </div>
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600/20 border border-brand-500/30 rounded-full text-brand-400 text-sm font-medium mb-6 animate-fade-in">
-              <Sparkles size={16} />
-              <span>Now in Beta - Get 7 Days Free!</span>
+              <Zap size={16} />
+              <span>Zero Bandwidth Streaming - Your Upload, Our Power!</span>
             </div>
 
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight mb-6">
-              Professional Streaming
-              <span className="block bg-gradient-to-r from-brand-400 via-brand-500 to-purple-500 bg-clip-text text-transparent">
-                Made Simple
+              Stream Without Limits.
+              <span className="block bg-gradient-to-r from-brand-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
+                Scream for Attention.
               </span>
             </h1>
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-8">
-              Stream to YouTube, Facebook, Twitch and more simultaneously.
-              With our revolutionary <strong className="text-white">Chat Stream</strong> feature,
-              send live messages directly to your viewers' screens!
+              Cloud-powered streaming that uses <strong className="text-brand-400">ZERO of your bandwidth</strong>.
+              Let viewers send donation-triggered <strong className="text-white">"Screams"</strong> that
+              take over the screen for maximum engagement!
             </p>
 
             {/* CTA Buttons */}
@@ -173,17 +189,35 @@ const LandingPage: React.FC = () => {
                 onClick={handleGetStarted}
                 className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 rounded-full font-bold text-lg transition-all shadow-xl shadow-brand-600/30 flex items-center justify-center gap-2 group"
               >
-                <Play size={20} fill="currentColor" />
-                Start Streaming Free
+                <Megaphone size={20} />
+                Start Screaming Free
                 <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </button>
               <button
-                onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => document.getElementById('chat-screamer')?.scrollIntoView({ behavior: 'smooth' })}
                 className="w-full sm:w-auto px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-full font-semibold text-gray-300 hover:text-white transition-all flex items-center justify-center gap-2"
               >
                 <Video size={20} />
-                Watch Demo
+                See It In Action
               </button>
+            </div>
+
+            {/* Zero Bandwidth Callout */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
+              <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-xl">
+                <WifiOff size={24} className="text-green-400" />
+                <div className="text-left">
+                  <div className="font-bold text-green-400">Zero Bandwidth</div>
+                  <div className="text-xs text-gray-400">Stream uses our servers, not yours</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl">
+                <Cloud size={24} className="text-purple-400" />
+                <div className="text-left">
+                  <div className="font-bold text-purple-400">Cloud Powered</div>
+                  <div className="text-xs text-gray-400">Constant high-bitrate CBR streaming</div>
+                </div>
+              </div>
             </div>
 
             {/* Social Proof */}
@@ -191,10 +225,10 @@ const LandingPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <div className="flex -space-x-2">
                   {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 border-2 border-dark-900" />
+                    <div key={i} className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-pink-500 border-2 border-dark-900" />
                   ))}
                 </div>
-                <span>2,500+ Streamers</span>
+                <span>3,500+ Screamers</span>
               </div>
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((i) => (
@@ -227,135 +261,144 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 md:py-32 bg-dark-800/50">
+      {/* Cloud Power Section */}
+      <section id="cloud-power" className="py-20 md:py-32 bg-dark-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 rounded-full text-cyan-400 text-sm font-medium mb-6">
+              <Cloud size={16} />
+              <span>The Cloud Engine</span>
+            </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Everything You Need to
-              <span className="text-brand-400"> Stream Like a Pro</span>
+              Your Stream, <span className="text-cyan-400">Our Servers</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Professional streaming tools without the complexity. Set up in minutes, not hours.
+              Upload your content to our cloud. We handle the heavy lifting with constant, high-bitrate streaming - regardless of YOUR internet connection.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Globe,
-                title: 'Multi-Platform Streaming',
-                description: 'Stream to YouTube, Facebook, Twitch, and any custom RTMP destination simultaneously.',
-                color: 'from-blue-500 to-cyan-500'
-              },
-              {
-                icon: MessageSquare,
-                title: 'Chat Stream',
-                description: 'Send live text messages that appear directly on your viewers\' screens. A game-changer for engagement!',
-                color: 'from-purple-500 to-pink-500',
-                highlight: true
-              },
-              {
-                icon: Sparkles,
-                title: 'AI-Powered Tools',
-                description: 'Generate stream titles, descriptions, and chat responses with Claude AI assistance.',
-                color: 'from-amber-500 to-orange-500'
-              },
-              {
-                icon: Video,
-                title: 'Professional Layouts',
-                description: '5 studio layouts including Picture-in-Picture, Split Screen, and Newsroom style.',
-                color: 'from-green-500 to-emerald-500'
-              },
-              {
-                icon: Shield,
-                title: 'Brand Customization',
-                description: 'Lower thirds, scrolling tickers, custom colors, and studio backgrounds.',
-                color: 'from-red-500 to-rose-500'
-              },
-              {
-                icon: Cloud,
-                title: 'Cloud Recording',
-                description: 'Record your streams and access them from anywhere. Never lose content again.',
-                color: 'from-indigo-500 to-violet-500'
-              }
-            ].map((feature, index) => (
-              <div
-                key={index}
-                className={`relative p-6 rounded-2xl border transition-all hover:scale-105 ${
-                  feature.highlight
-                    ? 'bg-gradient-to-br from-purple-900/50 to-pink-900/30 border-purple-500/50 shadow-xl shadow-purple-500/10'
-                    : 'bg-dark-800/50 border-gray-800 hover:border-gray-700'
-                }`}
-              >
-                {feature.highlight && (
-                  <div className="absolute -top-3 left-4 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-bold">
-                    UNIQUE FEATURE
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Visual Demo */}
+            <div className="relative">
+              <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-gray-800 p-8">
+                {/* Cloud Architecture Visualization */}
+                <div className="space-y-6">
+                  {/* User Upload */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl flex items-center justify-center">
+                      <Upload size={28} className="text-gray-400" />
+                    </div>
+                    <ArrowRight className="text-gray-600" />
+                    <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full w-1/3 bg-gradient-to-r from-red-500 to-orange-500 rounded-full animate-pulse" />
+                    </div>
+                    <span className="text-xs text-gray-500">Your Upload</span>
                   </div>
-                )}
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-4 shadow-lg`}>
-                  <feature.icon size={24} className="text-white" />
+
+                  {/* Cloud Processing */}
+                  <div className="flex justify-center">
+                    <div className="w-24 h-24 bg-gradient-to-br from-cyan-600/30 to-purple-600/30 rounded-2xl border border-cyan-500/30 flex items-center justify-center animate-glow">
+                      <Cloud size={40} className="text-cyan-400" />
+                    </div>
+                  </div>
+
+                  {/* Output Streams */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-500">Our Output</span>
+                    <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full w-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full" />
+                    </div>
+                    <ArrowRight className="text-gray-600" />
+                    <div className="flex gap-2">
+                      <Youtube size={20} className="text-red-500" />
+                      <Facebook size={20} className="text-blue-500" />
+                      <Twitch size={20} className="text-purple-500" />
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                <p className="text-gray-400">{feature.description}</p>
+
+                {/* Stats */}
+                <div className="mt-8 grid grid-cols-3 gap-4">
+                  <div className="text-center p-3 bg-dark-900/50 rounded-xl">
+                    <div className="text-2xl font-bold text-cyan-400">0%</div>
+                    <div className="text-xs text-gray-500">Your Bandwidth</div>
+                  </div>
+                  <div className="text-center p-3 bg-dark-900/50 rounded-xl">
+                    <div className="text-2xl font-bold text-green-400">8 Mbps</div>
+                    <div className="text-xs text-gray-500">Constant CBR</div>
+                  </div>
+                  <div className="text-center p-3 bg-dark-900/50 rounded-xl">
+                    <div className="text-2xl font-bold text-purple-400">4K</div>
+                    <div className="text-xs text-gray-500">Max Quality</div>
+                  </div>
+                </div>
               </div>
-            ))}
+            </div>
+
+            {/* Features List */}
+            <div className="space-y-6">
+              {[
+                {
+                  icon: HardDrive,
+                  title: 'Cloud Storage Integration',
+                  description: 'Connect Google Drive, OneDrive, or Dropbox. Stream directly from your cloud files.',
+                  color: 'from-blue-500 to-cyan-500'
+                },
+                {
+                  icon: WifiOff,
+                  title: 'Zero-Bandwidth Promise',
+                  description: 'Upload once, stream forever. Your home internet is never the bottleneck.',
+                  color: 'from-green-500 to-emerald-500'
+                },
+                {
+                  icon: Zap,
+                  title: 'Constant High-Bitrate',
+                  description: 'Our servers output constant bitrate (CBR) streams regardless of your connection quality.',
+                  color: 'from-yellow-500 to-orange-500'
+                },
+                {
+                  icon: Globe,
+                  title: 'Global Edge Network',
+                  description: 'Stream from the server closest to your audience for minimal latency.',
+                  color: 'from-purple-500 to-pink-500'
+                }
+              ].map((feature, index) => (
+                <div key={index} className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800 hover:border-gray-700 transition-all">
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center flex-shrink-0`}>
+                    <feature.icon size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white mb-1">{feature.title}</h3>
+                    <p className="text-gray-400 text-sm">{feature.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Chat Stream Feature Highlight */}
-      <section id="chat-stream" className="py-20 md:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 via-transparent to-pink-900/20" />
+      {/* Chat Screamer Feature Highlight */}
+      <section id="chat-screamer" className="py-20 md:py-32 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-900/20 via-transparent to-pink-900/20" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600/20 border border-purple-500/30 rounded-full text-purple-400 text-sm font-medium mb-6">
-                <MessageSquare size={16} />
-                <span>Revolutionary Feature</span>
-              </div>
-
-              <h2 className="text-3xl md:text-5xl font-bold mb-6">
-                Introducing
-                <span className="block bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-                  Chat Stream
-                </span>
-              </h2>
-
-              <p className="text-lg text-gray-300 mb-8">
-                Send live text messages that appear directly on your viewers' screens!
-                Perfect for announcements, shoutouts, Q&A sessions, and real-time engagement.
-              </p>
-
-              <ul className="space-y-4 mb-8">
-                {[
-                  'Messages appear as beautiful overlays on the stream',
-                  'AI-powered auto-responses for viewer questions',
-                  'Customizable styles and animations',
-                  'Moderation tools to keep chat clean',
-                  'Works on all platforms simultaneously'
-                ].map((item, index) => (
-                  <li key={index} className="flex items-center gap-3 text-gray-300">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                      <Check size={14} className="text-white" />
-                    </div>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                onClick={handleGetStarted}
-                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-full font-bold text-lg transition-all shadow-xl shadow-purple-600/30 flex items-center gap-2"
-              >
-                Try Chat Stream Free
-                <ArrowRight size={20} />
-              </button>
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600/20 border border-brand-500/30 rounded-full text-brand-400 text-sm font-medium mb-6">
+              <Megaphone size={16} />
+              <span>The USP - Unique Selling Point</span>
             </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">
+              The <span className="bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">Chat Screamer</span>
+            </h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              Donation-triggered alerts that DEMAND attention. The more they donate, the more OBNOXIOUS it gets!
+            </p>
+          </div>
 
-            {/* Chat Stream Demo Visual */}
-            <div className="relative">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Interactive Demo */}
+            <div className="relative order-2 lg:order-1">
               <div className="aspect-video bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden">
                 {/* Simulated Stream Preview */}
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
@@ -365,16 +408,27 @@ const LandingPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Chat Stream Message */}
-                <div className="absolute bottom-8 left-4 right-4 animate-slide-up">
-                  <div className="bg-gradient-to-r from-purple-600/90 to-pink-600/90 backdrop-blur-sm px-6 py-4 rounded-xl shadow-2xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <MessageSquare size={16} className="text-purple-200" />
-                      <span className="text-purple-200 text-xs font-medium">CHAT STREAM</span>
+                {/* Scream Alert Demo */}
+                <div className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${
+                  activeScreamTier === 2 ? 'bg-gradient-to-br from-red-600/80 to-pink-600/80 backdrop-blur-sm' : ''
+                }`}>
+                  <div className={`transform transition-all duration-500 ${
+                    activeScreamTier === 0 ? 'scale-100' : activeScreamTier === 1 ? 'scale-110' : 'scale-125 animate-shake'
+                  }`}>
+                    <div className={`px-8 py-6 rounded-2xl shadow-2xl bg-gradient-to-r ${screamTiers[activeScreamTier].color} animate-scream`}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <DollarSign size={activeScreamTier === 2 ? 32 : 24} className="text-white" />
+                        <span className="text-white/80 text-sm font-medium">SCREAM ALERT!</span>
+                      </div>
+                      <div className={`font-bold text-white ${
+                        activeScreamTier === 0 ? 'text-xl' : activeScreamTier === 1 ? 'text-2xl' : 'text-4xl'
+                      }`}>
+                        {screamTiers[activeScreamTier].amount} - {screamTiers[activeScreamTier].effect}
+                      </div>
+                      <div className="text-white/70 text-sm mt-2">
+                        "{activeScreamTier === 2 ? 'LETS GOOOOO!!!' : 'Great stream!'}"
+                      </div>
                     </div>
-                    <p className="text-white font-semibold text-lg">
-                      Welcome to the stream! Drop a 🔥 if you're excited!
-                    </p>
                   </div>
                 </div>
 
@@ -390,13 +444,208 @@ const LandingPage: React.FC = () => {
                   <span className="text-white text-xs font-medium">1,234 viewers</span>
                 </div>
               </div>
+
+              {/* Tier Selector */}
+              <div className="flex justify-center gap-4 mt-6">
+                {screamTiers.map((tier, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setActiveScreamTier(index)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      activeScreamTier === index
+                        ? `bg-gradient-to-r ${tier.color} text-white shadow-lg`
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    {tier.amount}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Feature Description */}
+            <div className="order-1 lg:order-2">
+              <h3 className="text-2xl font-bold mb-6">
+                How It Works: <span className="text-brand-400">Send a Scream</span>
+              </h3>
+
+              <div className="space-y-6">
+                {[
+                  {
+                    tier: '$5 - $10',
+                    title: 'Standard Scream',
+                    description: 'A tasteful visual alert with Text-to-Speech reading your message aloud.',
+                    icon: Volume2,
+                    color: 'from-green-500 to-emerald-500'
+                  },
+                  {
+                    tier: '$10 - $20',
+                    title: 'Loud Scream',
+                    description: 'Larger overlay, louder sound effects, distinct animation that grabs attention.',
+                    icon: MessageSquare,
+                    color: 'from-yellow-500 to-orange-500'
+                  },
+                  {
+                    tier: '$50+',
+                    title: 'MAXIMUM SCREAM',
+                    description: 'Full screen takeover effect with chaotic audio/visuals. TOS compliant but intentionally obnoxious!',
+                    icon: AlertTriangle,
+                    color: 'from-red-500 to-pink-500'
+                  }
+                ].map((item, index) => (
+                  <div key={index} className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center flex-shrink-0`}>
+                      <item.icon size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r ${item.color} text-white`}>
+                          {item.tier}
+                        </span>
+                        <h4 className="font-bold text-white">{item.title}</h4>
+                      </div>
+                      <p className="text-gray-400 text-sm">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleGetStarted}
+                className="mt-8 px-8 py-4 bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 rounded-full font-bold text-lg transition-all shadow-xl shadow-brand-600/30 flex items-center gap-2"
+              >
+                <Megaphone size={20} />
+                Enable Chat Screamer
+                <ArrowRight size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Scream Leaderboard Section */}
+      <section id="leaderboard" className="py-20 md:py-32 bg-dark-800/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600/20 border border-yellow-500/30 rounded-full text-yellow-400 text-sm font-medium mb-6">
+              <Trophy size={16} />
+              <span>Gamification</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              The Weekly <span className="text-yellow-400">Scream Leaderboard</span>
+            </h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              Compete for the crown! The streamer with the most Chat Screams each week wins a FREE month of Professional tier.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Leaderboard Preview */}
+            <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-gray-800 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <Trophy className="text-yellow-400" size={20} />
+                  This Week's Top Screamers
+                </h3>
+                <span className="text-xs text-gray-500">Resets Sunday</span>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  { rank: 1, name: 'StreamerKing', screams: 247, badge: Crown, color: 'from-yellow-500 to-amber-500' },
+                  { rank: 2, name: 'GamerGirl99', screams: 189, badge: Trophy, color: 'from-gray-400 to-gray-500' },
+                  { rank: 3, name: 'ProPlayer', screams: 156, badge: Trophy, color: 'from-amber-700 to-amber-800' },
+                  { rank: 4, name: 'ContentCreator', screams: 98, badge: null, color: null },
+                  { rank: 5, name: 'LiveStreamer', screams: 67, badge: null, color: null },
+                ].map((player) => (
+                  <div
+                    key={player.rank}
+                    className={`flex items-center gap-4 p-4 rounded-xl transition-all ${
+                      player.rank === 1
+                        ? 'bg-gradient-to-r from-yellow-900/30 to-amber-900/30 border border-yellow-500/30'
+                        : 'bg-dark-900/50 hover:bg-dark-900'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                      player.color ? `bg-gradient-to-br ${player.color} text-white` : 'bg-gray-700 text-gray-400'
+                    }`}>
+                      {player.rank}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{player.name}</span>
+                        {player.badge && <player.badge size={16} className="text-yellow-400" />}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-brand-400">{player.screams}</div>
+                      <div className="text-xs text-gray-500">screams</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 p-4 bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <Gift className="text-green-400" size={24} />
+                  <div>
+                    <div className="font-bold text-green-400">Weekly Prize</div>
+                    <div className="text-sm text-gray-400">1 FREE month of Professional ($59 value)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* How It Works */}
+            <div>
+              <h3 className="text-2xl font-bold mb-6">How to Win</h3>
+
+              <div className="space-y-4">
+                {[
+                  {
+                    step: '1',
+                    title: 'Receive Screams',
+                    description: 'Every donation $5+ triggers a Chat Scream and counts towards your total.'
+                  },
+                  {
+                    step: '2',
+                    title: 'Climb the Ranks',
+                    description: 'The leaderboard tracks total Scream QUANTITY, not dollar amount. More engagement = higher rank.'
+                  },
+                  {
+                    step: '3',
+                    title: 'Win Weekly',
+                    description: 'Top streamer each week automatically receives a credit for one free month of Professional tier.'
+                  }
+                ].map((item, index) => (
+                  <div key={index} className="flex gap-4">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center font-bold text-white flex-shrink-0">
+                      {item.step}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white mb-1">{item.title}</h4>
+                      <p className="text-gray-400 text-sm">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="text-purple-400" size={24} />
+                  <div>
+                    <div className="font-bold text-purple-400">Pro Tip</div>
+                    <div className="text-sm text-gray-400">Encourage smaller, frequent donations over single large ones for leaderboard success!</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 md:py-32 bg-dark-800/50">
+      <section id="pricing" className="py-20 md:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -404,7 +653,7 @@ const LandingPage: React.FC = () => {
               <span className="text-brand-400"> Pricing</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Start free, upgrade when you're ready. No hidden fees, cancel anytime.
+              Start free, upgrade when you're ready. The Professional tier unlocks advanced Chat Screamer customization.
             </p>
             {referralCode && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 rounded-full text-green-400 text-sm font-medium">
@@ -419,14 +668,14 @@ const LandingPage: React.FC = () => {
               <div
                 key={plan.id}
                 className={`relative p-6 rounded-2xl border transition-all ${
-                  plan.popular
-                    ? 'bg-gradient-to-br from-brand-900/50 to-brand-800/30 border-brand-500/50 shadow-xl shadow-brand-500/10 scale-105 z-10'
+                  plan.id === 'pro'
+                    ? 'bg-gradient-to-br from-brand-900/50 to-pink-900/30 border-brand-500/50 shadow-xl shadow-brand-500/10 scale-105 z-10'
                     : 'bg-dark-800/50 border-gray-800 hover:border-gray-700'
                 }`}
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-brand-500 to-brand-600 rounded-full text-xs font-bold whitespace-nowrap">
-                    MOST POPULAR
+                {plan.id === 'pro' && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-brand-500 to-pink-500 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1">
+                    <Crown size={12} /> INFLUENCER TIER
                   </div>
                 )}
 
@@ -450,8 +699,8 @@ const LandingPage: React.FC = () => {
                 <button
                   onClick={handleGetStarted}
                   className={`w-full py-3 rounded-full font-semibold transition-all ${
-                    plan.popular
-                      ? 'bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-600/30'
+                    plan.id === 'pro'
+                      ? 'bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 text-white shadow-lg shadow-brand-600/30'
                       : 'bg-gray-700 hover:bg-gray-600 text-white'
                   }`}
                 >
@@ -464,15 +713,15 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Testimonials Section */}
-      <section id="testimonials" className="py-20 md:py-32">
+      <section id="testimonials" className="py-20 md:py-32 bg-dark-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               Loved by
-              <span className="text-brand-400"> Streamers</span>
+              <span className="text-brand-400"> Screamers</span>
             </h2>
             <p className="text-gray-400 text-lg">
-              Join thousands of content creators who've upgraded their streaming game.
+              Join thousands of content creators making their streams unforgettable.
             </p>
           </div>
 
@@ -481,25 +730,25 @@ const LandingPage: React.FC = () => {
               {
                 name: 'Alex Gaming',
                 role: 'Twitch Partner',
-                quote: 'Chat Stream is a game-changer! My viewers love seeing messages pop up on screen. Engagement is through the roof!',
+                quote: 'Chat Screamer is INSANE! My viewers go crazy trying to trigger the Maximum Scream. Donations went up 300%!',
                 rating: 5
               },
               {
                 name: 'Sarah Creates',
                 role: 'YouTube Creator',
-                quote: 'Finally, a streaming tool that\'s powerful but not overwhelming. Set up in 5 minutes and I\'m live on 3 platforms!',
+                quote: 'Zero bandwidth streaming changed everything. I was dropping frames before, now it\'s crystal clear 4K every time.',
                 rating: 5
               },
               {
                 name: 'Mike Productions',
                 role: 'Event Streamer',
-                quote: 'The professional layouts and branding options make my corporate streams look amazing. Worth every penny.',
+                quote: 'Won the leaderboard twice now! That free month of Pro paid for itself with the exposure I got.',
                 rating: 5
               }
             ].map((testimonial, index) => (
               <div
                 key={index}
-                className="p-6 rounded-2xl bg-dark-800/50 border border-gray-800"
+                className="p-6 rounded-2xl bg-dark-900/50 border border-gray-800"
               >
                 <div className="flex items-center gap-1 mb-4">
                   {[...Array(testimonial.rating)].map((_, i) => (
@@ -508,7 +757,7 @@ const LandingPage: React.FC = () => {
                 </div>
                 <p className="text-gray-300 mb-6 italic">"{testimonial.quote}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-600" />
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-pink-500" />
                   <div>
                     <div className="font-semibold">{testimonial.name}</div>
                     <div className="text-gray-400 text-sm">{testimonial.role}</div>
@@ -522,23 +771,23 @@ const LandingPage: React.FC = () => {
 
       {/* CTA Section */}
       <section className="py-20 md:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-brand-900/30 via-purple-900/30 to-brand-900/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-900/30 via-pink-900/30 to-brand-900/30" />
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">
-            Ready to Level Up Your
-            <span className="block text-brand-400">Streaming Game?</span>
+            Ready to Make Some
+            <span className="block bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">Noise?</span>
           </h2>
           <p className="text-lg text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of creators who've discovered the easiest way to stream professionally.
-            Start your free trial today - no credit card required.
+            Join thousands of creators using ChatScream to build unforgettable streaming experiences.
+            Start free - no credit card required.
           </p>
           <button
             onClick={handleGetStarted}
-            className="px-10 py-5 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 rounded-full font-bold text-xl transition-all shadow-2xl shadow-brand-600/30 flex items-center gap-3 mx-auto"
+            className="px-10 py-5 bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 rounded-full font-bold text-xl transition-all shadow-2xl shadow-brand-600/30 flex items-center gap-3 mx-auto animate-glow"
           >
-            <Play size={24} fill="currentColor" />
-            Start Streaming Now
+            <Megaphone size={24} />
+            Start Screaming Now
             <ArrowRight size={24} />
           </button>
         </div>
@@ -550,23 +799,23 @@ const LandingPage: React.FC = () => {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="bg-brand-600 p-1.5 rounded-lg">
-                  <Monitor size={18} className="text-white" />
+                <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg">
+                  <Megaphone size={18} className="text-white" />
                 </div>
-                <span className="text-lg font-bold">StreamHub<span className="text-brand-400">Pro</span></span>
+                <span className="text-lg font-bold">Chat<span className="text-brand-400">Scream</span></span>
               </div>
               <p className="text-gray-400 text-sm">
-                Professional streaming made simple. Stream to multiple platforms with ease.
+                Stream Without Limits. Scream for Attention. Cloud-powered streaming with zero bandwidth usage.
               </p>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#cloud-power" className="hover:text-white transition-colors">Cloud Power</a></li>
+                <li><a href="#chat-screamer" className="hover:text-white transition-colors">Chat Screamer</a></li>
+                <li><a href="#leaderboard" className="hover:text-white transition-colors">Leaderboard</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#chat-stream" className="hover:text-white transition-colors">Chat Stream</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">API</a></li>
               </ul>
             </div>
 
@@ -592,7 +841,7 @@ const LandingPage: React.FC = () => {
 
           <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-gray-400 text-sm">
-              © 2024 StreamHub Pro. All rights reserved.
+              © 2024 ChatScream. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-gray-400 hover:text-white transition-colors">

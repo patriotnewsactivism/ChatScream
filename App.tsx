@@ -22,7 +22,7 @@ import { generateStreamMetadata } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
 import {
-  Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Sparkles,
+  Mic, MicOff, Video, VideoOff, Megaphone, MonitorOff, Sparkles,
   Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
   FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, ChevronUp,
   LogOut, User, CreditCard, MessageSquare
@@ -648,9 +648,9 @@ const App = () => {
       <header className="h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 z-30 transition-all">
         <div className="flex items-center gap-2">
             <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
-                <Monitor size={18} className="text-white"/>
+                <Megaphone size={18} className="text-white"/>
             </div>
-            <h1 className="text-lg font-bold tracking-tight hidden xs:block">StreamHub<span className="text-brand-400">Pro</span></h1>
+            <h1 className="text-lg font-bold tracking-tight hidden xs:block">Chat<span className="text-brand-400">Scream</span></h1>
             {userProfile?.subscription?.status === 'trialing' && (
               <span className="hidden md:inline-flex px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-xs text-amber-400 font-medium">
                 Trial

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getAffiliateByCode } from '../services/firebase';
 import {
-  Monitor, Mail, Lock, User, Eye, EyeOff, ArrowRight,
+  Megaphone, Mail, Lock, User, Eye, EyeOff, ArrowRight,
   AlertCircle, Check, Gift, Loader2
 } from 'lucide-react';
 
@@ -127,10 +127,10 @@ const AuthPage: React.FC = () => {
             onClick={() => navigate('/')}
           >
             <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-2.5 rounded-xl shadow-lg shadow-brand-500/30">
-              <Monitor size={28} className="text-white" />
+              <Megaphone size={28} className="text-white" />
             </div>
             <span className="text-2xl font-bold">
-              StreamHub<span className="text-brand-400">Pro</span>
+              Chat<span className="text-brand-400">Scream</span>
             </span>
           </div>
         </div>
