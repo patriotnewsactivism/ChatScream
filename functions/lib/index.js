@@ -118,6 +118,13 @@ const oauthRuntimeOpts = {
         'TWITCH_CLIENT_SECRET',
     ],
 };
+// OAuth platform configurations
+const OAUTH_PLATFORMS = ['youtube', 'facebook', 'twitch'];
+const parseOAuthPlatform = (value) => {
+    if (typeof value !== 'string')
+        return null;
+    return OAUTH_PLATFORMS.includes(value) ? value : null;
+};
 const getOAuthCredentials = (platform) => {
     switch (platform) {
         case 'youtube':
@@ -413,6 +420,7 @@ function getCurrentWeekId() {
 exports.oauthExchange = functions
     .runWith(oauthRuntimeOpts)
     .https.onRequest(async (req, res) => {
+    var _a, _b, _c;
     if (!setCorsHeaders(req, res))
         return;
     if (req.method === 'OPTIONS') {
@@ -425,9 +433,15 @@ exports.oauthExchange = functions
     }
     try {
         const authUser = await verifyAuth(req);
-        const { platform, code, redirectUri } = req.body;
+        const platform = parseOAuthPlatform((_a = req.body) === null || _a === void 0 ? void 0 : _a.platform);
+        const code = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.code) === 'string' ? req.body.code : '';
+        const redirectUri = typeof ((_c = req.body) === null || _c === void 0 ? void 0 : _c.redirectUri) === 'string' ? req.body.redirectUri : '';
         if (!platform || !code) {
-            res.status(400).json({ error: 'Missing platform or authorization code' });
+            res.status(400).json({ error: 'Missing or invalid platform/authorization code' });
+            return;
+        }
+        if (!redirectUri) {
+            res.status(400).json({ error: 'Missing redirectUri' });
             return;
         }
         const creds = getOAuthCredentials(platform);
@@ -441,7 +455,7 @@ exports.oauthExchange = functions
             client_secret: creds.clientSecret,
             code,
             grant_type: 'authorization_code',
-            redirect_uri: redirectUri || '',
+            redirect_uri: redirectUri,
         });
         const tokenResponse = await fetch(creds.tokenEndpoint, {
             method: 'POST',
@@ -487,7 +501,7 @@ exports.oauthExchange = functions
 exports.oauthRefresh = functions
     .runWith(oauthRuntimeOpts)
     .https.onRequest(async (req, res) => {
-    var _a;
+    var _a, _b;
     if (!setCorsHeaders(req, res))
         return;
     if (req.method === 'OPTIONS') {
@@ -500,14 +514,14 @@ exports.oauthRefresh = functions
     }
     try {
         const authUser = await verifyAuth(req);
-        const { platform } = req.body;
+        const platform = parseOAuthPlatform((_a = req.body) === null || _a === void 0 ? void 0 : _a.platform);
         if (!platform) {
-            res.status(400).json({ error: 'Missing platform' });
+            res.status(400).json({ error: 'Missing or invalid platform' });
             return;
         }
         const userDoc = await db.collection('users').doc(authUser.uid).get();
         const userData = userDoc.data();
-        const platformData = (_a = userData === null || userData === void 0 ? void 0 : userData.connectedPlatforms) === null || _a === void 0 ? void 0 : _a[platform];
+        const platformData = (_b = userData === null || userData === void 0 ? void 0 : userData.connectedPlatforms) === null || _b === void 0 ? void 0 : _b[platform];
         if (!(platformData === null || platformData === void 0 ? void 0 : platformData.refreshToken)) {
             res.status(400).json({ error: 'No refresh token available' });
             return;
@@ -550,7 +564,7 @@ exports.oauthRefresh = functions
 exports.oauthStreamKey = functions
     .runWith(oauthRuntimeOpts)
     .https.onRequest(async (req, res) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     if (!setCorsHeaders(req, res))
         return;
     if (req.method === 'OPTIONS') {
@@ -563,13 +577,14 @@ exports.oauthStreamKey = functions
     }
     try {
         const authUser = await verifyAuth(req);
-        const { platform, channelId } = req.body;
+        const platform = parseOAuthPlatform((_a = req.body) === null || _a === void 0 ? void 0 : _a.platform);
+        const channelId = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.channelId) === 'string' ? req.body.channelId : '';
         if (!platform) {
-            res.status(400).json({ error: 'Missing platform' });
+            res.status(400).json({ error: 'Missing or invalid platform' });
             return;
         }
         const userDoc = await db.collection('users').doc(authUser.uid).get();
-        const platformData = (_b = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.connectedPlatforms) === null || _b === void 0 ? void 0 : _b[platform];
+        const platformData = (_d = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.connectedPlatforms) === null || _d === void 0 ? void 0 : _d[platform];
         if (!(platformData === null || platformData === void 0 ? void 0 : platformData.accessToken)) {
             res.status(400).json({ error: 'Platform not connected' });
             return;
@@ -593,7 +608,7 @@ exports.oauthStreamKey = functions
 exports.oauthChannels = functions
     .runWith(oauthRuntimeOpts)
     .https.onRequest(async (req, res) => {
-    var _a, _b;
+    var _a, _b, _c;
     if (!setCorsHeaders(req, res))
         return;
     if (req.method === 'OPTIONS') {
@@ -606,13 +621,13 @@ exports.oauthChannels = functions
     }
     try {
         const authUser = await verifyAuth(req);
-        const { platform } = req.body;
+        const platform = parseOAuthPlatform((_a = req.body) === null || _a === void 0 ? void 0 : _a.platform);
         if (!platform) {
-            res.status(400).json({ error: 'Missing platform' });
+            res.status(400).json({ error: 'Missing or invalid platform' });
             return;
         }
         const userDoc = await db.collection('users').doc(authUser.uid).get();
-        const platformData = (_b = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.connectedPlatforms) === null || _b === void 0 ? void 0 : _b[platform];
+        const platformData = (_c = (_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.connectedPlatforms) === null || _c === void 0 ? void 0 : _c[platform];
         if (!(platformData === null || platformData === void 0 ? void 0 : platformData.accessToken)) {
             res.status(400).json({ error: 'Platform not connected' });
             return;

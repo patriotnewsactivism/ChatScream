@@ -91,7 +91,13 @@ const oauthRuntimeOpts = {
 };
 
 // OAuth platform configurations
-type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
+const OAUTH_PLATFORMS = ['youtube', 'facebook', 'twitch'] as const;
+type OAuthPlatform = typeof OAUTH_PLATFORMS[number];
+
+const parseOAuthPlatform = (value: unknown): OAuthPlatform | null => {
+  if (typeof value !== 'string') return null;
+  return (OAUTH_PLATFORMS as readonly string[]).includes(value) ? (value as OAuthPlatform) : null;
+};
 
 interface OAuthTokens {
   accessToken: string;
@@ -378,14 +384,21 @@ export const oauthExchange = functions
 
     try {
       const authUser = await verifyAuth(req);
-      const { platform, code, redirectUri } = req.body;
+      const platform = parseOAuthPlatform(req.body?.platform);
+      const code = typeof req.body?.code === 'string' ? req.body.code : '';
+      const redirectUri = typeof req.body?.redirectUri === 'string' ? req.body.redirectUri : '';
 
       if (!platform || !code) {
-        res.status(400).json({ error: 'Missing platform or authorization code' });
+        res.status(400).json({ error: 'Missing or invalid platform/authorization code' });
         return;
       }
 
-      const creds = getOAuthCredentials(platform as OAuthPlatform);
+      if (!redirectUri) {
+        res.status(400).json({ error: 'Missing redirectUri' });
+        return;
+      }
+
+      const creds = getOAuthCredentials(platform);
       if (!creds.clientId || !creds.clientSecret) {
         res.status(500).json({ error: `${platform} OAuth not configured` });
         return;
@@ -397,7 +410,7 @@ export const oauthExchange = functions
         client_secret: creds.clientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri || '',
+        redirect_uri: redirectUri,
       });
 
       const tokenResponse = await fetch(creds.tokenEndpoint, {
@@ -417,7 +430,7 @@ export const oauthExchange = functions
 
       // Get user info from platform
       const accountInfo = await getPlatformAccountInfo(
-        platform as OAuthPlatform,
+        platform,
         tokens.access_token,
         creds.clientId
       );
@@ -462,10 +475,10 @@ export const oauthRefresh = functions
 
     try {
       const authUser = await verifyAuth(req);
-      const { platform } = req.body;
+      const platform = parseOAuthPlatform(req.body?.platform);
 
       if (!platform) {
-        res.status(400).json({ error: 'Missing platform' });
+        res.status(400).json({ error: 'Missing or invalid platform' });
         return;
       }
 
@@ -478,7 +491,7 @@ export const oauthRefresh = functions
         return;
       }
 
-      const creds = getOAuthCredentials(platform as OAuthPlatform);
+      const creds = getOAuthCredentials(platform);
 
       const tokenParams = new URLSearchParams({
         client_id: creds.clientId,
@@ -534,10 +547,11 @@ export const oauthStreamKey = functions
 
     try {
       const authUser = await verifyAuth(req);
-      const { platform, channelId } = req.body;
+      const platform = parseOAuthPlatform(req.body?.platform);
+      const channelId = typeof req.body?.channelId === 'string' ? req.body.channelId : '';
 
       if (!platform) {
-        res.status(400).json({ error: 'Missing platform' });
+        res.status(400).json({ error: 'Missing or invalid platform' });
         return;
       }
 
@@ -549,9 +563,9 @@ export const oauthStreamKey = functions
         return;
       }
 
-      const creds = getOAuthCredentials(platform as OAuthPlatform);
+      const creds = getOAuthCredentials(platform);
       const streamInfo = await getPlatformStreamKey(
-        platform as OAuthPlatform,
+        platform,
         platformData.accessToken,
         creds.clientId,
         channelId || platformData.channelId
@@ -580,10 +594,10 @@ export const oauthChannels = functions
 
     try {
       const authUser = await verifyAuth(req);
-      const { platform } = req.body;
+      const platform = parseOAuthPlatform(req.body?.platform);
 
       if (!platform) {
-        res.status(400).json({ error: 'Missing platform' });
+        res.status(400).json({ error: 'Missing or invalid platform' });
         return;
       }
 
@@ -595,9 +609,9 @@ export const oauthChannels = functions
         return;
       }
 
-      const creds = getOAuthCredentials(platform as OAuthPlatform);
+      const creds = getOAuthCredentials(platform);
       const channels = await getPlatformChannels(
-        platform as OAuthPlatform,
+        platform,
         platformData.accessToken,
         creds.clientId
       );

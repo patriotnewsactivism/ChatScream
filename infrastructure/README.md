@@ -276,6 +276,10 @@ gcloud compute instances get-serial-port-output chatscream-media-server \
 1. Ensure you're logged in: `firebase login`
 2. Check project selection: `firebase use`
 3. Verify billing is enabled for the project
+4. If Functions deploy fails due to missing Secret Manager entries, set them from repo root:
+   - `chmod +x infrastructure/setup-secrets.sh`
+   - `./infrastructure/setup-secrets.sh wtp-apps`
+   - `firebase deploy --only functions --project wtp-apps`
 
 ## Support
 

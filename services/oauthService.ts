@@ -189,6 +189,7 @@ export const exchangeCodeForTokens = async (
   userId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const redirectUri = getOAuthConfig(platform).redirectUri;
     const response = await fetch('/api/oauth/exchange', {
       method: 'POST',
       headers: {
@@ -197,7 +198,7 @@ export const exchangeCodeForTokens = async (
       body: JSON.stringify({
         platform,
         code,
-        userId
+        redirectUri
       })
     });
 
@@ -225,8 +226,7 @@ export const refreshAccessToken = async (
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        platform,
-        userId
+        platform
       })
     });
 
@@ -342,7 +342,7 @@ export const getStreamKey = async (
     const response = await fetch('/api/oauth/stream-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, userId, channelId })
+      body: JSON.stringify({ platform, channelId })
     });
 
     if (!response.ok) {
@@ -370,7 +370,7 @@ export const getChannels = async (
     const response = await fetch('/api/oauth/channels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, userId })
+      body: JSON.stringify({ platform })
     });
 
     if (!response.ok) {
