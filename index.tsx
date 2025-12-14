@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
 const Studio = React.lazy(() => import('./App'));
+const CreatorDashboard = React.lazy(() => import('./pages/CreatorDashboard'));
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,6 +51,14 @@ const AppRouter: React.FC = () => {
         <Route path="/reset-password" element={<AuthPage />} />
 
         {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <CreatorDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/studio"
           element={
