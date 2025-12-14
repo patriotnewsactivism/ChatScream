@@ -562,11 +562,14 @@ const App = () => {
   };
 
   const handleLogout = async () => {
+    setShowUserMenu(false);
     try {
       await logout();
       navigate('/');
+      setMobileTip('Signed out.');
     } catch (error) {
       console.error('Logout failed:', error);
+      setMobileTip('Sign out failed. Please try again.');
     }
   };
 
@@ -838,7 +841,7 @@ const App = () => {
       {/* Click outside to close user menu */}
       {showUserMenu && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-20"
           onClick={() => setShowUserMenu(false)}
         />
       )}
