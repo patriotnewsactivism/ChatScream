@@ -31,6 +31,17 @@ import {
   Timestamp
 } from 'firebase/firestore';
 
+const MASTER_EMAILS = ['mreardon@wtpnews.org'];
+const DEFAULT_BETA_TESTERS = ['leroytruth247@gmail.com'];
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const isMasterEmail = (email?: string | null): boolean => {
+  if (!email) return false;
+  const normalized = normalizeEmail(email);
+  return MASTER_EMAILS.includes(normalized);
+};
+
 // Validate required Firebase environment variables safely so the app can still render
 const requiredEnvVars = [
   'VITE_FIREBASE_API_KEY',
@@ -130,6 +141,7 @@ export interface UserProfile {
     currentPeriodEnd?: Timestamp;
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
+    betaOverride?: boolean;
   };
   usage: {
     cloudHoursUsed: number; // Cloud VM streaming hours used this billing period
@@ -139,6 +151,7 @@ export interface UserProfile {
   affiliate?: {
     code: string;
     referredBy?: string;
+    referredByUserId?: string;
     referrals: number;
     totalEarnings: number;
     pendingPayout: number;
@@ -196,21 +209,19 @@ export const signUpWithEmail = async (
 ): Promise<User> => {
   const authClient = getAuthInstance();
   const db = getDbInstanceSafe();
+  const normalizedEmail = normalizeEmail(email);
   const userCredential = await createUserWithEmailAndPassword(authClient, email, password);
   const user = userCredential.user;
 
   // Calculate trial days (7 default, 14 with referral)
   let trialDays = 7;
-  let referredBy: string | undefined;
+  let referredBy: { code: string; ownerId: string } | undefined;
 
   if (referralCode) {
     const affiliateData = await getAffiliateByCode(referralCode);
     if (affiliateData && affiliateData.isActive) {
       trialDays = 7 + affiliateData.bonusTrialDays; // 7 + 7 = 14 for MMM code
-      referredBy = affiliateData.code;
-
-      // Update referral count
-      await updateAffiliateReferral(referralCode);
+      referredBy = { code: affiliateData.code, ownerId: affiliateData.ownerId };
     }
   }
 
@@ -218,10 +229,12 @@ export const signUpWithEmail = async (
     new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
   );
 
+  const personalAffiliateCode = await createUniqueAffiliateCode();
+
   // Create user profile in Firestore
   const userProfile: UserProfile = {
     uid: user.uid,
-    email: email,
+    email: normalizedEmail,
     displayName: displayName,
     createdAt: serverTimestamp() as Timestamp,
     subscription: {
@@ -233,13 +246,14 @@ export const signUpWithEmail = async (
       cloudHoursUsed: 0,
     },
     affiliate: referredBy ? {
-      code: generateAffiliateCode(user.uid),
-      referredBy: referredBy,
+      code: personalAffiliateCode,
+      referredBy: referredBy.code,
+      referredByUserId: referredBy.ownerId,
       referrals: 0,
       totalEarnings: 0,
       pendingPayout: 0,
     } : {
-      code: generateAffiliateCode(user.uid),
+      code: personalAffiliateCode,
       referrals: 0,
       totalEarnings: 0,
       pendingPayout: 0,
@@ -251,6 +265,17 @@ export const signUpWithEmail = async (
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
+
+  await ensureAffiliateDocForUser({
+    code: personalAffiliateCode,
+    ownerId: user.uid,
+    ownerEmail: normalizedEmail,
+    ownerName: displayName,
+  });
+
+  if (referredBy) {
+    await updateAffiliateReferral(referredBy.code, referredBy.ownerId, user.uid);
+  }
 
   return user;
 };
@@ -268,14 +293,13 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
   if (userDoc.exists()) return;
 
   let trialDays = 7;
-  let referredBy: string | undefined;
+  let referredBy: { code: string; ownerId: string } | undefined;
 
   if (referralCode) {
     const affiliateData = await getAffiliateByCode(referralCode);
     if (affiliateData && affiliateData.isActive) {
       trialDays = 7 + affiliateData.bonusTrialDays;
-      referredBy = affiliateData.code;
-      await updateAffiliateReferral(referralCode);
+      referredBy = { code: affiliateData.code, ownerId: affiliateData.ownerId };
     }
   }
 
@@ -283,9 +307,12 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
     new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
   );
 
+  const normalizedEmail = normalizeEmail(user.email || '');
+  const personalAffiliateCode = await createUniqueAffiliateCode();
+
   const userProfile: UserProfile = {
     uid: user.uid,
-    email: user.email || '',
+    email: normalizedEmail,
     displayName: user.displayName || 'User',
     photoURL: user.photoURL || undefined,
     createdAt: serverTimestamp() as Timestamp,
@@ -298,13 +325,14 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
       cloudHoursUsed: 0,
     },
     affiliate: referredBy ? {
-      code: generateAffiliateCode(user.uid),
-      referredBy: referredBy,
+      code: personalAffiliateCode,
+      referredBy: referredBy.code,
+      referredByUserId: referredBy.ownerId,
       referrals: 0,
       totalEarnings: 0,
       pendingPayout: 0,
     } : {
-      code: generateAffiliateCode(user.uid),
+      code: personalAffiliateCode,
       referrals: 0,
       totalEarnings: 0,
       pendingPayout: 0,
@@ -316,6 +344,17 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
+
+  await ensureAffiliateDocForUser({
+    code: personalAffiliateCode,
+    ownerId: user.uid,
+    ownerEmail: normalizedEmail,
+    ownerName: userProfile.displayName,
+  });
+
+  if (referredBy) {
+    await updateAffiliateReferral(referredBy.code, referredBy.ownerId, user.uid);
+  }
 };
 
 const shouldPreferRedirect = (): boolean => {
@@ -438,7 +477,7 @@ export const updateUserProfile = async (uid: string, data: Partial<UserProfile>)
 };
 
 // Affiliate Functions
-const generateAffiliateCode = (uid: string): string => {
+const generateAffiliateCode = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
@@ -449,6 +488,8 @@ const generateAffiliateCode = (uid: string): string => {
 
 export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | null> => {
   const db = getDbInstanceSafe();
+  const normalizedCode = code.trim().toUpperCase();
+  if (!normalizedCode) return null;
   // Check for special codes first (like MMM)
   const specialCodes: Record<string, AffiliateCode> = {
     'MMM': {
@@ -465,13 +506,19 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
     }
   };
 
-  if (specialCodes[code.toUpperCase()]) {
-    return specialCodes[code.toUpperCase()];
+  if (specialCodes[normalizedCode]) {
+    return specialCodes[normalizedCode];
+  }
+
+  // Prefer direct doc lookup (affiliates/{CODE})
+  const direct = await getDoc(doc(db, 'affiliates', normalizedCode));
+  if (direct.exists()) {
+    return direct.data() as AffiliateCode;
   }
 
   // Check Firestore for user-created affiliate codes
   const affiliatesRef = collection(db, 'affiliates');
-  const q = query(affiliatesRef, where('code', '==', code.toUpperCase()));
+  const q = query(affiliatesRef, where('code', '==', normalizedCode));
   const querySnapshot = await getDocs(q);
 
   if (!querySnapshot.empty) {
@@ -481,29 +528,71 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
   return null;
 };
 
-export const updateAffiliateReferral = async (code: string): Promise<void> => {
+const createUniqueAffiliateCode = async (): Promise<string> => {
   const db = getDbInstanceSafe();
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const candidate = generateAffiliateCode().toUpperCase();
+    if (candidate === 'MMM') continue;
+    const snap = await getDoc(doc(db, 'affiliates', candidate));
+    if (!snap.exists()) return candidate;
+  }
+  throw new Error('Failed to generate a unique affiliate code');
+};
+
+const ensureAffiliateDocForUser = async (input: { code: string; ownerId: string; ownerEmail: string; ownerName: string }): Promise<void> => {
+  const db = getDbInstanceSafe();
+  const code = input.code.trim().toUpperCase();
+  if (!code) return;
+  const affiliateDocRef = doc(db, 'affiliates', code);
+  const existing = await getDoc(affiliateDocRef);
+  if (existing.exists()) return;
+
+  await setDoc(affiliateDocRef, {
+    code,
+    ownerId: input.ownerId,
+    ownerEmail: normalizeEmail(input.ownerEmail),
+    ownerName: input.ownerName || 'User',
+    commissionRate: 0.20,
+    bonusTrialDays: 3,
+    totalReferrals: 0,
+    totalEarnings: 0,
+    createdAt: serverTimestamp(),
+    isActive: true,
+  } satisfies AffiliateCode as any);
+};
+
+export const updateAffiliateReferral = async (code: string, referrerId: string, referredUserId: string): Promise<void> => {
+  const db = getDbInstanceSafe();
+  const normalizedCode = code.trim().toUpperCase();
   // Skip for special codes - they're tracked differently
-  if (code.toUpperCase() === 'MMM') {
-    // Log referral for Mythical Meta
+  if (normalizedCode === 'MMM') {
     const referralDoc = doc(collection(db, 'referrals'));
     await setDoc(referralDoc, {
       affiliateCode: 'MMM',
+      referrerId: referrerId || 'mythical-meta',
+      referredUserId,
       createdAt: serverTimestamp(),
     });
     return;
   }
 
-  const affiliatesRef = collection(db, 'affiliates');
-  const q = query(affiliatesRef, where('code', '==', code.toUpperCase()));
-  const querySnapshot = await getDocs(q);
+  const affiliateDocRef = doc(db, 'affiliates', normalizedCode);
+  const affiliateDoc = await getDoc(affiliateDocRef);
 
-  if (!querySnapshot.empty) {
-    const affiliateDoc = querySnapshot.docs[0];
-    await updateDoc(affiliateDoc.ref, {
-      totalReferrals: (affiliateDoc.data().totalReferrals || 0) + 1,
+  if (affiliateDoc.exists()) {
+    const existingCount = (affiliateDoc.data() as any).totalReferrals || 0;
+    await updateDoc(affiliateDocRef, {
+      totalReferrals: existingCount + 1,
     });
   }
+
+  const referralDoc = doc(collection(db, 'referrals'));
+  await setDoc(referralDoc, {
+    affiliateCode: normalizedCode,
+    referrerId,
+    referredUserId,
+    createdAt: serverTimestamp(),
+  });
 };
 
 export const createAffiliateCode = async (
@@ -512,7 +601,7 @@ export const createAffiliateCode = async (
   userName: string
 ): Promise<string> => {
   const db = getDbInstanceSafe();
-  const code = generateAffiliateCode(userId);
+  const code = await createUniqueAffiliateCode();
 
   const affiliateData: AffiliateCode = {
     code: code,
@@ -530,6 +619,138 @@ export const createAffiliateCode = async (
   await setDoc(doc(db, 'affiliates', code), affiliateData);
 
   return code;
+};
+
+export interface AccessListConfig {
+  admins: string[];
+  betaTesters: string[];
+}
+
+export const getAccessListConfig = async (): Promise<AccessListConfig> => {
+  const db = getDbInstanceSafe();
+  try {
+    const snap = await getDoc(doc(db, 'config', 'access'));
+    if (!snap.exists()) {
+      return {
+        admins: MASTER_EMAILS.map(normalizeEmail),
+        betaTesters: DEFAULT_BETA_TESTERS.map(normalizeEmail),
+      };
+    }
+    const data = snap.data() as any;
+    const admins = Array.isArray(data?.admins) ? data.admins.filter((e: any) => typeof e === 'string').map(normalizeEmail) : [];
+    const betaTesters = Array.isArray(data?.betaTesters) ? data.betaTesters.filter((e: any) => typeof e === 'string').map(normalizeEmail) : [];
+    return {
+      admins: Array.from(new Set((admins.length ? admins : MASTER_EMAILS).map(normalizeEmail))),
+      betaTesters: Array.from(new Set((betaTesters.length ? betaTesters : DEFAULT_BETA_TESTERS).map(normalizeEmail))),
+    };
+  } catch (err) {
+    return {
+      admins: MASTER_EMAILS.map(normalizeEmail),
+      betaTesters: DEFAULT_BETA_TESTERS.map(normalizeEmail),
+    };
+  }
+};
+
+export const setAccessListConfig = async (admins: string[], betaTesters: string[]): Promise<void> => {
+  const authClient = getAuthInstance();
+  const db = getDbInstanceSafe();
+  if (!authClient.currentUser) throw new Error('Not signed in');
+
+  const unique = (emails: string[]) => Array.from(new Set(emails.map(normalizeEmail).filter(Boolean)));
+  await setDoc(
+    doc(db, 'config', 'access'),
+    {
+      admins: unique(admins),
+      betaTesters: unique(betaTesters),
+      updatedAt: serverTimestamp(),
+      updatedBy: authClient.currentUser.uid,
+    },
+    { merge: true }
+  );
+};
+
+export const findUsersByEmail = async (email: string): Promise<UserProfile[]> => {
+  const db = getDbInstanceSafe();
+  const normalized = normalizeEmail(email);
+  const usersRef = collection(db, 'users');
+  const results: UserProfile[] = [];
+
+  const snapNormalized = await getDocs(query(usersRef, where('email', '==', normalized)));
+  results.push(...snapNormalized.docs.map((d) => d.data() as UserProfile));
+
+  const raw = email.trim();
+  if (raw && raw !== normalized) {
+    const snapRaw = await getDocs(query(usersRef, where('email', '==', raw)));
+    results.push(...snapRaw.docs.map((d) => d.data() as UserProfile));
+  }
+
+  const byUid = new Map<string, UserProfile>();
+  results.forEach((u) => byUid.set(u.uid, u));
+  return Array.from(byUid.values());
+};
+
+export const setUserAccessOverrides = async (
+  uid: string,
+  patch: { role: 'admin' | 'beta_tester'; betaTester: boolean; plan: PlanTier; status: UserProfile['subscription']['status'] }
+): Promise<void> => {
+  const db = getDbInstanceSafe();
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, {
+    role: patch.role,
+    betaTester: patch.betaTester,
+    'subscription.plan': patch.plan,
+    'subscription.status': patch.status,
+    'subscription.betaOverride': true,
+  } as any);
+};
+
+export const ensureAffiliateForSignedInUser = async (): Promise<string> => {
+  const authClient = getAuthInstance();
+  const db = getDbInstanceSafe();
+  const currentUser = authClient.currentUser;
+  if (!currentUser) return '';
+
+  const snap = await getDoc(doc(db, 'users', currentUser.uid));
+  if (!snap.exists()) return '';
+  const profile = snap.data() as UserProfile;
+  const code = profile?.affiliate?.code?.toUpperCase() || '';
+  if (!code) return '';
+
+  const affiliateDocRef = doc(db, 'affiliates', code);
+  const existing = await getDoc(affiliateDocRef);
+  if (!existing.exists()) {
+    await setDoc(affiliateDocRef, {
+      code,
+      ownerId: currentUser.uid,
+      ownerEmail: normalizeEmail(currentUser.email || profile.email || ''),
+      ownerName: profile.displayName || currentUser.displayName || 'User',
+      commissionRate: 0.2,
+      bonusTrialDays: 3,
+      totalReferrals: 0,
+      totalEarnings: 0,
+      createdAt: serverTimestamp(),
+      isActive: true,
+    } satisfies AffiliateCode as any);
+  }
+
+  return code;
+};
+
+export const applyLocalAccessOverrides = (profile: UserProfile | null, email?: string | null): UserProfile | null => {
+  if (!profile) return profile;
+  if (!isMasterEmail(email)) return profile;
+
+  return {
+    ...profile,
+    role: 'admin',
+    betaTester: true,
+    subscription: {
+      ...profile.subscription,
+      plan: 'enterprise',
+      status: 'active',
+      betaOverride: true,
+    },
+  };
 };
 
 // Auth State Observer

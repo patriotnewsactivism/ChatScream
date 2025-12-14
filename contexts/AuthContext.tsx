@@ -16,6 +16,8 @@ import {
   getUserProfile,
   updateUserProfile,
   UserProfile,
+  applyLocalAccessOverrides,
+  ensureAffiliateForSignedInUser,
   firebaseConfigError,
 } from '../services/firebase';
 
@@ -94,7 +96,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.warn('Access sync skipped:', err);
           }
           const profile = await getUserProfile(firebaseUser.uid);
-          setUserProfile(profile);
+          setUserProfile(applyLocalAccessOverrides(profile, firebaseUser.email));
+          ensureAffiliateForSignedInUser().catch(() => {});
         } catch (err) {
           console.error('Failed to load user profile:', err);
         }
@@ -246,7 +249,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     guardConfig();
     if (user) {
       const profile = await getUserProfile(user.uid);
-      setUserProfile(profile);
+      setUserProfile(applyLocalAccessOverrides(profile, user.email));
     }
   };
 

@@ -43,6 +43,7 @@ const App = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org' || userProfile?.role === 'admin';
 
   // --- State ---
   const [destinations, setDestinations] = useState<Destination[]>([
@@ -840,7 +841,9 @@ const App = () => {
                     <p className="text-xs text-gray-400 truncate">{user?.email}</p>
                     {userProfile?.subscription && (
                       <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        userProfile.subscription.plan === 'pro'
+                        userProfile.subscription.plan === 'enterprise'
+                          ? 'bg-purple-500/20 text-purple-300'
+                          : userProfile.subscription.plan === 'pro'
                           ? 'bg-brand-500/20 text-brand-400'
                           : userProfile.subscription.plan === 'expert'
                           ? 'bg-green-500/20 text-green-400'
@@ -860,6 +863,15 @@ const App = () => {
                       <CreditCard size={16} />
                       Billing & Plans
                     </button>
+                    {canAccessAdmin && (
+                      <button
+                        onClick={() => navigate('/admin')}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:bg-gray-700/50 rounded-lg transition-colors text-sm"
+                      >
+                        <Settings size={16} />
+                        Admin Portal
+                      </button>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm"

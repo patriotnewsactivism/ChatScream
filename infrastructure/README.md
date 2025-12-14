@@ -85,6 +85,22 @@ cd ..
 
 ## Scripts Reference
 
+### Setting Firebase Secrets (Windows / PowerShell)
+
+If `firebase deploy` fails with “Failed to validate secret versions … Secret … not found”, you need to create the missing Secret Manager values first.
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\infrastructure\setup-secrets.ps1 -ProjectId wtp-apps
+```
+
+Then deploy functions:
+
+```powershell
+firebase deploy --only functions --project wtp-apps
+```
+
 ### `setup-gcloud-project.sh`
 
 Creates and configures the Google Cloud project:

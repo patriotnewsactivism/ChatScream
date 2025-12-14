@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
+import { Calendar, Clock, Copy, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
 
 const planMinutes: Record<string, number> = {
   free: 0,
-  starter: 180,
-  pro: 600,
+  pro: 180,
+  expert: 600,
   enterprise: 3000,
 };
 
@@ -16,6 +16,19 @@ const CreatorDashboard: React.FC = () => {
   const { userProfile } = useAuth();
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
+  const referralCode = userProfile?.affiliate?.code || '';
+  const referralLink = typeof window === 'undefined' || !referralCode
+    ? ''
+    : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
+
+  const copyToClipboard = async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore
+    }
+  };
 
   const destinations = [
     { name: 'YouTube', platform: Platform.YOUTUBE, status: 'Connected via OAuth' },
@@ -82,6 +95,37 @@ const CreatorDashboard: React.FC = () => {
             >
               Review payout settings
             </button>
+          </div>
+        </div>
+
+        <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold">Affiliate / Referral Link</h2>
+              <p className="text-sm text-gray-400">Share your link to credit signups back to you.</p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(referralLink || referralCode)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-brand-500 text-sm font-semibold disabled:opacity-60"
+              disabled={!referralCode}
+            >
+              <Copy size={16} /> Copy
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-1">
+              <div className="text-[11px] uppercase font-bold text-gray-400">Code</div>
+              <div className="mt-2 px-3 py-2 rounded-lg bg-dark-900 border border-gray-700 text-sm text-white break-all">
+                {referralCode || 'Generating…'}
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <div className="text-[11px] uppercase font-bold text-gray-400">Link</div>
+              <div className="mt-2 px-3 py-2 rounded-lg bg-dark-900 border border-gray-700 text-sm text-white break-all">
+                {referralLink || 'Generating…'}
+              </div>
+            </div>
           </div>
         </div>
 

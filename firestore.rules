@@ -1,16 +1,61 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function requesterEmail() {
+      return isSignedIn() ? request.auth.token.email : null;
+    }
+
+    function isMaster() {
+      return isSignedIn() && requesterEmail() == 'mreardon@wtpnews.org';
+    }
+
+    // Admin config (master-only)
+    match /config/access {
+      allow read, write: if isMaster();
+    }
+
     // Users collection
     match /users/{userId} {
       // Users can read their own profile
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if isSignedIn() && (request.auth.uid == userId || isMaster());
       // Users can create their own profile after sign-up
-      allow create: if request.auth != null && request.auth.uid == userId;
-      // Users can update their own profile (except subscription fields)
-      allow update: if request.auth != null && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscription.stripeCustomerId', 'subscription.stripeSubscriptionId']);
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // Users can update limited profile fields; subscription/role changes require master.
+      allow update: if isSignedIn() && (
+        (
+          request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role',
+            'betaTester',
+            'subscription',
+            'subscription.plan',
+            'subscription.status',
+            'subscription.trialEndsAt',
+            'subscription.currentPeriodEnd',
+            'subscription.stripeCustomerId',
+            'subscription.stripeSubscriptionId',
+            'subscription.betaOverride',
+            'connectedPlatforms',
+          ])
+        )
+        || (
+          isMaster()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'role',
+            'betaTester',
+            'subscription.plan',
+            'subscription.status',
+            'subscription.trialEndsAt',
+            'subscription.currentPeriodEnd',
+            'subscription.betaOverride',
+          ])
+        )
+      );
       // Only Cloud Functions can create users (via Admin SDK)
       allow delete: if false;
     }
@@ -19,18 +64,39 @@ service cloud.firestore {
     match /affiliates/{affiliateId} {
       // Anyone can read affiliate codes (for validation)
       allow read: if true;
-      // Allow safe referral count increments from authenticated users
-      allow update: if request.auth != null
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalReferrals'])
-        && request.resource.data.totalReferrals is int;
-      allow create, delete: if false;
+
+      // Allow master or owner to create their affiliate record (immutable except counters).
+      allow create: if isSignedIn()
+        && (
+          isMaster()
+          || (
+            request.resource.data.ownerId == request.auth.uid
+          )
+        )
+        && request.resource.data.code is string
+        && affiliateId == request.resource.data.code
+        && request.resource.data.code.size() >= 3
+        && request.resource.data.isActive is bool;
+
+      // Allow safe referral count increments from authenticated users (exact +1).
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalReferrals'])
+        && request.resource.data.totalReferrals is int
+        && request.resource.data.totalReferrals == resource.data.totalReferrals + 1;
+
+      allow delete: if isMaster();
     }
 
     // Referrals collection
     match /referrals/{referralId} {
       // Log referrals from authenticated users
-      allow create: if request.auth != null;
-      allow read, update, delete: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.affiliateCode is string
+        && request.resource.data.referrerId is string
+        && request.resource.data.referredUserId == request.auth.uid;
+
+      allow read: if isSignedIn() && (isMaster() || resource.data.referrerId == request.auth.uid);
+      allow update, delete: if false;
     }
 
     // Affiliate commissions collection
@@ -47,9 +113,9 @@ service cloud.firestore {
 
     // Stream sessions (for analytics)
     match /stream_sessions/{sessionId} {
-      allow read: if request.auth != null
+      allow read: if isSignedIn()
         && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
+      allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }

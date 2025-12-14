@@ -37,7 +37,7 @@ const AdminPage: React.FC = () => {
 
   const [lookupEmail, setLookupEmail] = useState('');
   const [lookupStatus, setLookupStatus] = useState<string | null>(null);
-  const [lookupResults, setLookupResults] = useState<Array<{ uid: string; email: string; displayName: string; plan: string }>>([]);
+  const [lookupResults, setLookupResults] = useState<Array<{ uid: string; email: string; displayName: string; plan: string; affiliateCode: string }>>([]);
 
   const [myAffiliateCode, setMyAffiliateCode] = useState<string>('');
   const referralLink = useMemo(() => {
@@ -133,6 +133,7 @@ const AdminPage: React.FC = () => {
           email: u.email,
           displayName: u.displayName,
           plan: u.subscription?.plan || 'free',
+          affiliateCode: u.affiliate?.code || '',
         }))
       );
     } catch (err: any) {
@@ -321,6 +322,25 @@ const AdminPage: React.FC = () => {
                         >
                           <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy UID</span>
                         </button>
+                        {r.affiliateCode && (
+                          <>
+                            <button
+                              onClick={() => handleCopy(r.affiliateCode)}
+                              className="px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold hover:bg-gray-700"
+                            >
+                              <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy Code</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                const origin = typeof window === 'undefined' ? '' : window.location.origin;
+                                handleCopy(`${origin}/signup?ref=${encodeURIComponent(r.affiliateCode)}`);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold hover:bg-gray-700"
+                            >
+                              <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy Link</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -381,4 +401,3 @@ const AdminPage: React.FC = () => {
 };
 
 export default AdminPage;
-
