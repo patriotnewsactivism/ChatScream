@@ -203,7 +203,7 @@ const parseOAuthPlatform = (value: unknown): OAuthPlatform | null => {
 
 // --- ACCESS CONTROL FUNCTIONS ---
 
-export const accessSync = functions.https.onRequest(async (req, res) => {
+export const accessSync = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
   if (!setCorsHeaders(req, res)) return;
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -219,7 +219,7 @@ export const accessSync = functions.https.onRequest(async (req, res) => {
   }
 });
 
-export const accessSetList = functions.https.onRequest(async (req, res) => {
+export const accessSetList = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
   if (!setCorsHeaders(req, res)) return;
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -303,7 +303,7 @@ const getOAuthCredentials = (platform: OAuthPlatform) => {
  */
 export const createCheckoutSession = functions
   .runWith(runtimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -368,7 +368,7 @@ export const createCheckoutSession = functions
  */
 export const createPortalSession = functions
   .runWith(runtimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -399,7 +399,7 @@ export const createPortalSession = functions
  */
 export const createScreamDonation = functions
   .runWith(runtimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -440,7 +440,7 @@ export const createScreamDonation = functions
  */
 export const stripeWebhook = functions
   .runWith(runtimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     const sig = req.headers['stripe-signature'];
     if (!sig) { res.status(400).send('Missing signature'); return; }
 
@@ -464,7 +464,7 @@ export const stripeWebhook = functions
 /**
  * Get Leaderboard (Public)
  */
-export const getLeaderboard = functions.https.onRequest(async (req, res) => {
+export const getLeaderboard = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
   res.set('Access-Control-Allow-Origin', '*');
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
@@ -547,7 +547,7 @@ function getCurrentWeekId(): string {
  */
 export const oauthExchange = functions
   .runWith(oauthRuntimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -638,7 +638,7 @@ export const oauthExchange = functions
  */
 export const oauthRefresh = functions
   .runWith(oauthRuntimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -710,7 +710,7 @@ export const oauthRefresh = functions
  */
 export const oauthStreamKey = functions
   .runWith(oauthRuntimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -757,7 +757,7 @@ export const oauthStreamKey = functions
  */
 export const oauthChannels = functions
   .runWith(oauthRuntimeOpts)
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
