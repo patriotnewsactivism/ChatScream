@@ -9,6 +9,8 @@ import {
   setUserAccessOverrides,
   ensureAffiliateForSignedInUser,
   type AccessListConfig,
+  getOAuthPublicConfig,
+  setOAuthPublicConfig,
 } from '../services/firebase';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -34,6 +36,11 @@ const AdminPage: React.FC = () => {
   const [adminsText, setAdminsText] = useState('');
   const [betaText, setBetaText] = useState('');
   const [accessConfig, setAccessConfig] = useState<AccessListConfig | null>(null);
+
+  const [oauthYouTubeClientId, setOauthYouTubeClientId] = useState('');
+  const [oauthFacebookAppId, setOauthFacebookAppId] = useState('');
+  const [oauthTwitchClientId, setOauthTwitchClientId] = useState('');
+  const [oauthRedirectBase, setOauthRedirectBase] = useState('');
 
   const [lookupEmail, setLookupEmail] = useState('');
   const [lookupStatus, setLookupStatus] = useState<string | null>(null);
@@ -66,6 +73,12 @@ const AdminPage: React.FC = () => {
         setAccessConfig(config);
         setAdminsText((config.admins || []).join('\n'));
         setBetaText((config.betaTesters || []).join('\n'));
+
+        const oauthConfig = await getOAuthPublicConfig();
+        setOauthYouTubeClientId(oauthConfig.youtubeClientId || '');
+        setOauthFacebookAppId(oauthConfig.facebookAppId || '');
+        setOauthTwitchClientId(oauthConfig.twitchClientId || '');
+        setOauthRedirectBase(oauthConfig.redirectUriBase || '');
       } catch (err: any) {
         setLoadError(err?.message || 'Failed to load admin settings.');
       } finally {
@@ -109,6 +122,25 @@ const AdminPage: React.FC = () => {
       setSaveMessage('Saved access lists.');
     } catch (err: any) {
       setSaveMessage(err?.message || 'Failed to save access lists.');
+    } finally {
+      setSaving(false);
+      window.setTimeout(() => setSaveMessage(null), 4000);
+    }
+  };
+
+  const handleSaveOAuthIds = async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      await setOAuthPublicConfig({
+        youtubeClientId: oauthYouTubeClientId,
+        facebookAppId: oauthFacebookAppId,
+        twitchClientId: oauthTwitchClientId,
+        redirectUriBase: oauthRedirectBase,
+      });
+      setSaveMessage('Saved OAuth client IDs.');
+    } catch (err: any) {
+      setSaveMessage(err?.message || 'Failed to save OAuth client IDs.');
     } finally {
       setSaving(false);
       window.setTimeout(() => setSaveMessage(null), 4000);
@@ -221,6 +253,71 @@ const AdminPage: React.FC = () => {
         {!loading && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-purple-300" />
+                  <h2 className="font-semibold">OAuth IDs (Public)</h2>
+                </div>
+                <p className="text-sm text-gray-400">
+                  These are safe to store publicly and are required to start the OAuth popup (YouTube/Facebook/Twitch).
+                  After saving, retry “Connect” in Studio → Destinations.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">YouTube Client ID</label>
+                  <input
+                    className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                    value={oauthYouTubeClientId}
+                    onChange={(e) => setOauthYouTubeClientId(e.target.value)}
+                    placeholder="...apps.googleusercontent.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">Facebook App ID</label>
+                  <input
+                    className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                    value={oauthFacebookAppId}
+                    onChange={(e) => setOauthFacebookAppId(e.target.value)}
+                    placeholder="1234567890"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">Twitch Client ID</label>
+                  <input
+                    className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                    value={oauthTwitchClientId}
+                    onChange={(e) => setOauthTwitchClientId(e.target.value)}
+                    placeholder="abcd1234..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">Redirect Base (optional)</label>
+                  <input
+                    className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                    value={oauthRedirectBase}
+                    onChange={(e) => setOauthRedirectBase(e.target.value)}
+                    placeholder="https://wtp-apps.web.app/oauth/callback"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    Leave blank to use this site’s default: {typeof window === 'undefined' ? '' : `${window.location.origin}/oauth/callback`}.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={handleSaveOAuthIds}
+                    disabled={saving}
+                    className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 font-semibold disabled:opacity-60"
+                  >
+                    {saving ? 'Saving…' : 'Save OAuth IDs'}
+                  </button>
+                  {saveMessage && <span className="text-sm text-gray-300">{saveMessage}</span>}
+                </div>
+              </div>
+
               <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70 space-y-3">
                 <div className="flex items-center gap-2">
                   <Users size={18} className="text-brand-300" />

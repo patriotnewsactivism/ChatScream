@@ -18,7 +18,6 @@ const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeScreamTier, setActiveScreamTier] = useState(0);
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const referralCode = searchParams.get('ref') || '';
 
@@ -47,7 +46,6 @@ const LandingPage: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    setShowUserMenu(false);
     setMobileMenuOpen(false);
     try {
       await logout();
@@ -94,51 +92,34 @@ const LandingPage: React.FC = () => {
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-4">
               {user ? (
-                <div className="relative">
+                <>
                   <button
-                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    onClick={() => navigate('/dashboard')}
                     className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-full font-semibold transition-all shadow-lg shadow-brand-600/30 flex items-center gap-2"
                   >
-                    Open <ArrowRight size={18} />
+                    Dashboard <ArrowRight size={18} />
                   </button>
-
-                  {showUserMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-60 bg-dark-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
-                      <div className="p-3 border-b border-gray-700">
-                        <div className="text-sm font-semibold truncate">{user.displayName || 'Signed in'}</div>
-                        <div className="text-xs text-gray-400 truncate">{user.email}</div>
-                      </div>
-                      <div className="p-2 space-y-1">
-                        <button
-                          onClick={() => { setShowUserMenu(false); navigate('/dashboard'); }}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm"
-                        >
-                          Dashboard
-                        </button>
-                        <button
-                          onClick={() => { setShowUserMenu(false); navigate('/studio'); }}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm"
-                        >
-                          Studio
-                        </button>
-                        {canAccessAdmin && (
-                          <button
-                            onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
-                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm flex items-center gap-2"
-                          >
-                            <Settings size={16} /> Admin Portal
-                          </button>
-                        )}
-                        <button
-                          onClick={handleSignOut}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-500/10 text-sm text-red-300 flex items-center gap-2"
-                        >
-                          <LogOut size={16} /> Sign Out
-                        </button>
-                      </div>
-                    </div>
+                  <button
+                    onClick={() => navigate('/studio')}
+                    className="px-5 py-2.5 border border-gray-600 hover:border-gray-500 rounded-full font-semibold text-gray-200 hover:text-white transition-all flex items-center gap-2"
+                  >
+                    Studio <Radio size={18} />
+                  </button>
+                  {canAccessAdmin && (
+                    <button
+                      onClick={() => navigate('/admin')}
+                      className="px-5 py-2.5 border border-gray-600 hover:border-gray-500 rounded-full font-semibold text-gray-200 hover:text-white transition-all flex items-center gap-2"
+                    >
+                      <Settings size={18} /> Admin
+                    </button>
                   )}
-                </div>
+                  <button
+                    onClick={handleSignOut}
+                    className="px-5 py-2.5 bg-red-600 hover:bg-red-500 rounded-full font-semibold transition-all shadow-lg shadow-red-900/30 flex items-center gap-2"
+                  >
+                    <LogOut size={18} /> Sign Out
+                  </button>
+                </>
               ) : (
                 <>
                   <button

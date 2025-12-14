@@ -626,6 +626,52 @@ export interface AccessListConfig {
   betaTesters: string[];
 }
 
+export interface OAuthPublicConfig {
+  youtubeClientId: string;
+  facebookAppId: string;
+  twitchClientId: string;
+  redirectUriBase: string;
+}
+
+export const getOAuthPublicConfig = async (): Promise<OAuthPublicConfig> => {
+  const db = getDbInstanceSafe();
+  try {
+    const snap = await getDoc(doc(db, 'config', 'oauth'));
+    const data = (snap.exists() ? snap.data() : {}) as any;
+    return {
+      youtubeClientId: typeof data?.youtubeClientId === 'string' ? data.youtubeClientId : '',
+      facebookAppId: typeof data?.facebookAppId === 'string' ? data.facebookAppId : '',
+      twitchClientId: typeof data?.twitchClientId === 'string' ? data.twitchClientId : '',
+      redirectUriBase: typeof data?.redirectUriBase === 'string' ? data.redirectUriBase : '',
+    };
+  } catch {
+    return { youtubeClientId: '', facebookAppId: '', twitchClientId: '', redirectUriBase: '' };
+  }
+};
+
+export const setOAuthPublicConfig = async (patch: Partial<OAuthPublicConfig>): Promise<void> => {
+  const authClient = getAuthInstance();
+  const db = getDbInstanceSafe();
+  if (!authClient.currentUser) throw new Error('Not signed in');
+
+  const safe = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+  const next: Partial<OAuthPublicConfig> = {};
+  if (patch.youtubeClientId !== undefined) next.youtubeClientId = safe(patch.youtubeClientId);
+  if (patch.facebookAppId !== undefined) next.facebookAppId = safe(patch.facebookAppId);
+  if (patch.twitchClientId !== undefined) next.twitchClientId = safe(patch.twitchClientId);
+  if (patch.redirectUriBase !== undefined) next.redirectUriBase = safe(patch.redirectUriBase);
+
+  await setDoc(
+    doc(db, 'config', 'oauth'),
+    {
+      ...next,
+      updatedAt: serverTimestamp(),
+      updatedBy: authClient.currentUser.uid,
+    },
+    { merge: true }
+  );
+};
+
 export const getAccessListConfig = async (): Promise<AccessListConfig> => {
   const db = getDbInstanceSafe();
   try {

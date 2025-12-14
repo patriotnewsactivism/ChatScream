@@ -45,13 +45,14 @@ const AuthPage: React.FC = () => {
   const [referralInfo, setReferralInfo] = useState<string>('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTo = (location.state as any)?.from?.pathname || '/dashboard';
 
   // Redirect if already logged in
   useEffect(() => {
     if (user && !loading) {
-      navigate('/studio');
+      navigate(redirectTo, { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, redirectTo]);
 
   // Clear errors when switching modes
   useEffect(() => {
@@ -90,10 +91,10 @@ const AuthPage: React.FC = () => {
     try {
       if (mode === 'login') {
         await signIn(email, password);
-        navigate('/studio');
+        navigate(redirectTo, { replace: true });
       } else if (mode === 'signup') {
         await signUp(email, password, displayName, referralValid ? referralCode : undefined);
-        navigate('/studio');
+        navigate('/studio', { replace: true });
       } else if (mode === 'reset') {
         await sendResetEmail(email);
         setSuccess('Password reset email sent! Check your inbox.');
@@ -118,7 +119,7 @@ const AuthPage: React.FC = () => {
         : await signInApple(ref);
 
       if (!result.didRedirect) {
-        navigate('/studio');
+        navigate(redirectTo, { replace: true });
       }
     } catch (err) {
       // Error is handled by AuthContext

@@ -2,7 +2,7 @@
 // Handles YouTube, Facebook, and Twitch OAuth flows
 
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, getOAuthPublicConfig } from './firebase';
 
 // Platform types
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
@@ -47,14 +47,30 @@ export interface OAuthState {
 
 const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
 
+let oauthPublicConfigCache: { value: Awaited<ReturnType<typeof getOAuthPublicConfig>>; loadedAt: number } | null = null;
+
+const readOAuthPublicConfigCached = async (): Promise<Awaited<ReturnType<typeof getOAuthPublicConfig>>> => {
+  const now = Date.now();
+  if (oauthPublicConfigCache && now - oauthPublicConfigCache.loadedAt < 60_000) {
+    return oauthPublicConfigCache.value;
+  }
+  const value = await getOAuthPublicConfig();
+  oauthPublicConfigCache = { value, loadedAt: now };
+  return value;
+};
+
 // Get OAuth configuration for each platform
-export const getOAuthConfig = (platform: OAuthPlatform): OAuthConfig => {
-  const baseRedirectUri = import.meta.env.VITE_OAUTH_REDIRECT_URI || `${window.location.origin}/oauth/callback`;
+export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConfig> => {
+  const publicConfig = await readOAuthPublicConfigCached();
+  const baseRedirectUri =
+    publicConfig.redirectUriBase ||
+    import.meta.env.VITE_OAUTH_REDIRECT_URI ||
+    `${window.location.origin}/oauth/callback`;
 
   switch (platform) {
     case 'youtube':
       return {
-        clientId: import.meta.env.VITE_YOUTUBE_CLIENT_ID || '',
+        clientId: publicConfig.youtubeClientId || import.meta.env.VITE_YOUTUBE_CLIENT_ID || '',
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
         scopes: [
@@ -69,7 +85,7 @@ export const getOAuthConfig = (platform: OAuthPlatform): OAuthConfig => {
 
     case 'facebook':
       return {
-        clientId: import.meta.env.VITE_FACEBOOK_APP_ID || '',
+        clientId: publicConfig.facebookAppId || import.meta.env.VITE_FACEBOOK_APP_ID || '',
         authorizationEndpoint: 'https://www.facebook.com/v18.0/dialog/oauth',
         tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
         scopes: [
@@ -85,7 +101,7 @@ export const getOAuthConfig = (platform: OAuthPlatform): OAuthConfig => {
 
     case 'twitch':
       return {
-        clientId: import.meta.env.VITE_TWITCH_CLIENT_ID || '',
+        clientId: publicConfig.twitchClientId || import.meta.env.VITE_TWITCH_CLIENT_ID || '',
         authorizationEndpoint: 'https://id.twitch.tv/oauth2/authorize',
         tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
         scopes: [
@@ -162,8 +178,8 @@ export const verifyOAuthState = (stateParam: string): OAuthState | null => {
 };
 
 // Generate OAuth authorization URL
-export const getAuthorizationUrl = (platform: OAuthPlatform, userId: string): string => {
-  const config = getOAuthConfig(platform);
+export const getAuthorizationUrl = async (platform: OAuthPlatform, userId: string): Promise<string> => {
+  const config = await getOAuthConfig(platform);
   const state = createOAuthState(platform, userId);
 
   const params = new URLSearchParams({
@@ -195,7 +211,7 @@ export const exchangeCodeForTokens = async (
       return { success: false, error: 'You must be signed in to connect accounts.' };
     }
 
-    const redirectUri = getOAuthConfig(platform).redirectUri;
+    const redirectUri = (await getOAuthConfig(platform)).redirectUri;
     const response = await fetch('/api/oauth/exchange', {
       method: 'POST',
       headers: {
@@ -408,32 +424,33 @@ export const getChannels = async (
 
 // Initiate OAuth flow for a platform
 export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => {
-  const config = getOAuthConfig(platform);
+  void (async () => {
+    const config = await getOAuthConfig(platform);
 
-  if (!config.clientId) {
-    console.error(`${platform} OAuth not configured. Missing client ID.`);
-    alert(`${platform} integration is not configured. Please contact support.`);
-    return;
-  }
+    if (!config.clientId) {
+      console.error(`${platform} OAuth not configured. Missing client ID.`);
+      alert(`${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client id.`);
+      return;
+    }
 
-  const authUrl = getAuthorizationUrl(platform, userId);
+    const authUrl = await getAuthorizationUrl(platform, userId);
 
-  // Open OAuth popup
-  const width = 600;
-  const height = 700;
-  const left = window.screenX + (window.outerWidth - width) / 2;
-  const top = window.screenY + (window.outerHeight - height) / 2;
+    // Open OAuth popup
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
 
-  const popup = window.open(
-    authUrl,
-    `${platform}_oauth`,
-    `width=${width},height=${height},left=${left},top=${top},popup=yes`
-  );
+    const popup = window.open(
+      authUrl,
+      `${platform}_oauth`,
+      `width=${width},height=${height},left=${left},top=${top},popup=yes`
+    );
 
-  // Focus the popup
-  if (popup) {
-    popup.focus();
-  }
+    if (popup) {
+      popup.focus();
+    }
+  })();
 };
 
 // Handle OAuth callback (called from callback page)

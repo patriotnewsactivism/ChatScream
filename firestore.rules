@@ -18,6 +18,12 @@ service cloud.firestore {
       allow read, write: if isMaster();
     }
 
+    // OAuth public client IDs (safe to read; master can write)
+    match /config/oauth {
+      allow read: if true;
+      allow write: if isMaster();
+    }
+
     // Users collection
     match /users/{userId} {
       // Users can read their own profile
