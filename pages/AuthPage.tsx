@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getAffiliateByCode } from '../services/firebase';
 import {
@@ -459,9 +459,9 @@ const AuthPage: React.FC = () => {
         {mode === 'signup' && (
           <p className="mt-6 text-center text-xs text-gray-500">
             By creating an account, you agree to our{' '}
-            <a href="#" className="text-brand-400 hover:underline">Terms of Service</a>
+            <Link to="/terms" className="text-brand-400 hover:underline">Terms of Service</Link>
             {' '}and{' '}
-            <a href="#" className="text-brand-400 hover:underline">Privacy Policy</a>
+            <Link to="/privacy-policy" className="text-brand-400 hover:underline">Privacy Policy</Link>
           </p>
         )}
       </div>
