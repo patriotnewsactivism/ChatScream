@@ -121,6 +121,8 @@ export interface UserProfile {
   displayName: string;
   photoURL?: string;
   createdAt: Timestamp;
+  role?: 'admin' | 'beta_tester' | 'user' | string;
+  betaTester?: boolean;
   subscription: {
     plan: PlanTier;
     status: 'trialing' | 'active' | 'canceled' | 'past_due';
@@ -357,6 +359,22 @@ export const completeRedirectSignIn = async (): Promise<{ processed: boolean }> 
   const referralCode = consumePendingReferralCode();
   await ensureUserProfileForOAuthUser(result.user, referralCode);
   return { processed: true };
+};
+
+export const syncAccess = async (): Promise<void> => {
+  const authClient = getAuthInstance();
+  const user = authClient.currentUser;
+  if (!user) return;
+
+  const idToken = await user.getIdToken();
+  await fetch('/api/access/sync', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({}),
+  });
 };
 
 export const signInWithGoogle = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {

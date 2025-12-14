@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.oauthChannels = exports.oauthStreamKey = exports.oauthRefresh = exports.oauthExchange = exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = void 0;
+exports.oauthChannels = exports.oauthStreamKey = exports.oauthRefresh = exports.oauthExchange = exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = exports.accessOnUserCreate = exports.accessSetList = exports.accessSync = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
@@ -49,6 +49,51 @@ const ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
 ];
+const MASTER_EMAILS = ['mreardon@wtpnews.org'];
+const DEFAULT_BETA_TESTER_EMAILS = ['leroytruth247@gmail.com'];
+const normalizeEmail = (email) => email.trim().toLowerCase();
+const uniqueEmails = (emails) => {
+    const seen = new Set();
+    return emails
+        .map(normalizeEmail)
+        .filter(Boolean)
+        .filter((email) => {
+        if (seen.has(email))
+            return false;
+        seen.add(email);
+        return true;
+    });
+};
+const safeEmailListFromUnknown = (value, max) => {
+    if (!Array.isArray(value))
+        return [];
+    return uniqueEmails(value.filter((v) => typeof v === 'string')).slice(0, max);
+};
+const getAccessListConfig = async () => {
+    try {
+        const snap = await db.collection('config').doc('access').get();
+        if (!snap.exists) {
+            return {
+                admins: uniqueEmails(MASTER_EMAILS),
+                betaTesters: uniqueEmails(DEFAULT_BETA_TESTER_EMAILS),
+            };
+        }
+        const data = snap.data() || {};
+        const admins = safeEmailListFromUnknown(data.admins, 200);
+        const betaTesters = safeEmailListFromUnknown(data.betaTesters, 500);
+        return {
+            admins: admins.length ? admins : uniqueEmails(MASTER_EMAILS),
+            betaTesters: betaTesters.length ? betaTesters : uniqueEmails(DEFAULT_BETA_TESTER_EMAILS),
+        };
+    }
+    catch (error) {
+        console.warn('Failed to read config/access, using defaults:', error);
+        return {
+            admins: uniqueEmails(MASTER_EMAILS),
+            betaTesters: uniqueEmails(DEFAULT_BETA_TESTER_EMAILS),
+        };
+    }
+};
 // Helper: Initialize Stripe lazily to ensure secrets are available
 const getStripe = () => {
     const secret = process.env.STRIPE_SECRET_KEY;
@@ -84,6 +129,41 @@ async function verifyAuth(req) {
     const idToken = authHeader.split('Bearer ')[1];
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     return { uid: decodedToken.uid, email: decodedToken.email };
+}
+async function verifyDecodedToken(req) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new Error('UNAUTHORIZED');
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    return await admin.auth().verifyIdToken(idToken);
+}
+async function applyAccessForUser(uid, email) {
+    var _a;
+    if (!email)
+        return 'none';
+    const normalized = normalizeEmail(email);
+    const { admins, betaTesters } = await getAccessListConfig();
+    const isAdmin = admins.includes(normalized);
+    const isBetaTester = isAdmin || betaTesters.includes(normalized);
+    if (!isBetaTester)
+        return 'none';
+    const userRecord = await admin.auth().getUser(uid);
+    const claims = userRecord.customClaims || {};
+    const nextRole = isAdmin ? 'admin' : (claims.role === 'admin' ? 'admin' : 'beta_tester');
+    await admin.auth().setCustomUserClaims(uid, Object.assign(Object.assign({}, claims), { role: nextRole, betaTester: true }));
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    const existing = userSnap.exists ? userSnap.data() : null;
+    const hasStripeSubscriptionId = Boolean((_a = existing === null || existing === void 0 ? void 0 : existing.subscription) === null || _a === void 0 ? void 0 : _a.stripeSubscriptionId);
+    const shouldUpgradePlan = !hasStripeSubscriptionId;
+    const existingSubscription = existing && typeof existing.subscription === 'object' && existing.subscription
+        ? existing.subscription
+        : {};
+    await userRef.set(Object.assign(Object.assign({ role: nextRole, betaTester: true }, (shouldUpgradePlan && {
+        subscription: Object.assign(Object.assign({}, existingSubscription), { plan: 'enterprise', status: 'active', betaOverride: true }),
+    })), { updatedAt: admin.firestore.FieldValue.serverTimestamp() }), { merge: true });
+    return nextRole;
 }
 // Helper: Sanitize string
 function sanitizeString(input, maxLength) {
@@ -125,6 +205,84 @@ const parseOAuthPlatform = (value) => {
         return null;
     return OAUTH_PLATFORMS.includes(value) ? value : null;
 };
+// --- ACCESS CONTROL FUNCTIONS ---
+exports.accessSync = functions.https.onRequest(async (req, res) => {
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const decoded = await verifyDecodedToken(req);
+        const role = await applyAccessForUser(decoded.uid, decoded.email);
+        res.json({ success: true, role });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('accessSync error:', error);
+        res.status(500).json({ error: 'Failed to sync access' });
+    }
+});
+exports.accessSetList = functions.https.onRequest(async (req, res) => {
+    var _a, _b;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const decoded = await verifyDecodedToken(req);
+        const requesterEmail = normalizeEmail(decoded.email || '');
+        const isMaster = MASTER_EMAILS.map(normalizeEmail).includes(requesterEmail);
+        const isAdminClaim = decoded.role === 'admin' || decoded.admin === true;
+        if (!isMaster && !isAdminClaim) {
+            res.status(403).json({ error: 'Forbidden' });
+            return;
+        }
+        const admins = safeEmailListFromUnknown((_a = req.body) === null || _a === void 0 ? void 0 : _a.admins, 200);
+        const betaTesters = safeEmailListFromUnknown((_b = req.body) === null || _b === void 0 ? void 0 : _b.betaTesters, 500);
+        if (!admins.length && !betaTesters.length) {
+            res.status(400).json({ error: 'Provide admins and/or betaTesters arrays' });
+            return;
+        }
+        await db.collection('config').doc('access').set({
+            admins: admins.length ? admins : admin.firestore.FieldValue.delete(),
+            betaTesters: betaTesters.length ? betaTesters : admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedBy: requesterEmail || decoded.uid,
+        }, { merge: true });
+        res.json({ success: true, adminsCount: admins.length, betaTestersCount: betaTesters.length });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('accessSetList error:', error);
+        res.status(500).json({ error: 'Failed to update access list' });
+    }
+});
+exports.accessOnUserCreate = functions.auth.user().onCreate(async (user) => {
+    try {
+        await applyAccessForUser(user.uid, user.email);
+    }
+    catch (error) {
+        console.error('accessOnUserCreate error:', error);
+    }
+});
 const getOAuthCredentials = (platform) => {
     switch (platform) {
         case 'youtube':

@@ -10,6 +10,7 @@ import {
   signInWithTwitter,
   signInWithApple,
   completeRedirectSignIn,
+  syncAccess,
   logOut,
   resetPassword,
   getUserProfile,
@@ -86,6 +87,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (firebaseUser) {
         try {
+          try {
+            await syncAccess();
+            await firebaseUser.getIdToken(true);
+          } catch (err) {
+            console.warn('Access sync skipped:', err);
+          }
           const profile = await getUserProfile(firebaseUser.uid);
           setUserProfile(profile);
         } catch (err) {

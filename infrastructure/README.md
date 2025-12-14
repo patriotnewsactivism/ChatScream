@@ -132,6 +132,19 @@ Applies Firebase custom claims and Firestore flags for admins and beta testers.
   - Admin + beta access to `mreardon@wtpnews.org`
   - Beta tester access to `leroytruth247@gmail.com`
 
+### `scripts/set-access-list.js`
+
+Writes `config/access` allowlists (`admins`, `betaTesters`). Use this to pre-register beta testers before they create accounts so Cloud Functions can auto-assign access on signup.
+
+Example:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccount.json"
+ADMIN_EMAILS="mreardon@wtpnews.org" \
+BETA_TESTER_EMAILS="leroytruth247@gmail.com,jess@example.com" \
+node set-access-list.js
+```
+
 ### `deploy.sh`
 
 Deploys the application:

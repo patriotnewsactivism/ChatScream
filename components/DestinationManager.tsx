@@ -2,15 +2,25 @@ import React, { useMemo, useState } from 'react';
 import { Destination, Platform } from '../types';
 import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff, Lock, AlertTriangle, Zap } from 'lucide-react';
 import { canAddDestination, getPlanById, type PlanTier } from '../services/stripe';
+import { initiateOAuth, getStreamKey, type OAuthPlatform as OAuthServicePlatform } from '../services/oauthService';
+
+type ConnectedPlatformsSummary = {
+  youtube?: { channelName?: string };
+  facebook?: { pageName?: string; pageId?: string };
+  twitch?: { channelName?: string };
+};
 
 interface DestinationManagerProps {
   destinations: Destination[];
   onAddDestination: (dest: Destination) => void;
   onRemoveDestination: (id: string) => void;
   onToggleDestination: (id: string) => void;
+  onUpdateDestination: (id: string, patch: Partial<Destination>) => void;
   isStreaming: boolean;
   userPlan?: PlanTier;
   onUpgradeClick?: () => void;
+  userId?: string;
+  connectedPlatforms?: ConnectedPlatformsSummary;
 }
 
 const DestinationManager: React.FC<DestinationManagerProps> = ({
@@ -18,9 +28,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   onAddDestination,
   onRemoveDestination,
   onToggleDestination,
+  onUpdateDestination,
   isStreaming,
   userPlan = 'free',
-  onUpgradeClick
+  onUpgradeClick,
+  userId,
+  connectedPlatforms
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);

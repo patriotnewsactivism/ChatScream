@@ -31,6 +31,14 @@
           "function": "createPortalSession"
         },
         {
+          "source": "/api/access/sync",
+          "function": "accessSync"
+        },
+        {
+          "source": "/api/access/set-list",
+          "function": "accessSetList"
+        },
+        {
           "source": "/api/oauth/exchange",
           "function": "oauthExchange"
         },

@@ -21,8 +21,21 @@ if (serviceAccountPath) {
 
 const db = admin.firestore();
 
-const betaTesterEmails = ['leroytruth247@gmail.com'];
-const adminEmails = ['mreardon@wtpnews.org'];
+const parseEmailList = (value) => {
+  if (!value) return [];
+  return String(value)
+    .split(/[,\n]/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+const betaTesterEmails = parseEmailList(process.env.BETA_TESTER_EMAILS).length
+  ? parseEmailList(process.env.BETA_TESTER_EMAILS)
+  : ['leroytruth247@gmail.com'];
+
+const adminEmails = parseEmailList(process.env.ADMIN_EMAILS).length
+  ? parseEmailList(process.env.ADMIN_EMAILS)
+  : ['mreardon@wtpnews.org'];
 
 (async () => {
   try {

@@ -705,8 +705,15 @@ const App = () => {
                 onAddDestination={(d) => setDestinations([...destinations, d])}
                 onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))}
                 onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))}
+                onUpdateDestination={(id, patch) => setDestinations(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d))}
                 isStreaming={appState.isStreaming}
                 userPlan={(userProfile?.subscription?.plan || 'free') as PlanTier}
+                userId={user?.uid}
+                connectedPlatforms={{
+                  youtube: userProfile?.connectedPlatforms?.youtube ? { channelName: userProfile.connectedPlatforms.youtube.channelName } : undefined,
+                  facebook: userProfile?.connectedPlatforms?.facebook ? { pageName: userProfile.connectedPlatforms.facebook.pageName } : undefined,
+                  twitch: userProfile?.connectedPlatforms?.twitch ? { channelName: userProfile.connectedPlatforms.twitch.channelName } : undefined,
+                }}
                 onUpgradeClick={() => {
                   setMobilePanel('none');
                   navigate('/dashboard');
@@ -1107,8 +1114,15 @@ const App = () => {
                 onAddDestination={(d) => setDestinations([...destinations, d])}
                 onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))}
                 onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))}
+                onUpdateDestination={(id, patch) => setDestinations(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d))}
                 isStreaming={appState.isStreaming}
                 userPlan={(userProfile?.subscription?.plan || 'free') as PlanTier}
+                userId={user?.uid}
+                connectedPlatforms={{
+                  youtube: userProfile?.connectedPlatforms?.youtube ? { channelName: userProfile.connectedPlatforms.youtube.channelName } : undefined,
+                  facebook: userProfile?.connectedPlatforms?.facebook ? { pageName: userProfile.connectedPlatforms.facebook.pageName } : undefined,
+                  twitch: userProfile?.connectedPlatforms?.twitch ? { channelName: userProfile.connectedPlatforms.twitch.channelName } : undefined,
+                }}
                 onUpgradeClick={() => navigate('/dashboard')}
               />
             </div>

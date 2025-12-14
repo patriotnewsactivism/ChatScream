@@ -10,6 +10,19 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (!id.includes('node_modules')) return;
+              if (id.includes('react-dom') || id.includes('react-router') || id.includes('react')) return 'react';
+              if (id.includes('firebase')) return 'firebase';
+              if (id.includes('lucide-react')) return 'icons';
+              return 'vendor';
+            },
+          },
+        },
+      },
       define: {
         // Legacy Gemini API support
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
