@@ -18,13 +18,6 @@
       ]
     },
     {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "subscription.stripeCustomerId", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "stream_sessions",
       "queryScope": "COLLECTION",
       "fields": [

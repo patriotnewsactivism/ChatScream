@@ -189,14 +189,7 @@ const runtimeOpts = {
 };
 // OAuth runtime options with platform secrets
 const oauthRuntimeOpts = {
-    secrets: [
-        'YOUTUBE_CLIENT_ID',
-        'YOUTUBE_CLIENT_SECRET',
-        'FACEBOOK_APP_ID',
-        'FACEBOOK_APP_SECRET',
-        'TWITCH_CLIENT_ID',
-        'TWITCH_CLIENT_SECRET',
-    ],
+    secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
 };
 // OAuth platform configurations
 const OAUTH_PLATFORMS = ['youtube', 'facebook', 'twitch'];

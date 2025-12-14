@@ -26,7 +26,7 @@ import {
   Mic, MicOff, Video, VideoOff, Megaphone, MonitorOff, Sparkles,
   Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
   FolderOpen, Palette, Radio, X, Menu, Settings, Disc, Globe, ChevronDown, ChevronUp,
-  LogOut, User, CreditCard, MessageSquare
+  LogOut, User, CreditCard, MessageSquare, SwitchCamera
 } from 'lucide-react';
 
 type MobilePanel = 'none' | 'media' | 'graphics' | 'destinations' | 'mixer';
@@ -42,6 +42,7 @@ const App = () => {
   const { user, userProfile, logout, refreshProfile } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
 
   // --- State ---
   const [destinations, setDestinations] = useState<Destination[]>([
@@ -223,7 +224,7 @@ const App = () => {
   }, [appState.isStreaming, appState.isRecording]);
 
   // Initial Camera Load with Error Handling
-  const initCam = async () => {
+  const initCam = async (desiredFacingMode: 'user' | 'environment' = cameraFacingMode) => {
     setPermissionError(null);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.warn("MediaDevices API not supported. Starting in No-Camera mode.");
@@ -234,11 +235,29 @@ const App = () => {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+
+      const baseConstraints: MediaStreamConstraints = {
+        video: { facingMode: { ideal: desiredFacingMode } },
+        audio: true,
+      };
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(baseConstraints);
+      } catch (err: any) {
+        if (err?.name === 'OverconstrainedError' || err?.name === 'ConstraintNotSatisfiedError') {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } else {
+          throw err;
+        }
+      }
       if (stream.getTracks().length > 0) {
+        stream.getAudioTracks().forEach(track => track.enabled = !isMicMuted);
+        stream.getVideoTracks().forEach(track => track.enabled = !isCamMuted);
         setCameraStream(stream);
-        setIsMicMuted(false);
-        setIsCamMuted(false);
       } else {
         throw new Error("Stream started but has no tracks.");
       }
@@ -573,6 +592,23 @@ const App = () => {
     }
   };
 
+  const handleSwitchCamera = async () => {
+    handleInteraction();
+    const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(nextFacingMode);
+    try {
+      await initCam(nextFacingMode);
+      if (window.innerWidth < 1024) {
+        setMobileTip(nextFacingMode === 'environment' ? 'Switched to back camera.' : 'Switched to front camera.');
+      }
+    } catch (err) {
+      console.warn('Failed to switch camera:', err);
+      if (window.innerWidth < 1024) {
+        setMobileTip('Could not switch camera on this device/browser.');
+      }
+    }
+  };
+
   const handleBroadcast = (message: any) => {
     setBroadcastMessages(prev => [...prev, {
       id: message.id,
@@ -742,7 +778,7 @@ const App = () => {
     <div className="h-[100dvh] w-full bg-dark-900 text-gray-100 flex flex-col overflow-hidden" onClick={handleInteraction}>
       
       {/* --- HEADER --- */}
-      <header className="h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 z-30 transition-all">
+      <header className="relative z-30 h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 transition-all">
         <div className="flex items-center gap-2">
             <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
                 <Megaphone size={18} className="text-white"/>
@@ -789,7 +825,7 @@ const App = () => {
             </button>
 
             {/* User Menu */}
-            <div className="relative">
+            <div className={`relative ${showUserMenu ? 'z-50' : ''}`}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
@@ -798,7 +834,7 @@ const App = () => {
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-56 bg-dark-800 border border-gray-700 rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-56 bg-dark-800 border border-gray-700 rounded-xl shadow-2xl z-[60] animate-fade-in overflow-hidden">
                   <div className="p-4 border-b border-gray-700">
                     <p className="font-semibold text-white truncate">{user?.displayName || 'User'}</p>
                     <p className="text-xs text-gray-400 truncate">{user?.email}</p>
@@ -806,7 +842,7 @@ const App = () => {
                       <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
                         userProfile.subscription.plan === 'pro'
                           ? 'bg-brand-500/20 text-brand-400'
-                          : userProfile.subscription.plan === 'starter'
+                          : userProfile.subscription.plan === 'expert'
                           ? 'bg-green-500/20 text-green-400'
                           : 'bg-gray-500/20 text-gray-400'
                       }`}>
@@ -841,7 +877,7 @@ const App = () => {
       {/* Click outside to close user menu */}
       {showUserMenu && (
         <div
-          className="fixed inset-0 z-20"
+          className="fixed inset-0 z-40"
           onClick={() => setShowUserMenu(false)}
         />
       )}
@@ -1002,6 +1038,14 @@ const App = () => {
                             className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation ${isCamMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
                         >
                             {isCamMuted ? <VideoOff size={20} /> : <Video size={20} />}
+                        </button>
+                        <button
+                            onClick={handleSwitchCamera}
+                            disabled={!cameraStream}
+                            aria-label="Switch camera"
+                            className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation bg-gray-700 text-white hover:bg-gray-600 ${!cameraStream && 'opacity-50'}`}
+                        >
+                            <SwitchCamera size={20} />
                         </button>
                    </div>
 
