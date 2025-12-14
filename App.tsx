@@ -864,7 +864,7 @@ const App = () => {
             {/* CONTROL DECK */}
             <div className="bg-dark-800 border-t border-gray-700 z-30 shrink-0 flex flex-col pb-safe shadow-2xl">
                 {/* Control Row */}
-                <div className="h-16 md:h-20 flex items-center px-4 md:px-8 gap-3 overflow-x-auto no-scrollbar">
+                <div className="flex flex-wrap md:flex-nowrap items-center px-4 md:px-8 gap-3 md:h-20 py-3 md:py-0 overflow-x-auto no-scrollbar">
                    {/* Main Toggles */}
                    <div className="flex items-center gap-3 pr-4 border-r border-gray-700 shrink-0">
                         <button 
@@ -907,7 +907,7 @@ const App = () => {
                    </div>
 
                    {/* Layout Selector */}
-                   <div className="flex-1 min-w-0 flex justify-end">
+                   <div className="flex-1 min-w-full md:min-w-0 flex justify-start md:justify-end">
                       <LayoutSelector currentLayout={layout} onSelect={setLayout} />
                    </div>
                 </div>
