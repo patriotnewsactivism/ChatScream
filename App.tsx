@@ -779,7 +779,7 @@ const App = () => {
     <div className="h-[100dvh] w-full bg-dark-900 text-gray-100 flex flex-col overflow-hidden" onClick={handleInteraction}>
       
       {/* --- HEADER --- */}
-      <header className="relative z-30 h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 transition-all">
+      <header className="relative h-14 md:h-16 border-b border-gray-800 flex items-center justify-between px-4 bg-dark-800/90 backdrop-blur-md shrink-0 transition-all">
         <div className="flex items-center gap-2">
             <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg shadow-lg shadow-brand-900/50">
                 <Megaphone size={18} className="text-white"/>
