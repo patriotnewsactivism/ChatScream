@@ -38,7 +38,7 @@ const LandingPage: React.FC = () => {
 
   const handleGetStarted = () => {
     if (user) {
-      navigate('/studio');
+      navigate('/dashboard');
     } else {
       navigate(referralCode ? `/signup?ref=${referralCode}` : '/signup');
     }
@@ -80,10 +80,10 @@ const LandingPage: React.FC = () => {
             <div className="hidden md:flex items-center gap-4">
               {user ? (
                 <button
-                  onClick={() => navigate('/studio')}
+                  onClick={() => navigate('/dashboard')}
                   className="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-full font-semibold transition-all shadow-lg shadow-brand-600/30 flex items-center gap-2"
                 >
-                  Open Studio <ArrowRight size={18} />
+                  Open Dashboard <ArrowRight size={18} />
                 </button>
               ) : (
                 <>
@@ -124,10 +124,10 @@ const LandingPage: React.FC = () => {
               <div className="pt-4 border-t border-gray-700 space-y-3">
                 {user ? (
                   <button
-                    onClick={() => { navigate('/studio'); setMobileMenuOpen(false); }}
+                    onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
                     className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
                   >
-                    Open Studio
+                    Open Dashboard
                   </button>
                 ) : (
                   <>

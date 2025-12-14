@@ -24,7 +24,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 
-// Validate required Firebase environment variables
+// Validate required Firebase environment variables safely so the app can still render
 const requiredEnvVars = [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
@@ -35,27 +35,49 @@ const requiredEnvVars = [
 ] as const;
 
 const missingVars = requiredEnvVars.filter(key => !import.meta.env[key]);
-if (missingVars.length > 0) {
-  console.error('Missing required Firebase environment variables:', missingVars);
-  throw new Error(`Missing Firebase config: ${missingVars.join(', ')}. Check your .env file.`);
-}
+export const firebaseConfigError =
+  missingVars.length > 0
+    ? `Missing Firebase config: ${missingVars.join(', ')}. Check your .env file.`
+    : null;
 
-// Firebase configuration from environment
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+// Firebase configuration from environment (null when misconfigured)
+const firebaseConfig = firebaseConfigError
+  ? null
+  : {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: import.meta.env.VITE_FIREBASE_APP_ID
+    };
+
+// Initialize Firebase only when we have a valid configuration
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+const authInstance = app ? getAuth(app) : null;
+const dbInstance = app ? getFirestore(app) : null;
+export const auth = authInstance;
+export const db = dbInstance;
+
+const ensureInitialized = () => {
+  if (!app || !authInstance || !dbInstance) {
+    const error = firebaseConfigError ?? 'Firebase failed to initialize. Check your configuration.';
+    console.error(error);
+    throw new Error(error);
+  }
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-
 const googleProvider = new GoogleAuthProvider();
+
+const getAuthInstance = () => {
+  ensureInitialized();
+  return authInstance!;
+};
+
+const getDbInstanceSafe = () => {
+  ensureInitialized();
+  return dbInstance!;
+};
 
 // User Profile Interface
 export interface UserProfile {
@@ -106,7 +128,9 @@ export const signUpWithEmail = async (
   displayName: string,
   referralCode?: string
 ): Promise<User> => {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const authClient = getAuthInstance();
+  const db = getDbInstanceSafe();
+  const userCredential = await createUserWithEmailAndPassword(authClient, email, password);
   const user = userCredential.user;
 
   // Calculate trial days (7 default, 14 with referral)
@@ -163,12 +187,15 @@ export const signUpWithEmail = async (
 };
 
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const authClient = getAuthInstance();
+  const userCredential = await signInWithEmailAndPassword(authClient, email, password);
   return userCredential.user;
 };
 
 export const signInWithGoogle = async (referralCode?: string): Promise<User> => {
-  const userCredential = await signInWithPopup(auth, googleProvider);
+  const authClient = getAuthInstance();
+  const db = getDbInstanceSafe();
+  const userCredential = await signInWithPopup(authClient, googleProvider);
   const user = userCredential.user;
 
   // Check if user profile exists
@@ -228,15 +255,18 @@ export const signInWithGoogle = async (referralCode?: string): Promise<User> => 
 };
 
 export const logOut = async (): Promise<void> => {
-  await signOut(auth);
+  const authClient = getAuthInstance();
+  await signOut(authClient);
 };
 
 export const resetPassword = async (email: string): Promise<void> => {
-  await sendPasswordResetEmail(auth, email);
+  const authClient = getAuthInstance();
+  await sendPasswordResetEmail(authClient, email);
 };
 
 // User Profile Functions
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+  const db = getDbInstanceSafe();
   const userDoc = await getDoc(doc(db, 'users', uid));
   if (userDoc.exists()) {
     return userDoc.data() as UserProfile;
@@ -245,6 +275,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 };
 
 export const updateUserProfile = async (uid: string, data: Partial<UserProfile>): Promise<void> => {
+  const db = getDbInstanceSafe();
   await updateDoc(doc(db, 'users', uid), data);
 };
 
@@ -259,6 +290,7 @@ const generateAffiliateCode = (uid: string): string => {
 };
 
 export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | null> => {
+  const db = getDbInstanceSafe();
   // Check for special codes first (like MMM)
   const specialCodes: Record<string, AffiliateCode> = {
     'MMM': {
@@ -292,6 +324,7 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
 };
 
 export const updateAffiliateReferral = async (code: string): Promise<void> => {
+  const db = getDbInstanceSafe();
   // Skip for special codes - they're tracked differently
   if (code.toUpperCase() === 'MMM') {
     // Log referral for Mythical Meta
@@ -320,6 +353,7 @@ export const createAffiliateCode = async (
   userEmail: string,
   userName: string
 ): Promise<string> => {
+  const db = getDbInstanceSafe();
   const code = generateAffiliateCode(userId);
 
   const affiliateData: AffiliateCode = {
@@ -342,5 +376,11 @@ export const createAffiliateCode = async (
 
 // Auth State Observer
 export const onAuthChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+  if (!authInstance) {
+    console.error(firebaseConfigError ?? 'Firebase auth is not initialized.');
+    callback(null);
+    return () => {};
+  }
+
+  return onAuthStateChanged(authInstance, callback);
 };

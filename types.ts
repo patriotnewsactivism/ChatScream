@@ -21,6 +21,7 @@ export interface Destination {
   name: string; // e.g., "Personal YouTube", "Business YouTube"
   streamKey: string;
   serverUrl?: string;
+  authType?: 'manual' | 'oauth';
   isEnabled: boolean;
   status: 'offline' | 'connecting' | 'live' | 'error';
 }

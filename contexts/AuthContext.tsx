@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import {
-  auth,
   onAuthChange,
   signUpWithEmail,
   signInWithEmail,
@@ -11,6 +10,7 @@ import {
   getUserProfile,
   updateUserProfile,
   UserProfile,
+  firebaseConfigError,
 } from '../services/firebase';
 
 interface AuthContextType {
@@ -25,6 +25,7 @@ interface AuthContextType {
   sendResetEmail: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   clearError: () => void;
+  configError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,8 +47,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const configError = firebaseConfigError;
+
+  const guardConfig = () => {
+    if (configError) {
+      setError(configError);
+      throw new Error(configError);
+    }
+  };
 
   useEffect(() => {
+    if (configError) {
+      setLoading(false);
+      setError(configError);
+      return;
+    }
+
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       setUser(firebaseUser);
 
@@ -76,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   ): Promise<void> => {
     setError(null);
     setLoading(true);
+    guardConfig();
     try {
       await signUpWithEmail(email, password, displayName, referralCode);
     } catch (err: any) {
@@ -90,6 +106,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signIn = async (email: string, password: string): Promise<void> => {
     setError(null);
     setLoading(true);
+    guardConfig();
     try {
       await signInWithEmail(email, password);
     } catch (err: any) {
@@ -104,6 +121,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signInGoogle = async (referralCode?: string): Promise<void> => {
     setError(null);
     setLoading(true);
+    guardConfig();
     try {
       await signInWithGoogle(referralCode);
     } catch (err: any) {
@@ -117,6 +135,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async (): Promise<void> => {
     setError(null);
+    guardConfig();
     try {
       await logOut();
       setUserProfile(null);
@@ -128,6 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const sendResetEmail = async (email: string): Promise<void> => {
     setError(null);
+    guardConfig();
     try {
       await resetPassword(email);
     } catch (err: any) {
@@ -138,6 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const refreshProfile = async (): Promise<void> => {
+    guardConfig();
     if (user) {
       const profile = await getUserProfile(user.uid);
       setUserProfile(profile);
@@ -160,6 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     sendResetEmail,
     refreshProfile,
     clearError,
+    configError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
