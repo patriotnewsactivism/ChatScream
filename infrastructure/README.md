@@ -123,6 +123,15 @@ Configures Firebase project:
 - Configures hosting
 - Shows Firebase web SDK config
 
+### `scripts/assign-roles.js`
+
+Applies Firebase custom claims and Firestore flags for admins and beta testers.
+- Ensure `GOOGLE_APPLICATION_CREDENTIALS` points to a service account JSON with Admin SDK access.
+- Update the email arrays inside the script if you need to change who receives access.
+- Run with `node assign-roles.js` to grant:
+  - Admin + beta access to `mreardon@wtpnews.org`
+  - Beta tester access to `leroytruth247@gmail.com`
+
 ### `deploy.sh`
 
 Deploys the application:
