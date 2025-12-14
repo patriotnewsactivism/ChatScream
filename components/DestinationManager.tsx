@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Destination, Platform } from '../types';
-import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff, Lock } from 'lucide-react';
+import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff, Lock, AlertTriangle, Zap } from 'lucide-react';
+import { canAddDestination, getPlanById, type PlanTier } from '../services/stripe';
 
 interface DestinationManagerProps {
   destinations: Destination[];
@@ -8,14 +9,18 @@ interface DestinationManagerProps {
   onRemoveDestination: (id: string) => void;
   onToggleDestination: (id: string) => void;
   isStreaming: boolean;
+  userPlan?: PlanTier;
+  onUpgradeClick?: () => void;
 }
 
-const DestinationManager: React.FC<DestinationManagerProps> = ({ 
-  destinations, 
-  onAddDestination, 
-  onRemoveDestination, 
+const DestinationManager: React.FC<DestinationManagerProps> = ({
+  destinations,
+  onAddDestination,
+  onRemoveDestination,
   onToggleDestination,
-  isStreaming
+  isStreaming,
+  userPlan = 'free',
+  onUpgradeClick
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);
@@ -23,6 +28,20 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [newKey, setNewKey] = useState('');
   const [newServerUrl, setNewServerUrl] = useState('');
   const [showKey, setShowKey] = useState(false);
+
+  // Check destination limits
+  const destinationLimit = useMemo(() => {
+    return canAddDestination(userPlan, destinations.length);
+  }, [userPlan, destinations.length]);
+
+  const currentPlan = useMemo(() => getPlanById(userPlan), [userPlan]);
+
+  const handleAddWithLimitCheck = (dest: Destination) => {
+    if (!destinationLimit.allowed) {
+      return; // Don't allow adding if limit reached
+    }
+    onAddDestination(dest);
+  };
 
   const oauthOptions = useMemo(() => ([
     {
@@ -63,6 +82,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
   const handleAdd = () => {
     if (!newName || !newKey || (newPlatform === Platform.CUSTOM_RTMP && !newServerUrl)) return;
+    if (!destinationLimit.allowed) return; // Enforce limit
+
     const newDest: Destination = {
       id: Date.now().toString(),
       platform: newPlatform,
@@ -95,15 +116,46 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Wifi size={20} /> Destinations
         </h2>
-        {!showAddForm && (
-          <button 
-            onClick={() => setShowAddForm(true)}
-            className="text-xs bg-brand-600 hover:bg-brand-500 px-2 py-1 rounded flex items-center gap-1"
-          >
-            <Plus size={14} /> Add
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Destination counter */}
+          <span className={`text-xs px-2 py-1 rounded ${
+            !destinationLimit.allowed
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              : 'bg-gray-700/50 text-gray-400'
+          }`}>
+            {destinationLimit.maxDestinations === -1
+              ? `${destinations.length} used`
+              : `${destinations.length}/${destinationLimit.maxDestinations}`}
+          </span>
+          {!showAddForm && destinationLimit.allowed && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              disabled={isStreaming}
+              className={`text-xs bg-brand-600 hover:bg-brand-500 px-2 py-1 rounded flex items-center gap-1 ${isStreaming ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <Plus size={14} /> Add
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Destination limit warning */}
+      {!destinationLimit.allowed && (
+        <div className="mb-4 bg-amber-500/10 p-3 rounded border border-amber-500/30 flex items-start gap-2">
+          <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-amber-200 font-medium">{destinationLimit.message}</p>
+            {onUpgradeClick && (
+              <button
+                onClick={onUpgradeClick}
+                className="mt-2 text-xs bg-brand-600 hover:bg-brand-500 px-3 py-1.5 rounded flex items-center gap-1.5 font-medium"
+              >
+                <Zap size={12} /> Upgrade Plan
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 bg-brand-900/30 p-2 rounded border border-brand-500/20 text-xs text-gray-300 flex gap-2">
          <Info size={16} className="text-brand-400 shrink-0" />
@@ -114,9 +166,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         {oauthOptions.map(option => (
           <button
             key={option.platform}
-            onClick={() => onAddDestination(createOAuthDestination(option.platform))}
-            disabled={isStreaming}
-            className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/40 ${isStreaming ? 'opacity-50 cursor-not-allowed' : 'border-gray-700'}`}
+            onClick={() => handleAddWithLimitCheck(createOAuthDestination(option.platform))}
+            disabled={isStreaming || !destinationLimit.allowed}
+            className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/40 ${(isStreaming || !destinationLimit.allowed) ? 'opacity-50 cursor-not-allowed' : 'border-gray-700'}`}
           >
             <div className="mt-0.5">{option.icon}</div>
             <div className="flex-1 space-y-1">
@@ -134,7 +186,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3">
-        {showAddForm && (
+        {showAddForm && destinationLimit.allowed && (
           <div className="bg-gray-800 p-3 rounded border border-gray-600 mb-3 animate-fade-in">
             <h3 className="text-xs font-semibold mb-2 text-gray-400">CONNECT NEW ACCOUNT</h3>
             <select 

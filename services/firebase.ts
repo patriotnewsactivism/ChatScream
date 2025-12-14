@@ -79,6 +79,9 @@ const getDbInstanceSafe = () => {
   return dbInstance!;
 };
 
+// Plan tier types
+export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise';
+
 // User Profile Interface
 export interface UserProfile {
   uid: string;
@@ -87,12 +90,17 @@ export interface UserProfile {
   photoURL?: string;
   createdAt: Timestamp;
   subscription: {
-    plan: 'free' | 'starter' | 'pro' | 'enterprise';
+    plan: PlanTier;
     status: 'trialing' | 'active' | 'canceled' | 'past_due';
     trialEndsAt?: Timestamp;
     currentPeriodEnd?: Timestamp;
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
+  };
+  usage: {
+    cloudHoursUsed: number; // Cloud VM streaming hours used this billing period
+    cloudHoursResetAt?: Timestamp; // When cloud hours reset (next billing date)
+    lastStreamDate?: Timestamp; // When user last streamed
   };
   affiliate?: {
     code: string;
@@ -104,6 +112,30 @@ export interface UserProfile {
   settings: {
     emailNotifications: boolean;
     marketingEmails: boolean;
+  };
+  // OAuth tokens for connected platforms (encrypted at rest)
+  connectedPlatforms?: {
+    youtube?: {
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: Timestamp;
+      channelId: string;
+      channelName: string;
+    };
+    facebook?: {
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: Timestamp;
+      pageId?: string;
+      pageName?: string;
+    };
+    twitch?: {
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: Timestamp;
+      channelId: string;
+      channelName: string;
+    };
   };
 }
 
@@ -162,6 +194,9 @@ export const signUpWithEmail = async (
       plan: 'free',
       status: 'trialing',
       trialEndsAt: trialEndsAt,
+    },
+    usage: {
+      cloudHoursUsed: 0,
     },
     affiliate: referredBy ? {
       code: generateAffiliateCode(user.uid),
@@ -229,6 +264,9 @@ export const signInWithGoogle = async (referralCode?: string): Promise<User> => 
         plan: 'free',
         status: 'trialing',
         trialEndsAt: trialEndsAt,
+      },
+      usage: {
+        cloudHoursUsed: 0,
       },
       affiliate: referredBy ? {
         code: generateAffiliateCode(user.uid),

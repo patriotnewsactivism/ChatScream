@@ -21,6 +21,7 @@ import ChatStreamOverlay from './components/ChatStreamOverlay';
 import { generateStreamMetadata } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
+import { planHasWatermark, type PlanTier } from './services/stripe';
 import {
   Mic, MicOff, Video, VideoOff, Megaphone, MonitorOff, Sparkles,
   Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
@@ -629,12 +630,17 @@ const App = () => {
             </div>
         </div>
         <div className="flex-1 overflow-y-auto pb-safe">
-            <DestinationManager 
+            <DestinationManager
                 destinations={destinations}
                 onAddDestination={(d) => setDestinations([...destinations, d])}
                 onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))}
                 onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))}
                 isStreaming={appState.isStreaming}
+                userPlan={(userProfile?.subscription?.plan || 'free') as PlanTier}
+                onUpgradeClick={() => {
+                  setMobilePanel('none');
+                  navigate('/dashboard');
+                }}
             />
         </div>
     </div>
@@ -785,6 +791,7 @@ const App = () => {
                         backgroundUrl={activeBackgroundUrl}
                         videoVolume={videoVolume}
                         branding={branding}
+                        showWatermark={planHasWatermark(userProfile?.subscription?.plan || 'free')}
                     />
                     {/* Chat Stream Overlay */}
                     <ChatStreamOverlay
@@ -871,29 +878,31 @@ const App = () => {
 
             {/* CONTROL DECK */}
             <div className="bg-dark-800 border-t border-gray-700 z-30 shrink-0 flex flex-col pb-safe shadow-2xl">
-                {/* Control Row */}
-                <div className="flex flex-wrap md:flex-nowrap items-center px-4 md:px-8 gap-3 md:h-20 py-3 md:py-0 overflow-x-auto no-scrollbar">
-                   {/* Main Toggles */}
-                   <div className="flex items-center gap-3 pr-4 border-r border-gray-700 shrink-0">
-                        <button 
+                {/* Control Row - Fixed spacing and minimum tap targets for mobile */}
+                <div className="flex items-center px-3 sm:px-4 md:px-8 gap-2 sm:gap-3 h-16 md:h-20 overflow-x-auto no-scrollbar">
+                   {/* Main Toggles - Minimum 48px tap targets with 8px spacing */}
+                   <div className="flex items-center gap-2 sm:gap-3 pr-3 sm:pr-4 border-r border-gray-700 shrink-0">
+                        <button
                             onClick={toggleMic}
                             disabled={!cameraStream}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${isMicMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
+                            aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
+                            className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation ${isMicMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
                         >
                             {isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
                         </button>
-                        <button 
+                        <button
                             onClick={toggleCam}
                             disabled={!cameraStream}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${isCamMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
+                            aria-label={isCamMuted ? 'Enable camera' : 'Disable camera'}
+                            className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation ${isCamMuted ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'} ${!cameraStream && 'opacity-50'}`}
                         >
                             {isCamMuted ? <VideoOff size={20} /> : <Video size={20} />}
                         </button>
                    </div>
 
-                   {/* Mixer Toggle */}
+                   {/* Mixer Toggle - Proper spacing from other buttons */}
                    <div className="relative shrink-0">
-                        <button 
+                        <button
                             onClick={() => {
                                 if (window.innerWidth < 1024) {
                                     setMobilePanel(mobilePanel === 'mixer' ? 'none' : 'mixer');
@@ -901,11 +910,12 @@ const App = () => {
                                     setShowMixerDesktop(!showMixerDesktop);
                                 }
                             }}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 ${mobilePanel === 'mixer' || showMixerDesktop ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                            aria-label="Audio mixer"
+                            className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation ${mobilePanel === 'mixer' || showMixerDesktop ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                         >
                             <Sliders size={20} />
                         </button>
-                        
+
                         {showMixerDesktop && (
                             <div className="hidden lg:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 animate-fade-in shadow-2xl">
                                 <AudioMixer micVolume={micVolume} musicVolume={musicVolume} videoVolume={videoVolume} onMicVolumeChange={setMicVolume} onMusicVolumeChange={setMusicVolume} onVideoVolumeChange={setVideoVolume} />
@@ -914,22 +924,34 @@ const App = () => {
                         )}
                    </div>
 
-                   {/* Layout Selector */}
-                   <div className="flex-1 min-w-full md:min-w-0 flex justify-start md:justify-end">
+                   {/* Layout Selector - Push to end on larger screens, allow scroll on mobile */}
+                   <div className="flex-1 flex justify-end ml-2">
                       <LayoutSelector currentLayout={layout} onSelect={setLayout} />
                    </div>
                 </div>
 
-                {/* Mobile Tab Bar */}
-                <div className="lg:hidden flex border-t border-gray-700 bg-dark-900">
-                   <button onClick={() => setMobilePanel(mobilePanel === 'media' ? 'none' : 'media')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'media' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
-                      <FolderOpen size={20} /> <span className="text-[10px] font-bold">MEDIA</span>
+                {/* Mobile Tab Bar - Improved tap targets and spacing */}
+                <div className="lg:hidden flex border-t border-gray-700 bg-dark-900 safe-area-bottom">
+                   <button
+                      onClick={() => setMobilePanel(mobilePanel === 'media' ? 'none' : 'media')}
+                      aria-label="Media library"
+                      className={`flex-1 min-h-[56px] py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform touch-manipulation ${mobilePanel === 'media' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}
+                   >
+                      <FolderOpen size={20} /> <span className="text-[10px] sm:text-xs font-bold">MEDIA</span>
                    </button>
-                   <button onClick={() => setMobilePanel(mobilePanel === 'graphics' ? 'none' : 'graphics')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'graphics' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
-                      <Palette size={20} /> <span className="text-[10px] font-bold">STYLE</span>
+                   <button
+                      onClick={() => setMobilePanel(mobilePanel === 'graphics' ? 'none' : 'graphics')}
+                      aria-label="Stream graphics"
+                      className={`flex-1 min-h-[56px] py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform touch-manipulation ${mobilePanel === 'graphics' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}
+                   >
+                      <Palette size={20} /> <span className="text-[10px] sm:text-xs font-bold">STYLE</span>
                    </button>
-                   <button onClick={() => setMobilePanel(mobilePanel === 'destinations' ? 'none' : 'destinations')} className={`flex-1 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform ${mobilePanel === 'destinations' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}>
-                      <Globe size={20} /> <span className="text-[10px] font-bold">STREAM</span>
+                   <button
+                      onClick={() => setMobilePanel(mobilePanel === 'destinations' ? 'none' : 'destinations')}
+                      aria-label="Stream destinations"
+                      className={`flex-1 min-h-[56px] py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform touch-manipulation ${mobilePanel === 'destinations' ? 'text-brand-400 bg-gray-800' : 'text-gray-400'}`}
+                   >
+                      <Globe size={20} /> <span className="text-[10px] sm:text-xs font-bold">STREAM</span>
                    </button>
                 </div>
             </div>
@@ -955,7 +977,15 @@ const App = () => {
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <DestinationManager destinations={destinations} onAddDestination={(d) => setDestinations([...destinations, d])} onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))} onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))} isStreaming={appState.isStreaming} />
+              <DestinationManager
+                destinations={destinations}
+                onAddDestination={(d) => setDestinations([...destinations, d])}
+                onRemoveDestination={(id) => setDestinations(destinations.filter(d => d.id !== id))}
+                onToggleDestination={(id) => setDestinations(destinations.map(d => d.id === id ? {...d, isEnabled: !d.isEnabled} : d))}
+                isStreaming={appState.isStreaming}
+                userPlan={(userProfile?.subscription?.plan || 'free') as PlanTier}
+                onUpgradeClick={() => navigate('/dashboard')}
+              />
             </div>
         </aside>
       </div>
