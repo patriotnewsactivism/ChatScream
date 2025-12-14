@@ -8,16 +8,17 @@ import {
   Youtube, Facebook, Twitch, Radio, Clock, Cloud, CloudCog, BarChart3,
   DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive, Server, Database,
   Upload, TrendingUp, Gift, AlertTriangle, MapPin, Smartphone, Monitor, Laptop,
-  Camera, Hash, Copy, ExternalLink, Infinity
+  Camera, Hash, Copy, ExternalLink, Infinity, LogOut, Settings
 } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeScreamTier, setActiveScreamTier] = useState(0);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const referralCode = searchParams.get('ref') || '';
 
@@ -44,6 +45,19 @@ const LandingPage: React.FC = () => {
       navigate(referralCode ? `/signup?ref=${referralCode}` : '/signup');
     }
   };
+
+  const handleSignOut = async () => {
+    setShowUserMenu(false);
+    setMobileMenuOpen(false);
+    try {
+      await logout();
+      navigate('/');
+    } catch (err) {
+      console.warn('Sign out failed:', err);
+    }
+  };
+
+  const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org';
 
   const screamTiers = [
     { amount: '$5', effect: 'Standard Scream', color: 'from-green-500 to-emerald-500', description: 'Visual alert + Text-to-Speech' },
@@ -80,12 +94,51 @@ const LandingPage: React.FC = () => {
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-4">
               {user ? (
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-full font-semibold transition-all shadow-lg shadow-brand-600/30 flex items-center gap-2"
-                >
-                  Open Dashboard <ArrowRight size={18} />
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-full font-semibold transition-all shadow-lg shadow-brand-600/30 flex items-center gap-2"
+                  >
+                    Open <ArrowRight size={18} />
+                  </button>
+
+                  {showUserMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-60 bg-dark-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="p-3 border-b border-gray-700">
+                        <div className="text-sm font-semibold truncate">{user.displayName || 'Signed in'}</div>
+                        <div className="text-xs text-gray-400 truncate">{user.email}</div>
+                      </div>
+                      <div className="p-2 space-y-1">
+                        <button
+                          onClick={() => { setShowUserMenu(false); navigate('/dashboard'); }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm"
+                        >
+                          Dashboard
+                        </button>
+                        <button
+                          onClick={() => { setShowUserMenu(false); navigate('/studio'); }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm"
+                        >
+                          Studio
+                        </button>
+                        {canAccessAdmin && (
+                          <button
+                            onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700/40 text-sm flex items-center gap-2"
+                          >
+                            <Settings size={16} /> Admin Portal
+                          </button>
+                        )}
+                        <button
+                          onClick={handleSignOut}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-500/10 text-sm text-red-300 flex items-center gap-2"
+                        >
+                          <LogOut size={16} /> Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
                   <button
@@ -124,12 +177,34 @@ const LandingPage: React.FC = () => {
               <a href="#pricing" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
               <div className="pt-4 border-t border-gray-700 space-y-3">
                 {user ? (
-                  <button
-                    onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
-                    className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
-                  >
-                    Open Dashboard
-                  </button>
+                  <>
+                    <button
+                      onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
+                      className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
+                    >
+                      Open Dashboard
+                    </button>
+                    <button
+                      onClick={() => { navigate('/studio'); setMobileMenuOpen(false); }}
+                      className="w-full px-6 py-3 border border-gray-600 rounded-full font-semibold"
+                    >
+                      Open Studio
+                    </button>
+                    {canAccessAdmin && (
+                      <button
+                        onClick={() => { navigate('/admin'); setMobileMenuOpen(false); }}
+                        className="w-full px-6 py-3 border border-gray-600 rounded-full font-semibold flex items-center justify-center gap-2"
+                      >
+                        <Settings size={18} /> Admin Portal
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full px-6 py-3 bg-red-600 rounded-full font-semibold flex items-center justify-center gap-2"
+                    >
+                      <LogOut size={18} /> Sign Out
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button

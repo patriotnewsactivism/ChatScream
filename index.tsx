@@ -2,9 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import Studio from './App';
+import CreatorDashboard from './pages/CreatorDashboard';
+import OAuthCallback from './pages/OAuthCallback';
+import AdminPage from './pages/AdminPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -31,26 +35,45 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 // App Router Component
 const AppRouter: React.FC = () => {
   return (
-    <Routes>
-      {/* Public Routes */}
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<AuthPage />} />
-      <Route path="/signup" element={<AuthPage />} />
-      <Route path="/reset-password" element={<AuthPage />} />
+    <ChunkErrorBoundary>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/signup" element={<AuthPage />} />
+        <Route path="/reset-password" element={<AuthPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
 
-      {/* Protected Routes */}
-      <Route
-        path="/studio"
-        element={
-          <ProtectedRoute>
-            <Studio />
-          </ProtectedRoute>
-        }
-      />
+        {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <CreatorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/studio"
+          element={
+            <ProtectedRoute>
+              <Studio />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ChunkErrorBoundary>
   );
 };
 
