@@ -1,0 +1,454 @@
+// OAuth Service for Social Platform Integration
+// Handles YouTube, Facebook, and Twitch OAuth flows
+
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
+
+// Platform types
+export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
+
+// OAuth Configuration
+export interface OAuthConfig {
+  clientId: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  scopes: string[];
+  redirectUri: string;
+}
+
+// Connected account info
+export interface ConnectedAccount {
+  platform: OAuthPlatform;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+  accountId: string;
+  accountName: string;
+  profileImage?: string;
+  channels?: AccountChannel[];
+}
+
+// Channel/Page info for accounts with multiple broadcast destinations
+export interface AccountChannel {
+  id: string;
+  name: string;
+  thumbnailUrl?: string;
+  streamKey?: string;
+  ingestUrl?: string;
+}
+
+// OAuth state for CSRF protection
+export interface OAuthState {
+  platform: OAuthPlatform;
+  userId: string;
+  timestamp: number;
+  nonce: string;
+}
+
+// Get OAuth configuration for each platform
+export const getOAuthConfig = (platform: OAuthPlatform): OAuthConfig => {
+  const baseRedirectUri = import.meta.env.VITE_OAUTH_REDIRECT_URI || `${window.location.origin}/oauth/callback`;
+
+  switch (platform) {
+    case 'youtube':
+      return {
+        clientId: import.meta.env.VITE_YOUTUBE_CLIENT_ID || '',
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+        scopes: [
+          'https://www.googleapis.com/auth/youtube',
+          'https://www.googleapis.com/auth/youtube.force-ssl',
+          'https://www.googleapis.com/auth/youtube.readonly',
+          'profile',
+          'email'
+        ],
+        redirectUri: `${baseRedirectUri}?platform=youtube`
+      };
+
+    case 'facebook':
+      return {
+        clientId: import.meta.env.VITE_FACEBOOK_APP_ID || '',
+        authorizationEndpoint: 'https://www.facebook.com/v18.0/dialog/oauth',
+        tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
+        scopes: [
+          'public_profile',
+          'email',
+          'pages_show_list',
+          'pages_read_engagement',
+          'pages_manage_posts',
+          'publish_video'
+        ],
+        redirectUri: `${baseRedirectUri}?platform=facebook`
+      };
+
+    case 'twitch':
+      return {
+        clientId: import.meta.env.VITE_TWITCH_CLIENT_ID || '',
+        authorizationEndpoint: 'https://id.twitch.tv/oauth2/authorize',
+        tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
+        scopes: [
+          'user:read:email',
+          'channel:read:stream_key',
+          'channel:manage:broadcast',
+          'channel:read:subscriptions'
+        ],
+        redirectUri: `${baseRedirectUri}?platform=twitch`
+      };
+
+    default:
+      throw new Error(`Unsupported OAuth platform: ${platform}`);
+  }
+};
+
+// Generate a random nonce for state parameter
+const generateNonce = (): string => {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+// Create OAuth state and store it for verification
+export const createOAuthState = (platform: OAuthPlatform, userId: string): string => {
+  const state: OAuthState = {
+    platform,
+    userId,
+    timestamp: Date.now(),
+    nonce: generateNonce()
+  };
+
+  // Store state in sessionStorage for verification after redirect
+  sessionStorage.setItem('oauth_state', JSON.stringify(state));
+
+  // Encode state as base64 for URL safety
+  return btoa(JSON.stringify(state));
+};
+
+// Verify OAuth state from callback
+export const verifyOAuthState = (stateParam: string): OAuthState | null => {
+  try {
+    const receivedState: OAuthState = JSON.parse(atob(stateParam));
+    const storedState = sessionStorage.getItem('oauth_state');
+
+    if (!storedState) {
+      console.error('No stored OAuth state found');
+      return null;
+    }
+
+    const parsed: OAuthState = JSON.parse(storedState);
+
+    // Verify nonce matches
+    if (parsed.nonce !== receivedState.nonce) {
+      console.error('OAuth state nonce mismatch');
+      return null;
+    }
+
+    // Verify state is not too old (10 minute expiry)
+    const tenMinutes = 10 * 60 * 1000;
+    if (Date.now() - receivedState.timestamp > tenMinutes) {
+      console.error('OAuth state expired');
+      return null;
+    }
+
+    // Clear stored state
+    sessionStorage.removeItem('oauth_state');
+
+    return receivedState;
+  } catch (error) {
+    console.error('Failed to verify OAuth state:', error);
+    return null;
+  }
+};
+
+// Generate OAuth authorization URL
+export const getAuthorizationUrl = (platform: OAuthPlatform, userId: string): string => {
+  const config = getOAuthConfig(platform);
+  const state = createOAuthState(platform, userId);
+
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    scope: config.scopes.join(' '),
+    state,
+    access_type: 'offline', // For refresh tokens (YouTube/Google)
+    prompt: 'consent' // Force consent screen to get refresh token
+  });
+
+  // Platform-specific parameters
+  if (platform === 'twitch') {
+    params.set('force_verify', 'true');
+  }
+
+  return `${config.authorizationEndpoint}?${params.toString()}`;
+};
+
+// Exchange authorization code for tokens (via Cloud Function)
+export const exchangeCodeForTokens = async (
+  platform: OAuthPlatform,
+  code: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch('/api/oauth/exchange', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        platform,
+        code,
+        userId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.message || 'Token exchange failed' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Token exchange error:', error);
+    return { success: false, error: 'Failed to connect account' };
+  }
+};
+
+// Refresh access token (via Cloud Function)
+export const refreshAccessToken = async (
+  platform: OAuthPlatform,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch('/api/oauth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        platform,
+        userId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.message || 'Token refresh failed' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    return { success: false, error: 'Failed to refresh token' };
+  }
+};
+
+// Disconnect platform account
+export const disconnectPlatform = async (
+  platform: OAuthPlatform,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (!db) {
+    return { success: false, error: 'Database not configured' };
+  }
+
+  try {
+    // Remove tokens from user profile
+    await updateDoc(doc(db, 'users', userId), {
+      [`connectedPlatforms.${platform}`]: null
+    });
+
+    // Optionally revoke tokens on the platform side
+    try {
+      await fetch('/api/oauth/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform, userId })
+      });
+    } catch {
+      // Non-critical if revocation fails
+      console.warn('Token revocation failed, but account disconnected locally');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Disconnect error:', error);
+    return { success: false, error: 'Failed to disconnect account' };
+  }
+};
+
+// Get connected platforms for a user
+export const getConnectedPlatforms = async (userId: string): Promise<{
+  youtube?: ConnectedAccount;
+  facebook?: ConnectedAccount;
+  twitch?: ConnectedAccount;
+}> => {
+  if (!db) return {};
+
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) return {};
+
+    const data = userDoc.data();
+    const platforms: {
+      youtube?: ConnectedAccount;
+      facebook?: ConnectedAccount;
+      twitch?: ConnectedAccount;
+    } = {};
+
+    if (data.connectedPlatforms?.youtube) {
+      platforms.youtube = {
+        platform: 'youtube',
+        ...data.connectedPlatforms.youtube,
+        expiresAt: data.connectedPlatforms.youtube.expiresAt?.toDate()
+      };
+    }
+
+    if (data.connectedPlatforms?.facebook) {
+      platforms.facebook = {
+        platform: 'facebook',
+        ...data.connectedPlatforms.facebook,
+        expiresAt: data.connectedPlatforms.facebook.expiresAt?.toDate()
+      };
+    }
+
+    if (data.connectedPlatforms?.twitch) {
+      platforms.twitch = {
+        platform: 'twitch',
+        ...data.connectedPlatforms.twitch,
+        expiresAt: data.connectedPlatforms.twitch.expiresAt?.toDate()
+      };
+    }
+
+    return platforms;
+  } catch (error) {
+    console.error('Error getting connected platforms:', error);
+    return {};
+  }
+};
+
+// Check if token is expired or about to expire (within 5 minutes)
+export const isTokenExpired = (expiresAt: Date): boolean => {
+  const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
+  return expiresAt <= fiveMinutesFromNow;
+};
+
+// Get stream key for a platform (fetches from platform API via Cloud Function)
+export const getStreamKey = async (
+  platform: OAuthPlatform,
+  userId: string,
+  channelId?: string
+): Promise<{ streamKey?: string; ingestUrl?: string; error?: string }> => {
+  try {
+    const response = await fetch('/api/oauth/stream-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, userId, channelId })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { error: error.message || 'Failed to get stream key' };
+    }
+
+    const data = await response.json();
+    return {
+      streamKey: data.streamKey,
+      ingestUrl: data.ingestUrl
+    };
+  } catch (error) {
+    console.error('Get stream key error:', error);
+    return { error: 'Failed to retrieve stream key' };
+  }
+};
+
+// Get user's channels/pages for platforms that support multiple destinations
+export const getChannels = async (
+  platform: OAuthPlatform,
+  userId: string
+): Promise<{ channels: AccountChannel[]; error?: string }> => {
+  try {
+    const response = await fetch('/api/oauth/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, userId })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { channels: [], error: error.message || 'Failed to get channels' };
+    }
+
+    const data = await response.json();
+    return { channels: data.channels || [] };
+  } catch (error) {
+    console.error('Get channels error:', error);
+    return { channels: [], error: 'Failed to retrieve channels' };
+  }
+};
+
+// Initiate OAuth flow for a platform
+export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => {
+  const config = getOAuthConfig(platform);
+
+  if (!config.clientId) {
+    console.error(`${platform} OAuth not configured. Missing client ID.`);
+    alert(`${platform} integration is not configured. Please contact support.`);
+    return;
+  }
+
+  const authUrl = getAuthorizationUrl(platform, userId);
+
+  // Open OAuth popup
+  const width = 600;
+  const height = 700;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+
+  const popup = window.open(
+    authUrl,
+    `${platform}_oauth`,
+    `width=${width},height=${height},left=${left},top=${top},popup=yes`
+  );
+
+  // Focus the popup
+  if (popup) {
+    popup.focus();
+  }
+};
+
+// Handle OAuth callback (called from callback page)
+export const handleOAuthCallback = async (
+  searchParams: URLSearchParams
+): Promise<{ success: boolean; platform?: OAuthPlatform; error?: string }> => {
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const error = searchParams.get('error');
+
+  if (error) {
+    return {
+      success: false,
+      error: error === 'access_denied' ? 'Authorization was denied' : error
+    };
+  }
+
+  if (!code || !state) {
+    return { success: false, error: 'Missing authorization code or state' };
+  }
+
+  const stateData = verifyOAuthState(state);
+  if (!stateData) {
+    return { success: false, error: 'Invalid or expired authorization state' };
+  }
+
+  const result = await exchangeCodeForTokens(
+    stateData.platform,
+    code,
+    stateData.userId
+  );
+
+  if (!result.success) {
+    return { success: false, platform: stateData.platform, error: result.error };
+  }
+
+  return { success: true, platform: stateData.platform };
+};

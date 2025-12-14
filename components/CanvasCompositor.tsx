@@ -10,6 +10,7 @@ interface CanvasCompositorProps {
   backgroundUrl: string | null; // Custom Template Background
   videoVolume: number; // 0 to 1
   branding: BrandingSettings;
+  showWatermark?: boolean; // Show ChatScream watermark (required for free tier)
 }
 
 export interface CanvasRef {
@@ -332,29 +333,29 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
       if (brand.showTicker && brand.tickerText) {
           const tickerH = 50;
           const tickerY = h - tickerH;
-          
+
           ctx.fillStyle = brand.primaryColor;
           ctx.fillRect(0, tickerY, w, tickerH);
-          
+
           const labelW = 120;
           ctx.fillStyle = brand.accentColor;
           ctx.fillRect(0, tickerY, labelW, tickerH);
-          
+
           ctx.fillStyle = 'white';
           ctx.font = 'bold 16px sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText("NEWS", labelW / 2, tickerY + tickerH / 2);
-          
+
           ctx.textAlign = 'left';
           ctx.font = '20px sans-serif';
-          
+
           const textWidth = ctx.measureText(brand.tickerText).width;
           const tickerSpeed = 2; // px per frame
 
           // Update Ticker Position using Ref (persistent across renders)
           tickerXRef.current -= tickerSpeed;
-          
+
           // Reset if fully off screen
           if (tickerXRef.current < -textWidth) {
               tickerXRef.current = w;
@@ -369,6 +370,56 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
           ctx.rect(labelW, tickerY, w - labelW, tickerH);
           ctx.clip();
           ctx.fillText(brand.tickerText, labelW + 20 + tickerXRef.current, tickerY + tickerH / 2);
+          ctx.restore();
+      }
+
+      // --- WATERMARK (Free Tier) ---
+      // Drawn last to ensure it's always visible on top
+      if (currentProps.showWatermark) {
+          const watermarkText = "ChatScream";
+          const padding = 16;
+          const cornerX = w - padding;
+          const cornerY = padding;
+
+          // Background pill
+          ctx.font = 'bold 18px sans-serif';
+          const textMetrics = ctx.measureText(watermarkText);
+          const pillWidth = textMetrics.width + 24;
+          const pillHeight = 32;
+          const pillX = cornerX - pillWidth;
+          const pillY = cornerY;
+
+          // Draw semi-transparent background
+          ctx.save();
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = '#0f172a';
+          ctx.beginPath();
+          ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 6);
+          ctx.fill();
+
+          // Draw border
+          ctx.strokeStyle = '#6366f1';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+
+          // Draw text with gradient effect
+          const gradient = ctx.createLinearGradient(pillX, pillY, pillX + pillWidth, pillY);
+          gradient.addColorStop(0, '#818cf8');
+          gradient.addColorStop(1, '#c084fc');
+          ctx.fillStyle = gradient;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(watermarkText, pillX + pillWidth / 2, pillY + pillHeight / 2);
+          ctx.restore();
+
+          // Additional small "Free" badge below
+          ctx.save();
+          ctx.globalAlpha = 0.75;
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillStyle = '#fbbf24';
+          ctx.textAlign = 'right';
+          ctx.fillText('FREE', cornerX - 8, cornerY + pillHeight + 14);
           ctx.restore();
       }
 

@@ -10,13 +10,18 @@ export interface PricingPlan {
   features: string[];
   limits: {
     destinations: number;
-    streamHours: number;
+    localStreamHours: number; // Unlimited for all plans (device streaming)
+    cloudStreamHours: number; // VM-based streaming hours
     chatScreams: number;
     storage: number; // GB
   };
   stripePriceId: string;
   popular?: boolean;
+  hasWatermark: boolean;
 }
+
+// Plan tier type for easy reference
+export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise';
 
 export const PRICING_PLANS: PricingPlan[] = [
   {
@@ -27,92 +32,101 @@ export const PRICING_PLANS: PricingPlan[] = [
     interval: 'month',
     features: [
       '1 streaming destination',
+      'Unlimited local device streaming',
+      '0 cloud VM streaming hours',
       '720p streaming quality',
-      '2 hours/month streaming',
       'Basic overlays',
-      'Watermark on stream',
+      'ChatScream watermark on stream',
     ],
     limits: {
       destinations: 1,
-      streamHours: 2,
+      localStreamHours: -1, // -1 = unlimited
+      cloudStreamHours: 0,
       chatScreams: 0,
       storage: 1,
     },
     stripePriceId: 'price_free',
+    hasWatermark: true,
   },
   {
-    id: 'starter',
-    name: 'Starter',
-    description: 'For creators getting started',
+    id: 'pro',
+    name: 'Pro',
+    description: 'For creators getting started with multi-streaming',
     price: 19,
     interval: 'month',
     features: [
-      '3 streaming destinations',
+      '3 simultaneous destinations',
+      'Unlimited local device streaming',
+      '3 hours cloud VM streaming',
       '1080p streaming quality',
-      '20 hours/month streaming',
-      'Basic Chat Screamer alerts',
-      'Cloud storage integration',
       'No watermark',
+      'Basic Chat Screamer alerts',
       'Email support',
     ],
     limits: {
       destinations: 3,
-      streamHours: 20,
+      localStreamHours: -1, // -1 = unlimited
+      cloudStreamHours: 3,
       chatScreams: 50,
       storage: 25,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID || 'price_starter',
+    stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
+    hasWatermark: false,
   },
   {
-    id: 'creator',
-    name: 'Creator',
-    description: 'For growing streamers',
-    price: 39,
+    id: 'expert',
+    name: 'Expert',
+    description: 'For growing streamers with higher capacity needs',
+    price: 29,
     interval: 'month',
     features: [
-      '5 streaming destinations',
+      '5 simultaneous destinations',
+      'Unlimited local device streaming',
+      '10 hours cloud VM streaming',
       '1080p/60fps streaming',
-      '50 hours/month streaming',
+      'No watermark',
       'Full Chat Screamer tiers',
       'Custom Scream sounds/visuals',
-      'Leaderboard participation',
       'Priority support',
-      'Google Drive & Dropbox sync',
     ],
     limits: {
       destinations: 5,
-      streamHours: 50,
+      localStreamHours: -1, // -1 = unlimited
+      cloudStreamHours: 10,
       chatScreams: 200,
       storage: 100,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID || 'price_creator',
+    stripePriceId: import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID || 'price_expert',
+    hasWatermark: false,
   },
   {
-    id: 'pro',
-    name: 'Professional',
+    id: 'enterprise',
+    name: 'Enterprise',
     description: 'For influencers & power users',
     price: 59,
     interval: 'month',
     features: [
-      'Unlimited destinations',
+      'Unlimited simultaneous destinations',
+      'Unlimited local device streaming',
+      '50 hours cloud VM streaming',
       '4K streaming quality',
-      'Unlimited streaming hours',
+      'No watermark',
       'Maximum Scream customization',
       'Custom TTS voices',
-      'Leaderboard priority',
       'API access',
       'White-label options',
       '24/7 priority support',
-      'All cloud integrations',
     ],
     limits: {
-      destinations: 999,
-      streamHours: 999,
+      destinations: -1, // -1 = unlimited
+      localStreamHours: -1, // -1 = unlimited
+      cloudStreamHours: 50,
       chatScreams: 999,
       storage: 500,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
+    stripePriceId: import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID || 'price_enterprise',
     popular: true,
+    hasWatermark: false,
   },
 ];
 
@@ -199,13 +213,109 @@ export const formatPrice = (price: number): string => {
 // Check if user has access to feature based on plan
 export const hasFeatureAccess = (
   userPlan: string,
-  feature: 'chatScreams' | 'destinations' | 'streamHours' | 'storage',
+  feature: 'chatScreams' | 'destinations' | 'cloudStreamHours' | 'storage',
   currentUsage: number
 ): boolean => {
   const plan = getPlanById(userPlan);
   if (!plan) return false;
 
-  return currentUsage < plan.limits[feature];
+  const limit = plan.limits[feature];
+  // -1 means unlimited
+  if (limit === -1) return true;
+  return currentUsage < limit;
+};
+
+// Check if user can add more destinations
+export const canAddDestination = (
+  userPlan: string,
+  currentDestinations: number
+): { allowed: boolean; maxDestinations: number; message: string } => {
+  const plan = getPlanById(userPlan);
+  if (!plan) {
+    return {
+      allowed: false,
+      maxDestinations: 1,
+      message: 'Invalid plan'
+    };
+  }
+
+  const maxDest = plan.limits.destinations;
+  // -1 means unlimited
+  if (maxDest === -1) {
+    return {
+      allowed: true,
+      maxDestinations: -1,
+      message: 'Unlimited destinations'
+    };
+  }
+
+  if (currentDestinations >= maxDest) {
+    return {
+      allowed: false,
+      maxDestinations: maxDest,
+      message: `Your ${plan.name} plan allows ${maxDest} destination${maxDest > 1 ? 's' : ''}. Upgrade to add more.`
+    };
+  }
+
+  return {
+    allowed: true,
+    maxDestinations: maxDest,
+    message: `${currentDestinations}/${maxDest} destinations used`
+  };
+};
+
+// Check if plan has watermark requirement
+export const planHasWatermark = (userPlan: string): boolean => {
+  const plan = getPlanById(userPlan);
+  return plan?.hasWatermark ?? true;
+};
+
+// Get remaining cloud hours
+export const getRemainingCloudHours = (
+  userPlan: string,
+  usedHours: number
+): { remaining: number; total: number; percentUsed: number } => {
+  const plan = getPlanById(userPlan);
+  if (!plan) {
+    return { remaining: 0, total: 0, percentUsed: 100 };
+  }
+
+  const total = plan.limits.cloudStreamHours;
+  const remaining = Math.max(0, total - usedHours);
+  const percentUsed = total > 0 ? Math.min(100, (usedHours / total) * 100) : 100;
+
+  return { remaining, total, percentUsed };
+};
+
+// Check if cloud streaming is available
+export const canUseCloudStreaming = (
+  userPlan: string,
+  usedHours: number
+): { allowed: boolean; message: string } => {
+  const plan = getPlanById(userPlan);
+  if (!plan) {
+    return { allowed: false, message: 'Invalid plan' };
+  }
+
+  const total = plan.limits.cloudStreamHours;
+  if (total === 0) {
+    return {
+      allowed: false,
+      message: 'Cloud streaming is not available on the Free plan. Upgrade to Pro for 3 hours of cloud streaming.'
+    };
+  }
+
+  if (usedHours >= total) {
+    return {
+      allowed: false,
+      message: `You've used all ${total} cloud streaming hours this month. Upgrade your plan for more hours.`
+    };
+  }
+
+  return {
+    allowed: true,
+    message: `${(total - usedHours).toFixed(1)} cloud hours remaining`
+  };
 };
 
 // Chat Screamer tier configuration
