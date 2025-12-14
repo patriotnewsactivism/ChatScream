@@ -1,13 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "affiliates",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "code", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "screams",
       "queryScope": "COLLECTION",
       "fields": [
