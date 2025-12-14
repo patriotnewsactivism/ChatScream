@@ -59,18 +59,21 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const oauthOptions = useMemo(() => ([
     {
       platform: Platform.YOUTUBE,
+      oauthPlatform: 'youtube' as const,
       label: 'YouTube',
       description: 'Stream to your main channel or brand account with YouTube verified bitrate.',
       icon: <Youtube className="text-red-500" aria-hidden />,
     },
     {
       platform: Platform.FACEBOOK,
+      oauthPlatform: 'facebook' as const,
       label: 'Facebook Live',
       description: 'Go live to your profile or page without copying stream keys.',
       icon: <Facebook className="text-blue-500" aria-hidden />,
     },
     {
       platform: Platform.TWITCH,
+      oauthPlatform: 'twitch' as const,
       label: 'Twitch',
       description: 'Authenticate your channel to keep VOD/audio rules in sync.',
       icon: <Twitch className="text-purple-500" aria-hidden />,
@@ -121,6 +124,44 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       case Platform.TWITCH: return <Twitch className="text-purple-500" />;
       default: return <Globe className="text-gray-400" />;
     }
+  };
+
+  const isPlatformConnected = (platform: OAuthServicePlatform): boolean => {
+    if (!connectedPlatforms) return false;
+    return Boolean(connectedPlatforms[platform]);
+  };
+
+  const getConnectedLabel = (platform: OAuthServicePlatform): string => {
+    if (!connectedPlatforms) return 'Not connected';
+    if (platform === 'youtube') return connectedPlatforms.youtube?.channelName ? `Connected: ${connectedPlatforms.youtube.channelName}` : 'Connected';
+    if (platform === 'facebook') return connectedPlatforms.facebook?.pageName ? `Connected: ${connectedPlatforms.facebook.pageName}` : 'Connected';
+    if (platform === 'twitch') return connectedPlatforms.twitch?.channelName ? `Connected: ${connectedPlatforms.twitch.channelName}` : 'Connected';
+    return 'Connected';
+  };
+
+  const handleConnectOAuth = (platform: OAuthServicePlatform) => {
+    if (!userId) {
+      alert('Please sign in again to connect this platform.');
+      return;
+    }
+    initiateOAuth(platform, userId);
+  };
+
+  const handleSyncStreamKey = async (dest: Destination, platform: OAuthServicePlatform) => {
+    if (!userId) {
+      alert('Please sign in again to sync stream info.');
+      return;
+    }
+    const result = await getStreamKey(platform, userId);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    if (!result.streamKey || !result.ingestUrl) {
+      alert('Stream key not available yet. Try again after connecting, or create a broadcast on the platform.');
+      return;
+    }
+    onUpdateDestination(dest.id, { streamKey: result.streamKey, serverUrl: result.ingestUrl });
   };
 
   return (
@@ -177,14 +218,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         {oauthOptions.map(option => (
-          <button
+          <div
             key={option.platform}
-            onClick={() => handleAddWithLimitCheck(createOAuthDestination(option.platform))}
-            disabled={isStreaming || !destinationLimit.allowed}
-            className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/40 ${(isStreaming || !destinationLimit.allowed) ? 'opacity-50 cursor-not-allowed' : 'border-gray-700'}`}
+            className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/40 ${(isStreaming || !destinationLimit.allowed) ? 'opacity-50' : 'border-gray-700'}`}
           >
             <div className="mt-0.5">{option.icon}</div>
-            <div className="flex-1 space-y-1">
+            <div className="flex-1 space-y-2 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm">{option.label}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 font-semibold">One-click</span>
@@ -193,8 +232,29 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               <div className="inline-flex items-center gap-1 text-[11px] text-brand-300 bg-brand-900/40 px-2 py-1 rounded-full">
                 <Lock size={12} /> Secure OAuth sign-in
               </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[11px] truncate ${isPlatformConnected(option.oauthPlatform) ? 'text-emerald-300' : 'text-gray-500'}`}>
+                  {isPlatformConnected(option.oauthPlatform) ? getConnectedLabel(option.oauthPlatform) : 'Not connected'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleConnectOAuth(option.oauthPlatform)}
+                  disabled={isStreaming || !destinationLimit.allowed}
+                  className="text-[11px] px-2 py-1 rounded bg-brand-600/30 hover:bg-brand-600/40 border border-brand-500/20 text-brand-100 disabled:opacity-50"
+                >
+                  Connect
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleAddWithLimitCheck(createOAuthDestination(option.platform))}
+                disabled={isStreaming || !destinationLimit.allowed}
+                className="w-full text-[11px] px-2 py-2 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-gray-200 disabled:opacity-50"
+              >
+                Add destination
+              </button>
             </div>
-          </button>
+          </div>
         ))}
       </div>
 
