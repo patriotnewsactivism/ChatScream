@@ -5,12 +5,13 @@ service cloud.firestore {
     match /users/{userId} {
       // Users can read their own profile
       allow read: if request.auth != null && request.auth.uid == userId;
+      // Users can create their own profile after sign-up
+      allow create: if request.auth != null && request.auth.uid == userId;
       // Users can update their own profile (except subscription fields)
       allow update: if request.auth != null && request.auth.uid == userId
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscription.stripeCustomerId', 'subscription.stripeSubscriptionId']);
       // Only Cloud Functions can create users (via Admin SDK)
-      allow create: if false;
       allow delete: if false;
     }
 
