@@ -769,7 +769,7 @@ const App = () => {
 
         {/* CANVAS & CENTRAL AREA */}
         <main className="flex-1 flex flex-col min-w-0 bg-black relative">
-            <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-0 md:p-8 overflow-hidden">
+            <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-3 md:p-8 overflow-hidden">
                  
                  {/* Video Container */}
                  <div className={`transition-all duration-300 relative shadow-2xl border-gray-800 overflow-hidden bg-black
@@ -812,9 +812,17 @@ const App = () => {
                  )}
             </div>
 
+            {/* MOBILE OVERLAYS */}
+            {mobilePanel !== 'none' && (
+              <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
+                onClick={() => setMobilePanel('none')}
+              />
+            )}
+
             {/* MOBILE: Landscape Side Panel Logic (Hidden in Portrait) */}
             {isLandscape && mobilePanel !== 'none' && (
-                <div className="absolute top-0 right-0 bottom-0 w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col">
+                <div className="fixed inset-y-16 right-0 w-full sm:w-[50%] md:w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col shadow-2xl">
                     <div className="flex items-center justify-between p-3 border-b border-gray-700">
                          <h3 className="text-xs font-bold uppercase">
                            {mobilePanel === 'media' && 'Media'}
@@ -835,7 +843,7 @@ const App = () => {
 
             {/* MOBILE: Portrait Bottom Sheet */}
             {!isLandscape && mobilePanel !== 'none' && (
-              <div className="absolute inset-x-0 bottom-0 top-auto h-[60%] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
+              <div className="fixed inset-x-0 bottom-0 top-auto max-h-[78vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
                  <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0 cursor-pointer" onClick={() => setMobilePanel('none')}>
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-1 bg-gray-600 rounded-full mx-auto absolute left-0 right-0 top-2" />
