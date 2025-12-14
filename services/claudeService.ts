@@ -6,6 +6,13 @@ interface StreamMetadata {
   description: string;
 }
 
+export interface ViralStreamPackage {
+  titles: string[];
+  descriptions: string[];
+  hashtags: string[];
+  tags: string[];
+}
+
 interface ChatStreamResponse {
   message: string;
   suggestions?: string[];
@@ -90,6 +97,89 @@ Keep titles under 60 characters. Descriptions should be 100-150 characters, enga
   return {
     title: `Live: ${topic} Stream`,
     description: `Join us for an amazing live stream about ${topic}! Don't miss out on the excitement.`,
+  };
+}
+
+export async function generateViralStreamPackage(
+  topic: string,
+  platforms: string[] = ['youtube', 'twitch', 'facebook', 'tiktok', 'instagram']
+): Promise<ViralStreamPackage> {
+  const systemPrompt = `You are a growth-focused live streaming strategist.
+Generate viral, platform-aware stream copy and tags.
+Return ONLY valid JSON with keys: "titles" (string[]), "descriptions" (string[]), "hashtags" (string[]), "tags" (string[]).
+Constraints:
+- titles: 3 options, max 60 chars each, punchy and curiosity-driven
+- descriptions: 2 options, 120-220 chars each, include 1-2 keywords naturally
+- hashtags: 12 items, no duplicates, include the leading #, avoid banned/violent/NSFW terms
+- tags: 15 items, no hashtags, concise, SEO-friendly
+Target platforms: ${platforms.join(', ')}.`;
+
+  const userMessage = `Topic: ${topic}\nGenerate the JSON package.`;
+
+  try {
+    const response = await callClaude(systemPrompt, userMessage, 700);
+
+    if (response) {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          titles: Array.isArray(parsed.titles) ? parsed.titles.filter(Boolean) : [`Live: ${topic}`],
+          descriptions: Array.isArray(parsed.descriptions) ? parsed.descriptions.filter(Boolean) : [`Going live about ${topic}. Jump in and say hi!`],
+          hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter(Boolean) : [`#${topic.replace(/\s+/g, '')}`],
+          tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean) : [topic],
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Failed to generate viral package:', error);
+  }
+
+  const normalized = topic.trim();
+  const slug = normalized.replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, '');
+  const baseHashtag = slug ? `#${slug}` : '#Live';
+
+  return {
+    titles: [
+      `Live: ${normalized}`.slice(0, 60),
+      `Let’s talk ${normalized}`.slice(0, 60),
+      `${normalized} (Live Q&A)` .slice(0, 60),
+    ],
+    descriptions: [
+      `Going live on ${normalized}. Ask questions, share your takes, and hang out. ${baseHashtag}`.slice(0, 220),
+      `Streaming ${normalized} right now—tips, demos, and chat. Drop in and say hi! ${baseHashtag}`.slice(0, 220),
+    ],
+    hashtags: [
+      baseHashtag,
+      '#Live',
+      '#Streaming',
+      '#Creator',
+      '#Community',
+      '#Tutorial',
+      '#QandA',
+      '#BehindTheScenes',
+      '#ContentCreator',
+      '#Tech',
+      '#Gaming',
+      '#Podcast',
+    ].slice(0, 12),
+    tags: [
+      normalized,
+      'live stream',
+      'streaming',
+      'creator',
+      'community',
+      'how to',
+      'tips',
+      'tutorial',
+      'q&a',
+      'behind the scenes',
+      'discussion',
+      'highlights',
+      'chat',
+      'studio',
+      'multistream',
+    ].slice(0, 15),
   };
 }
 

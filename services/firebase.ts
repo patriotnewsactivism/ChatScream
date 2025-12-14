@@ -6,7 +6,14 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
+  FacebookAuthProvider,
+  GithubAuthProvider,
+  TwitterAuthProvider,
+  OAuthProvider,
+  AuthProvider as FirebaseAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail,
   User
 } from 'firebase/auth';
@@ -68,6 +75,31 @@ const ensureInitialized = () => {
 };
 
 const googleProvider = new GoogleAuthProvider();
+const facebookProvider = new FacebookAuthProvider();
+const githubProvider = new GithubAuthProvider();
+const twitterProvider = new TwitterAuthProvider();
+const appleProvider = new OAuthProvider('apple.com');
+
+const PENDING_AUTH_REFERRAL_KEY = 'pending_auth_referral';
+
+const storePendingReferralCode = (referralCode?: string) => {
+  if (!referralCode) return;
+  try {
+    sessionStorage.setItem(PENDING_AUTH_REFERRAL_KEY, referralCode);
+  } catch {
+    // ignore
+  }
+};
+
+const consumePendingReferralCode = (): string | undefined => {
+  try {
+    const referralCode = sessionStorage.getItem(PENDING_AUTH_REFERRAL_KEY) || '';
+    sessionStorage.removeItem(PENDING_AUTH_REFERRAL_KEY);
+    return referralCode || undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const getAuthInstance = () => {
   ensureInitialized();
@@ -227,69 +259,139 @@ export const signInWithEmail = async (email: string, password: string): Promise<
   return userCredential.user;
 };
 
-export const signInWithGoogle = async (referralCode?: string): Promise<User> => {
-  const authClient = getAuthInstance();
+const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string): Promise<void> => {
   const db = getDbInstanceSafe();
-  const userCredential = await signInWithPopup(authClient, googleProvider);
-  const user = userCredential.user;
 
-  // Check if user profile exists
   const userDoc = await getDoc(doc(db, 'users', user.uid));
+  if (userDoc.exists()) return;
 
-  if (!userDoc.exists()) {
-    // New user - create profile
-    let trialDays = 7;
-    let referredBy: string | undefined;
+  let trialDays = 7;
+  let referredBy: string | undefined;
 
-    if (referralCode) {
-      const affiliateData = await getAffiliateByCode(referralCode);
-      if (affiliateData && affiliateData.isActive) {
-        trialDays = 7 + affiliateData.bonusTrialDays;
-        referredBy = affiliateData.code;
-        await updateAffiliateReferral(referralCode);
-      }
+  if (referralCode) {
+    const affiliateData = await getAffiliateByCode(referralCode);
+    if (affiliateData && affiliateData.isActive) {
+      trialDays = 7 + affiliateData.bonusTrialDays;
+      referredBy = affiliateData.code;
+      await updateAffiliateReferral(referralCode);
     }
-
-    const trialEndsAt = Timestamp.fromDate(
-      new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
-    );
-
-    const userProfile: UserProfile = {
-      uid: user.uid,
-      email: user.email || '',
-      displayName: user.displayName || 'User',
-      photoURL: user.photoURL || undefined,
-      createdAt: serverTimestamp() as Timestamp,
-      subscription: {
-        plan: 'free',
-        status: 'trialing',
-        trialEndsAt: trialEndsAt,
-      },
-      usage: {
-        cloudHoursUsed: 0,
-      },
-      affiliate: referredBy ? {
-        code: generateAffiliateCode(user.uid),
-        referredBy: referredBy,
-        referrals: 0,
-        totalEarnings: 0,
-        pendingPayout: 0,
-      } : {
-        code: generateAffiliateCode(user.uid),
-        referrals: 0,
-        totalEarnings: 0,
-        pendingPayout: 0,
-      },
-      settings: {
-        emailNotifications: true,
-        marketingEmails: true,
-      },
-    };
-
-    await setDoc(doc(db, 'users', user.uid), userProfile);
   }
 
-  return user;
+  const trialEndsAt = Timestamp.fromDate(
+    new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+  );
+
+  const userProfile: UserProfile = {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || 'User',
+    photoURL: user.photoURL || undefined,
+    createdAt: serverTimestamp() as Timestamp,
+    subscription: {
+      plan: 'free',
+      status: 'trialing',
+      trialEndsAt: trialEndsAt,
+    },
+    usage: {
+      cloudHoursUsed: 0,
+    },
+    affiliate: referredBy ? {
+      code: generateAffiliateCode(user.uid),
+      referredBy: referredBy,
+      referrals: 0,
+      totalEarnings: 0,
+      pendingPayout: 0,
+    } : {
+      code: generateAffiliateCode(user.uid),
+      referrals: 0,
+      totalEarnings: 0,
+      pendingPayout: 0,
+    },
+    settings: {
+      emailNotifications: true,
+      marketingEmails: true,
+    },
+  };
+
+  await setDoc(doc(db, 'users', user.uid), userProfile);
+};
+
+const shouldPreferRedirect = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent.toLowerCase();
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+  return isIOS || window.innerWidth < 768;
+};
+
+const signInWithPopupOrRedirect = async (
+  provider: FirebaseAuthProvider,
+  referralCode?: string
+): Promise<{ user?: User; didRedirect: boolean }> => {
+  const authClient = getAuthInstance();
+
+  if (shouldPreferRedirect()) {
+    storePendingReferralCode(referralCode);
+    await signInWithRedirect(authClient, provider);
+    return { didRedirect: true };
+  }
+
+  try {
+    const userCredential = await signInWithPopup(authClient, provider);
+    return { user: userCredential.user, didRedirect: false };
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-supported-in-this-environment') {
+      storePendingReferralCode(referralCode);
+      await signInWithRedirect(authClient, provider);
+      return { didRedirect: true };
+    }
+    throw err;
+  }
+};
+
+export const completeRedirectSignIn = async (): Promise<{ processed: boolean }> => {
+  const authClient = getAuthInstance();
+
+  const result = await getRedirectResult(authClient);
+  if (!result?.user) return { processed: false };
+
+  const referralCode = consumePendingReferralCode();
+  await ensureUserProfileForOAuthUser(result.user, referralCode);
+  return { processed: true };
+};
+
+export const signInWithGoogle = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+  const { user, didRedirect } = await signInWithPopupOrRedirect(googleProvider, referralCode);
+  if (didRedirect) return { didRedirect: true };
+  await ensureUserProfileForOAuthUser(user!, referralCode);
+  return { didRedirect: false };
+};
+
+export const signInWithFacebook = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+  const { user, didRedirect } = await signInWithPopupOrRedirect(facebookProvider, referralCode);
+  if (didRedirect) return { didRedirect: true };
+  await ensureUserProfileForOAuthUser(user!, referralCode);
+  return { didRedirect: false };
+};
+
+export const signInWithGithub = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+  const { user, didRedirect } = await signInWithPopupOrRedirect(githubProvider, referralCode);
+  if (didRedirect) return { didRedirect: true };
+  await ensureUserProfileForOAuthUser(user!, referralCode);
+  return { didRedirect: false };
+};
+
+export const signInWithTwitter = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+  const { user, didRedirect } = await signInWithPopupOrRedirect(twitterProvider, referralCode);
+  if (didRedirect) return { didRedirect: true };
+  await ensureUserProfileForOAuthUser(user!, referralCode);
+  return { didRedirect: false };
+};
+
+export const signInWithApple = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+  const { user, didRedirect } = await signInWithPopupOrRedirect(appleProvider, referralCode);
+  if (didRedirect) return { didRedirect: true };
+  await ensureUserProfileForOAuthUser(user!, referralCode);
+  return { didRedirect: false };
 };
 
 export const logOut = async (): Promise<void> => {

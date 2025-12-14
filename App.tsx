@@ -18,7 +18,7 @@ import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundS
 import BrandingPanel from './components/BrandingPanel';
 import ChatStream from './components/ChatStream';
 import ChatStreamOverlay from './components/ChatStreamOverlay';
-import { generateStreamMetadata } from './services/claudeService';
+import { generateViralStreamPackage, type ViralStreamPackage } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
 import { planHasWatermark, type PlanTier } from './services/stripe';
@@ -94,10 +94,12 @@ const App = () => {
   // Mobile Specific UI State
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('none');
   const [isLandscape, setIsLandscape] = useState(false);
+  const [isCompactLandscape, setIsCompactLandscape] = useState(false);
+  const [mobileTip, setMobileTip] = useState<string | null>(null);
 
   // AI Content
   const [streamTopic, setStreamTopic] = useState('');
-  const [generatedInfo, setGeneratedInfo] = useState<{title: string, description: string} | null>(null);
+  const [viralPackage, setViralPackage] = useState<ViralStreamPackage | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const canvasRef = useRef<CanvasRef>(null);
@@ -126,12 +128,20 @@ const App = () => {
   // Handle Orientation Changes
   useEffect(() => {
     const handleResize = () => {
-      setIsLandscape(window.innerWidth > window.innerHeight && window.innerWidth < 1024);
+      const landscapeViewport = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
+      setIsLandscape(landscapeViewport);
+      setIsCompactLandscape(landscapeViewport && window.innerHeight < 500);
     };
     handleResize(); // Init
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!mobileTip) return;
+    const timeoutId = window.setTimeout(() => setMobileTip(null), 6500);
+    return () => window.clearTimeout(timeoutId);
+  }, [mobileTip]);
 
   // Initialize RTMPSender
   useEffect(() => {
@@ -391,6 +401,14 @@ const App = () => {
       rtmpSenderRef.current.disconnect();
       setAppState({ ...appState, isStreaming: false, streamDuration: appState.isRecording ? appState.streamDuration : 0 });
     } else {
+      if (window.innerWidth < 1024) {
+        if (!isLandscape) {
+          setMobileTip('Tip: rotate to landscape for more room while streaming.');
+        } else if (!cameraStream) {
+          setMobileTip('Tip: allow camera + mic permissions for the best stream.');
+        }
+      }
+
       const enabled = destinations.filter(d => d.isEnabled);
       if (enabled.length === 0) {
         alert("Please enable at least one destination!");
@@ -516,9 +534,20 @@ const App = () => {
   const handleGenerateAI = async () => {
     if (!streamTopic) return;
     setIsGenerating(true);
-    const result = await generateStreamMetadata(streamTopic);
-    setGeneratedInfo(result);
+    const result = await generateViralStreamPackage(streamTopic);
+    setViralPackage(result);
     setIsGenerating(false);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (window.innerWidth < 1024) {
+        setMobileTip('Copied to clipboard.');
+      }
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
   };
 
   const handleLogout = async () => {
@@ -619,13 +648,54 @@ const App = () => {
                     disabled={isGenerating || !streamTopic}
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                    {isGenerating ? 'Generating...' : 'Generate Metadata'}
+                    {isGenerating ? 'Generating...' : 'Generate Viral Pack'}
                 </button>
-                {generatedInfo && (
-                    <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in">
-                        <div className="font-bold text-indigo-300 mb-1">{generatedInfo.title}</div>
-                        <div className="text-xs text-gray-400">{generatedInfo.description}</div>
+                {viralPackage && (
+                  <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-indigo-200 mb-1">{viralPackage.titles[0] || 'Untitled'}</div>
+                        <div className="text-xs text-gray-300">{viralPackage.descriptions[0] || ''}</div>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(`${viralPackage.titles[0] || ''}\n\n${viralPackage.descriptions[0] || ''}`.trim())}
+                        className="shrink-0 px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-500/30 text-xs text-indigo-100"
+                        type="button"
+                      >
+                        Copy
+                      </button>
                     </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[11px] uppercase font-bold text-gray-400">Hashtags</div>
+                          <div className="text-xs text-gray-300 break-words">{viralPackage.hashtags.join(' ')}</div>
+                        </div>
+                        <button
+                          onClick={() => copyToClipboard(viralPackage.hashtags.join(' '))}
+                          className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                          type="button"
+                        >
+                          Copy
+                        </button>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[11px] uppercase font-bold text-gray-400">Tags</div>
+                          <div className="text-xs text-gray-300 break-words">{viralPackage.tags.join(', ')}</div>
+                        </div>
+                        <button
+                          onClick={() => copyToClipboard(viralPackage.tags.join(', '))}
+                          className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                          type="button"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
             </div>
         </div>
@@ -775,11 +845,11 @@ const App = () => {
 
         {/* CANVAS & CENTRAL AREA */}
         <main className="flex-1 flex flex-col min-w-0 bg-black relative">
-            <div className="flex-1 flex items-center justify-center relative bg-[#0a0a0a] p-3 md:p-8 overflow-hidden">
+            <div className={`flex-1 flex items-center justify-center relative bg-[#0a0a0a] overflow-hidden ${isCompactLandscape ? 'p-0' : 'p-3 md:p-8'}`}>
                  
                  {/* Video Container */}
                  <div className={`transition-all duration-300 relative shadow-2xl border-gray-800 overflow-hidden bg-black
-                    ${isLandscape && window.innerHeight < 500 ? 'h-full aspect-video border-none' : 'w-full max-w-full aspect-video md:rounded-lg border-y md:border'}
+                    ${isCompactLandscape ? 'h-full aspect-video border-none' : 'w-full max-w-full aspect-video md:rounded-lg border-y md:border'}
                  `}>
                     <CanvasCompositor
                         ref={canvasRef}
@@ -878,6 +948,20 @@ const App = () => {
 
             {/* CONTROL DECK */}
             <div className="bg-dark-800 border-t border-gray-700 z-30 shrink-0 flex flex-col pb-safe shadow-2xl">
+                {mobileTip && (
+                  <div className="lg:hidden px-3 pt-3">
+                    <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-100 text-sm animate-fade-in">
+                      <span className="leading-snug">{mobileTip}</span>
+                      <button
+                        className="shrink-0 p-1 text-brand-200 hover:text-white"
+                        aria-label="Dismiss tip"
+                        onClick={() => setMobileTip(null)}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* Control Row - Fixed spacing and minimum tap targets for mobile */}
                 <div className="flex items-center px-3 sm:px-4 md:px-8 gap-2 sm:gap-3 h-16 md:h-20 overflow-x-auto no-scrollbar">
                    {/* Main Toggles - Minimum 48px tap targets with 8px spacing */}
@@ -966,13 +1050,54 @@ const App = () => {
                 <div className="space-y-3">
                     <input className="w-full bg-dark-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 outline-none" placeholder="What's your stream about?" value={streamTopic} onChange={(e) => setStreamTopic(e.target.value)} />
                     <button onClick={handleGenerateAI} disabled={isGenerating || !streamTopic} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50">
-                        {isGenerating ? 'Generating...' : 'Generate Metadata'}
+                        {isGenerating ? 'Generating...' : 'Generate Viral Pack'}
                     </button>
-                    {generatedInfo && (
-                        <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in">
-                            <div className="font-bold text-indigo-300 mb-1">{generatedInfo.title}</div>
-                            <div className="text-xs text-gray-400">{generatedInfo.description}</div>
+                    {viralPackage && (
+                      <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-bold text-indigo-200 mb-1">{viralPackage.titles[0] || 'Untitled'}</div>
+                            <div className="text-xs text-gray-300">{viralPackage.descriptions[0] || ''}</div>
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(`${viralPackage.titles[0] || ''}\n\n${viralPackage.descriptions[0] || ''}`.trim())}
+                            className="shrink-0 px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-500/30 text-xs text-indigo-100"
+                            type="button"
+                          >
+                            Copy
+                          </button>
                         </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-[11px] uppercase font-bold text-gray-400">Hashtags</div>
+                              <div className="text-xs text-gray-300 break-words">{viralPackage.hashtags.join(' ')}</div>
+                            </div>
+                            <button
+                              onClick={() => copyToClipboard(viralPackage.hashtags.join(' '))}
+                              className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                              type="button"
+                            >
+                              Copy
+                            </button>
+                          </div>
+
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-[11px] uppercase font-bold text-gray-400">Tags</div>
+                              <div className="text-xs text-gray-300 break-words">{viralPackage.tags.join(', ')}</div>
+                            </div>
+                            <button
+                              onClick={() => copyToClipboard(viralPackage.tags.join(', '))}
+                              className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                              type="button"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     )}
                 </div>
             </div>

@@ -179,9 +179,9 @@ const LandingPage: React.FC = () => {
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-8">
-              Cloud-powered streaming that uses <strong className="text-brand-400">ZERO of your bandwidth</strong>.
-              Let viewers send donation-triggered <strong className="text-white">"Screams"</strong> that
-              take over the screen for maximum engagement!
+              Go live with <strong className="text-white">unlimited local device streaming</strong> from your phone, tablet, or desktop.
+              Upgrade anytime for <strong className="text-brand-400">cloud-powered streaming</strong> that uses ZERO of your bandwidth.
+              Let viewers send donation-triggered <strong className="text-white">"Screams"</strong> that take over the screen for maximum engagement!
             </p>
 
             {/* CTA Buttons */}

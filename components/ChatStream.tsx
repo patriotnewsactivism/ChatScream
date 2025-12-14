@@ -131,11 +131,11 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
     return (
       <button
         onClick={() => setIsExpanded(true)}
-        className="fixed bottom-24 right-4 z-40 p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-xl shadow-purple-600/30 hover:scale-110 transition-all group"
+        className="fixed bottom-36 right-3 md:bottom-24 md:right-4 z-40 p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-xl shadow-purple-600/30 hover:scale-110 transition-all group"
       >
         <MessageSquare size={24} className="text-white" />
         <span className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full border-2 border-dark-900 animate-pulse" />
-        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-dark-800 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="hidden md:block absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-dark-800 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
           Chat Stream
         </span>
       </button>
@@ -143,7 +143,7 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
   }
 
   return (
-    <div className="fixed bottom-24 right-4 z-40 w-80 md:w-96 bg-dark-800/95 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[70vh] animate-slide-up">
+    <div className="fixed left-3 right-3 bottom-36 md:left-auto md:right-4 md:bottom-24 z-40 md:w-80 lg:w-96 bg-dark-800/95 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[60vh] md:max-h-[70vh] animate-slide-up">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-t-2xl">
         <div className="flex items-center gap-2">

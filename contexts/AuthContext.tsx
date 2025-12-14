@@ -5,6 +5,11 @@ import {
   signUpWithEmail,
   signInWithEmail,
   signInWithGoogle,
+  signInWithFacebook,
+  signInWithGithub,
+  signInWithTwitter,
+  signInWithApple,
+  completeRedirectSignIn,
   logOut,
   resetPassword,
   getUserProfile,
@@ -20,7 +25,11 @@ interface AuthContextType {
   error: string | null;
   signUp: (email: string, password: string, displayName: string, referralCode?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signInGoogle: (referralCode?: string) => Promise<void>;
+  signInGoogle: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
+  signInFacebook: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
+  signInGithub: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
+  signInTwitter: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
+  signInApple: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
   logout: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -62,6 +71,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setError(configError);
       return;
     }
+
+    (async () => {
+      try {
+        await completeRedirectSignIn();
+      } catch (err: any) {
+        const message = getErrorMessage(err?.code);
+        setError(message);
+      }
+    })();
 
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       setUser(firebaseUser);
@@ -118,12 +136,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const signInGoogle = async (referralCode?: string): Promise<void> => {
+  const signInGoogle = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
     setError(null);
     setLoading(true);
     guardConfig();
     try {
-      await signInWithGoogle(referralCode);
+      return await signInWithGoogle(referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInFacebook = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+    setError(null);
+    setLoading(true);
+    guardConfig();
+    try {
+      return await signInWithFacebook(referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInGithub = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+    setError(null);
+    setLoading(true);
+    guardConfig();
+    try {
+      return await signInWithGithub(referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInTwitter = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+    setError(null);
+    setLoading(true);
+    guardConfig();
+    try {
+      return await signInWithTwitter(referralCode);
+    } catch (err: any) {
+      const message = getErrorMessage(err.code);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInApple = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+    setError(null);
+    setLoading(true);
+    guardConfig();
+    try {
+      return await signInWithApple(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err.code);
       setError(message);
@@ -177,6 +255,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signUp,
     signIn,
     signInGoogle,
+    signInFacebook,
+    signInGithub,
+    signInTwitter,
+    signInApple,
     logout,
     sendResetEmail,
     refreshProfile,

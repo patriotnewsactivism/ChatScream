@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = void 0;
+exports.oauthChannels = exports.oauthStreamKey = exports.oauthRefresh = exports.oauthExchange = exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
@@ -106,6 +106,39 @@ const LEADERBOARD_PRIZE_VALUE = 59;
 // Shared run options for functions needing secrets
 const runtimeOpts = {
     secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+};
+// OAuth runtime options with platform secrets
+const oauthRuntimeOpts = {
+    secrets: [
+        'YOUTUBE_CLIENT_ID',
+        'YOUTUBE_CLIENT_SECRET',
+        'FACEBOOK_APP_ID',
+        'FACEBOOK_APP_SECRET',
+        'TWITCH_CLIENT_ID',
+        'TWITCH_CLIENT_SECRET',
+    ],
+};
+const getOAuthCredentials = (platform) => {
+    switch (platform) {
+        case 'youtube':
+            return {
+                clientId: process.env.YOUTUBE_CLIENT_ID || '',
+                clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
+                tokenEndpoint: 'https://oauth2.googleapis.com/token',
+            };
+        case 'facebook':
+            return {
+                clientId: process.env.FACEBOOK_APP_ID || '',
+                clientSecret: process.env.FACEBOOK_APP_SECRET || '',
+                tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
+            };
+        case 'twitch':
+            return {
+                clientId: process.env.TWITCH_CLIENT_ID || '',
+                clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+                tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
+            };
+    }
 };
 /**
  * Create Stripe Checkout Session
@@ -372,5 +405,385 @@ function getCurrentWeekId() {
     const start = new Date(now.getFullYear(), 0, 1);
     const weeks = Math.ceil((((now.getTime() - start.getTime()) / 86400000) + start.getDay() + 1) / 7);
     return `${now.getFullYear()}-W${weeks.toString().padStart(2, '0')}`;
+}
+// --- OAUTH FUNCTIONS ---
+/**
+ * Exchange OAuth authorization code for tokens
+ */
+exports.oauthExchange = functions
+    .runWith(oauthRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { platform, code, redirectUri } = req.body;
+        if (!platform || !code) {
+            res.status(400).json({ error: 'Missing platform or authorization code' });
+            return;
+        }
+        const creds = getOAuthCredentials(platform);
+        if (!creds.clientId || !creds.clientSecret) {
+            res.status(500).json({ error: `${platform} OAuth not configured` });
+            return;
+        }
+        // Exchange code for tokens
+        const tokenParams = new URLSearchParams({
+            client_id: creds.clientId,
+            client_secret: creds.clientSecret,
+            code,
+            grant_type: 'authorization_code',
+            redirect_uri: redirectUri || '',
+        });
+        const tokenResponse = await fetch(creds.tokenEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: tokenParams.toString(),
+        });
+        if (!tokenResponse.ok) {
+            const errorData = await tokenResponse.json();
+            console.error('Token exchange failed:', errorData);
+            res.status(400).json({ error: 'Token exchange failed' });
+            return;
+        }
+        const tokens = await tokenResponse.json();
+        // Get user info from platform
+        const accountInfo = await getPlatformAccountInfo(platform, tokens.access_token, creds.clientId);
+        // Calculate expiration time
+        const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokens.expires_in || 3600) * 1000));
+        // Store tokens in user profile (encrypted at rest by Firestore)
+        await db.collection('users').doc(authUser.uid).update({
+            [`connectedPlatforms.${platform}`]: {
+                accessToken: tokens.access_token,
+                refreshToken: tokens.refresh_token || null,
+                expiresAt,
+                channelId: accountInfo.channelId,
+                channelName: accountInfo.channelName,
+                profileImage: accountInfo.profileImage,
+            },
+        });
+        res.json({ success: true, accountName: accountInfo.channelName });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('OAuth exchange error:', error);
+        res.status(500).json({ error: 'Failed to connect account' });
+    }
+});
+/**
+ * Refresh OAuth access token
+ */
+exports.oauthRefresh = functions
+    .runWith(oauthRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { platform } = req.body;
+        if (!platform) {
+            res.status(400).json({ error: 'Missing platform' });
+            return;
+        }
+        const userDoc = await db.collection('users').doc(authUser.uid).get();
+        const userData = userDoc.data();
+        const platformData = (_a = userData === null || userData === void 0 ? void 0 : userData.connectedPlatforms) === null || _a === void 0 ? void 0 : _a[platform];
+        if (!(platformData === null || platformData === void 0 ? void 0 : platformData.refreshToken)) {
+            res.status(400).json({ error: 'No refresh token available' });
+            return;
+        }
+        const creds = getOAuthCredentials(platform);
+        const tokenParams = new URLSearchParams({
+            client_id: creds.clientId,
+            client_secret: creds.clientSecret,
+            refresh_token: platformData.refreshToken,
+            grant_type: 'refresh_token',
+        });
+        const tokenResponse = await fetch(creds.tokenEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: tokenParams.toString(),
+        });
+        if (!tokenResponse.ok) {
+            res.status(400).json({ error: 'Token refresh failed' });
+            return;
+        }
+        const tokens = await tokenResponse.json();
+        const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokens.expires_in || 3600) * 1000));
+        await db.collection('users').doc(authUser.uid).update(Object.assign({ [`connectedPlatforms.${platform}.accessToken`]: tokens.access_token, [`connectedPlatforms.${platform}.expiresAt`]: expiresAt }, (tokens.refresh_token && {
+            [`connectedPlatforms.${platform}.refreshToken`]: tokens.refresh_token,
+        })));
+        res.json({ success: true });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('OAuth refresh error:', error);
+        res.status(500).json({ error: 'Failed to refresh token' });
+    }
+});
+/**
+ * Get stream key from platform
+ */
+exports.oauthStreamKey = functions
+    .runWith(oauthRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a, _b;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { platform, channelId } = req.body;
+        if (!platform) {
+            res.status(400).json({ error: 'Missing platform' });
+            return;
+        }
+        const userDoc = await db.collection('users').doc(authUser.uid).get();
+        const platformData = (_b = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.connectedPlatforms) === null || _b === void 0 ? void 0 : _b[platform];
+        if (!(platformData === null || platformData === void 0 ? void 0 : platformData.accessToken)) {
+            res.status(400).json({ error: 'Platform not connected' });
+            return;
+        }
+        const creds = getOAuthCredentials(platform);
+        const streamInfo = await getPlatformStreamKey(platform, platformData.accessToken, creds.clientId, channelId || platformData.channelId);
+        res.json(streamInfo);
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Stream key error:', error);
+        res.status(500).json({ error: 'Failed to get stream key' });
+    }
+});
+/**
+ * Get channels/pages for a connected platform
+ */
+exports.oauthChannels = functions
+    .runWith(oauthRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a, _b;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { platform } = req.body;
+        if (!platform) {
+            res.status(400).json({ error: 'Missing platform' });
+            return;
+        }
+        const userDoc = await db.collection('users').doc(authUser.uid).get();
+        const platformData = (_b = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.connectedPlatforms) === null || _b === void 0 ? void 0 : _b[platform];
+        if (!(platformData === null || platformData === void 0 ? void 0 : platformData.accessToken)) {
+            res.status(400).json({ error: 'Platform not connected' });
+            return;
+        }
+        const creds = getOAuthCredentials(platform);
+        const channels = await getPlatformChannels(platform, platformData.accessToken, creds.clientId);
+        res.json({ channels });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Channels error:', error);
+        res.status(500).json({ error: 'Failed to get channels' });
+    }
+});
+// --- OAUTH HELPER FUNCTIONS ---
+async function getPlatformAccountInfo(platform, accessToken, clientId) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    switch (platform) {
+        case 'youtube': {
+            const response = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${accessToken}` } });
+            const data = await response.json();
+            const channel = (_a = data.items) === null || _a === void 0 ? void 0 : _a[0];
+            return {
+                channelId: (channel === null || channel === void 0 ? void 0 : channel.id) || '',
+                channelName: ((_b = channel === null || channel === void 0 ? void 0 : channel.snippet) === null || _b === void 0 ? void 0 : _b.title) || 'YouTube Channel',
+                profileImage: (_e = (_d = (_c = channel === null || channel === void 0 ? void 0 : channel.snippet) === null || _c === void 0 ? void 0 : _c.thumbnails) === null || _d === void 0 ? void 0 : _d.default) === null || _e === void 0 ? void 0 : _e.url,
+            };
+        }
+        case 'facebook': {
+            const response = await fetch(`https://graph.facebook.com/me?fields=id,name,picture&access_token=${accessToken}`);
+            const data = await response.json();
+            return {
+                channelId: data.id || '',
+                channelName: data.name || 'Facebook User',
+                profileImage: (_g = (_f = data.picture) === null || _f === void 0 ? void 0 : _f.data) === null || _g === void 0 ? void 0 : _g.url,
+            };
+        }
+        case 'twitch': {
+            const response = await fetch('https://api.twitch.tv/helix/users', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Client-Id': clientId,
+                },
+            });
+            const data = await response.json();
+            const user = (_h = data.data) === null || _h === void 0 ? void 0 : _h[0];
+            return {
+                channelId: (user === null || user === void 0 ? void 0 : user.id) || '',
+                channelName: (user === null || user === void 0 ? void 0 : user.display_name) || (user === null || user === void 0 ? void 0 : user.login) || 'Twitch User',
+                profileImage: user === null || user === void 0 ? void 0 : user.profile_image_url,
+            };
+        }
+    }
+}
+async function getPlatformStreamKey(platform, accessToken, clientId, channelId) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    switch (platform) {
+        case 'youtube': {
+            // Create a live broadcast and get stream key
+            const broadcastResponse = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    snippet: {
+                        title: 'ChatScream Live Stream',
+                        scheduledStartTime: new Date().toISOString(),
+                    },
+                    status: { privacyStatus: 'public' },
+                    contentDetails: { enableAutoStart: true, enableAutoStop: true },
+                }),
+            });
+            if (!broadcastResponse.ok) {
+                return { error: 'Failed to create YouTube broadcast' };
+            }
+            const broadcast = await broadcastResponse.json();
+            // Get the stream key for this broadcast
+            const streamResponse = await fetch(`https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn&id=${(_a = broadcast.contentDetails) === null || _a === void 0 ? void 0 : _a.boundStreamId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            const stream = await streamResponse.json();
+            const streamData = (_d = (_c = (_b = stream.items) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.cdn) === null || _d === void 0 ? void 0 : _d.ingestionInfo;
+            return {
+                streamKey: streamData === null || streamData === void 0 ? void 0 : streamData.streamName,
+                ingestUrl: streamData === null || streamData === void 0 ? void 0 : streamData.ingestionAddress,
+            };
+        }
+        case 'twitch': {
+            const response = await fetch(`https://api.twitch.tv/helix/streams/key?broadcaster_id=${channelId}`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Client-Id': clientId,
+                },
+            });
+            if (!response.ok) {
+                return { error: 'Failed to get Twitch stream key' };
+            }
+            const data = await response.json();
+            return {
+                streamKey: (_f = (_e = data.data) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.stream_key,
+                ingestUrl: 'rtmp://live.twitch.tv/app',
+            };
+        }
+        case 'facebook': {
+            // Create a live video to get the stream URL
+            const response = await fetch(`https://graph.facebook.com/v18.0/${channelId}/live_videos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    access_token: accessToken,
+                    title: 'ChatScream Live Stream',
+                    status: 'SCHEDULED_UNPUBLISHED',
+                }),
+            });
+            if (!response.ok) {
+                return { error: 'Failed to create Facebook live video' };
+            }
+            const data = await response.json();
+            return {
+                streamKey: (_g = data.stream_url) === null || _g === void 0 ? void 0 : _g.split('/').pop(),
+                ingestUrl: data.secure_stream_url || data.stream_url,
+            };
+        }
+    }
+}
+async function getPlatformChannels(platform, accessToken, clientId) {
+    switch (platform) {
+        case 'youtube': {
+            // Get all channels the user has access to (including brand accounts)
+            const response = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&maxResults=50', { headers: { Authorization: `Bearer ${accessToken}` } });
+            const data = await response.json();
+            return (data.items || []).map((ch) => {
+                var _a, _b, _c, _d;
+                return ({
+                    id: ch.id,
+                    name: (_a = ch.snippet) === null || _a === void 0 ? void 0 : _a.title,
+                    thumbnailUrl: (_d = (_c = (_b = ch.snippet) === null || _b === void 0 ? void 0 : _b.thumbnails) === null || _c === void 0 ? void 0 : _c.default) === null || _d === void 0 ? void 0 : _d.url,
+                });
+            });
+        }
+        case 'facebook': {
+            // Get pages the user manages
+            const response = await fetch(`https://graph.facebook.com/me/accounts?fields=id,name,picture&access_token=${accessToken}`);
+            const data = await response.json();
+            return (data.data || []).map((page) => {
+                var _a, _b;
+                return ({
+                    id: page.id,
+                    name: page.name,
+                    thumbnailUrl: (_b = (_a = page.picture) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.url,
+                });
+            });
+        }
+        case 'twitch': {
+            // Twitch users typically only have one channel
+            const response = await fetch('https://api.twitch.tv/helix/users', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Client-Id': clientId,
+                },
+            });
+            const data = await response.json();
+            return (data.data || []).map((user) => ({
+                id: user.id,
+                name: user.display_name || user.login,
+                thumbnailUrl: user.profile_image_url,
+            }));
+        }
+    }
 }
 //# sourceMappingURL=index.js.map

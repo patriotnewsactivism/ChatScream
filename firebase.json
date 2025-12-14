@@ -12,6 +12,9 @@
   "hosting": [
     {
       "target": "production",
+      "predeploy": [
+        "npm run build"
+      ],
       "public": "dist",
       "ignore": [
         "firebase.json",
@@ -26,6 +29,22 @@
         {
           "source": "/api/create-portal-session",
           "function": "createPortalSession"
+        },
+        {
+          "source": "/api/oauth/exchange",
+          "function": "oauthExchange"
+        },
+        {
+          "source": "/api/oauth/refresh",
+          "function": "oauthRefresh"
+        },
+        {
+          "source": "/api/oauth/stream-key",
+          "function": "oauthStreamKey"
+        },
+        {
+          "source": "/api/oauth/channels",
+          "function": "oauthChannels"
         },
         {
           "source": "/api/stripe-webhook",
