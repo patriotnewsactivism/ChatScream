@@ -7,7 +7,8 @@ import {
   Check, CheckCircle2, Star, Users, Video, Sparkles, ArrowRight, Menu, X,
   Youtube, Facebook, Twitch, Radio, Clock, Cloud, CloudCog, BarChart3,
   DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive, Server, Database,
-  Upload, TrendingUp, Gift, AlertTriangle, MapPin
+  Upload, TrendingUp, Gift, AlertTriangle, MapPin, Smartphone, Monitor, Laptop,
+  Camera, Hash, Copy, ExternalLink, Infinity
 } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
@@ -256,6 +257,136 @@ const LandingPage: React.FC = () => {
             <div className="flex items-center gap-2 text-gray-400">
               <Radio size={32} className="text-brand-500" />
               <span className="font-medium">Custom RTMP</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Stream From Any Device Section - NEW */}
+      <section id="any-device" className="py-20 md:py-32 bg-gradient-to-b from-dark-900 to-dark-800/50 relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-600/10 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600/20 border border-brand-500/30 rounded-full text-brand-400 text-sm font-medium mb-6">
+              <Infinity size={16} />
+              <span>Unlimited Local Streaming</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              Stream From <span className="text-brand-400">Any Device</span>
+            </h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              Use your phone, tablet, laptop, or desktop as a camera source. Go live instantly with unlimited local device streaming - no extra software needed!
+            </p>
+          </div>
+
+          {/* Device Grid */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            {[
+              {
+                icon: Smartphone,
+                title: 'Phone Camera',
+                description: 'Turn your smartphone into a professional camera. Perfect for on-the-go streaming.',
+                color: 'from-green-500 to-emerald-500'
+              },
+              {
+                icon: Laptop,
+                title: 'Laptop Webcam',
+                description: 'Use your built-in webcam or external USB cameras without any configuration.',
+                color: 'from-blue-500 to-cyan-500'
+              },
+              {
+                icon: Monitor,
+                title: 'Desktop Setup',
+                description: 'Full studio setup support with multiple camera sources and screen sharing.',
+                color: 'from-purple-500 to-pink-500'
+              },
+              {
+                icon: Camera,
+                title: 'Pro Cameras',
+                description: 'Connect DSLR, mirrorless, and action cameras via capture cards.',
+                color: 'from-orange-500 to-red-500'
+              }
+            ].map((device, index) => (
+              <div
+                key={index}
+                className="relative group p-6 rounded-2xl bg-dark-800/50 border border-gray-800 hover:border-gray-700 transition-all hover:transform hover:-translate-y-1"
+              >
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${device.color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+                  <device.icon size={28} className="text-white" />
+                </div>
+                <h3 className="font-bold text-white mb-2">{device.title}</h3>
+                <p className="text-gray-400 text-sm">{device.description}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Feature Highlights */}
+          <div className="bg-gradient-to-br from-dark-800/80 to-dark-900/80 rounded-2xl border border-gray-800 p-8 md:p-12">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <div>
+                <h3 className="text-2xl font-bold mb-6">Why Local Device Streaming?</h3>
+                <div className="space-y-4">
+                  {[
+                    { title: 'Zero Latency Preview', description: 'See exactly what your viewers see in real-time' },
+                    { title: 'Browser-Based Studio', description: 'No downloads, no plugins - just open and stream' },
+                    { title: 'Multi-Device Support', description: 'Switch cameras or add multiple sources instantly' },
+                    { title: 'Mobile Optimized', description: 'Full-featured streaming studio on your phone' }
+                  ].map((item, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Check size={14} className="text-brand-400" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-white">{item.title}</h4>
+                        <p className="text-gray-400 text-sm">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="aspect-video bg-gradient-to-br from-dark-700 to-dark-800 rounded-xl border border-gray-700 shadow-2xl overflow-hidden">
+                  {/* Simulated mobile streaming UI */}
+                  <div className="absolute inset-0 p-4">
+                    <div className="h-full bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-lg flex items-center justify-center relative">
+                      {/* Simulated camera feed */}
+                      <div className="absolute inset-2 bg-gradient-to-br from-brand-900/30 to-purple-900/30 rounded animate-pulse" />
+
+                      {/* Live indicator */}
+                      <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 bg-red-600 rounded-full z-10">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                        <span className="text-white text-xs font-bold">LIVE</span>
+                      </div>
+
+                      {/* Mobile controls overlay */}
+                      <div className="absolute bottom-4 left-4 right-4 flex items-center justify-center gap-4 z-10">
+                        <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
+                          <Camera size={20} className="text-white" />
+                        </div>
+                        <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/30">
+                          <div className="w-6 h-6 bg-white rounded" />
+                        </div>
+                        <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
+                          <Monitor size={20} className="text-white" />
+                        </div>
+                      </div>
+
+                      {/* Phone frame */}
+                      <Smartphone size={48} className="text-gray-600 absolute" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Floating badges */}
+                <div className="absolute -top-4 -right-4 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 rounded-full text-white text-sm font-bold shadow-lg animate-bounce-subtle">
+                  Unlimited!
+                </div>
+              </div>
             </div>
           </div>
         </div>
