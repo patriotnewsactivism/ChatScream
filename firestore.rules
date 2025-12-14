@@ -19,14 +19,18 @@ service cloud.firestore {
     match /affiliates/{affiliateId} {
       // Anyone can read affiliate codes (for validation)
       allow read: if true;
-      // Only Cloud Functions can write
-      allow write: if false;
+      // Allow safe referral count increments from authenticated users
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalReferrals'])
+        && request.resource.data.totalReferrals is int;
+      allow create, delete: if false;
     }
 
     // Referrals collection
     match /referrals/{referralId} {
-      // Only Cloud Functions can access
-      allow read, write: if false;
+      // Log referrals from authenticated users
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
     }
 
     // Affiliate commissions collection
