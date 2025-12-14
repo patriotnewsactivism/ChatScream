@@ -7,6 +7,7 @@ const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AuthPage = React.lazy(() => import('./pages/AuthPage'));
 const Studio = React.lazy(() => import('./App'));
 const CreatorDashboard = React.lazy(() => import('./pages/CreatorDashboard'));
+const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,6 +50,7 @@ const AppRouter: React.FC = () => {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/signup" element={<AuthPage />} />
         <Route path="/reset-password" element={<AuthPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
 
         {/* Protected Routes */}
         <Route

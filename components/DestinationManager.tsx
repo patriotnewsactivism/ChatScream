@@ -152,7 +152,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       alert('Please sign in again to sync stream info.');
       return;
     }
-    const result = await getStreamKey(platform, userId);
+    const result = await getStreamKey(platform);
     if (result.error) {
       alert(result.error);
       return;

@@ -39,7 +39,7 @@ interface BroadcastMessage {
 
 const App = () => {
   const navigate = useNavigate();
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile, logout, refreshProfile } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
 
@@ -136,6 +136,17 @@ const App = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'oauth:connected') return;
+      refreshProfile().catch((err) => console.warn('Failed to refresh profile after OAuth:', err));
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [refreshProfile]);
 
   useEffect(() => {
     if (!mobileTip) return;

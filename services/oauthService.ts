@@ -2,7 +2,7 @@
 // Handles YouTube, Facebook, and Twitch OAuth flows
 
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { auth, db } from './firebase';
 
 // Platform types
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
@@ -44,6 +44,8 @@ export interface OAuthState {
   timestamp: number;
   nonce: string;
 }
+
+const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
 
 // Get OAuth configuration for each platform
 export const getOAuthConfig = (platform: OAuthPlatform): OAuthConfig => {
@@ -116,8 +118,8 @@ export const createOAuthState = (platform: OAuthPlatform, userId: string): strin
     nonce: generateNonce()
   };
 
-  // Store state in sessionStorage for verification after redirect
-  sessionStorage.setItem('oauth_state', JSON.stringify(state));
+  // Store state in localStorage so the OAuth popup window can verify it
+  localStorage.setItem(OAUTH_STATE_STORAGE_KEY, JSON.stringify(state));
 
   // Encode state as base64 for URL safety
   return btoa(JSON.stringify(state));
@@ -127,7 +129,7 @@ export const createOAuthState = (platform: OAuthPlatform, userId: string): strin
 export const verifyOAuthState = (stateParam: string): OAuthState | null => {
   try {
     const receivedState: OAuthState = JSON.parse(atob(stateParam));
-    const storedState = sessionStorage.getItem('oauth_state');
+    const storedState = localStorage.getItem(OAUTH_STATE_STORAGE_KEY);
 
     if (!storedState) {
       console.error('No stored OAuth state found');
@@ -150,7 +152,7 @@ export const verifyOAuthState = (stateParam: string): OAuthState | null => {
     }
 
     // Clear stored state
-    sessionStorage.removeItem('oauth_state');
+    localStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
 
     return receivedState;
   } catch (error) {
@@ -185,15 +187,20 @@ export const getAuthorizationUrl = (platform: OAuthPlatform, userId: string): st
 // Exchange authorization code for tokens (via Cloud Function)
 export const exchangeCodeForTokens = async (
   platform: OAuthPlatform,
-  code: string,
-  userId: string
+  code: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) {
+      return { success: false, error: 'You must be signed in to connect accounts.' };
+    }
+
     const redirectUri = getOAuthConfig(platform).redirectUri;
     const response = await fetch('/api/oauth/exchange', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
       },
       body: JSON.stringify({
         platform,
@@ -216,14 +223,19 @@ export const exchangeCodeForTokens = async (
 
 // Refresh access token (via Cloud Function)
 export const refreshAccessToken = async (
-  platform: OAuthPlatform,
-  userId: string
+  platform: OAuthPlatform
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) {
+      return { success: false, error: 'You must be signed in to refresh tokens.' };
+    }
+
     const response = await fetch('/api/oauth/refresh', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
       },
       body: JSON.stringify({
         platform
@@ -335,13 +347,17 @@ export const isTokenExpired = (expiresAt: Date): boolean => {
 // Get stream key for a platform (fetches from platform API via Cloud Function)
 export const getStreamKey = async (
   platform: OAuthPlatform,
-  userId: string,
   channelId?: string
 ): Promise<{ streamKey?: string; ingestUrl?: string; error?: string }> => {
   try {
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) {
+      return { error: 'You must be signed in to retrieve stream info.' };
+    }
+
     const response = await fetch('/api/oauth/stream-key', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
       body: JSON.stringify({ platform, channelId })
     });
 
@@ -363,13 +379,17 @@ export const getStreamKey = async (
 
 // Get user's channels/pages for platforms that support multiple destinations
 export const getChannels = async (
-  platform: OAuthPlatform,
-  userId: string
+  platform: OAuthPlatform
 ): Promise<{ channels: AccountChannel[]; error?: string }> => {
   try {
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) {
+      return { channels: [], error: 'You must be signed in to retrieve channels.' };
+    }
+
     const response = await fetch('/api/oauth/channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
       body: JSON.stringify({ platform })
     });
 
@@ -442,8 +462,7 @@ export const handleOAuthCallback = async (
 
   const result = await exchangeCodeForTokens(
     stateData.platform,
-    code,
-    stateData.userId
+    code
   );
 
   if (!result.success) {
