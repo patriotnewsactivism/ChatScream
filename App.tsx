@@ -889,7 +889,7 @@ const App = () => {
       {/* Click outside to close user menu */}
       {showUserMenu && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 top-14 md:top-16 z-40"
           onClick={() => setShowUserMenu(false)}
         />
       )}

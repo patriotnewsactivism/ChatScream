@@ -13,13 +13,14 @@ const planMinutes: Record<string, number> = {
 
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
   const referralCode = userProfile?.affiliate?.code || '';
   const referralLink = typeof window === 'undefined' || !referralCode
     ? ''
     : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
+  const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org' || userProfile?.role === 'admin';
 
   const copyToClipboard = async (text: string) => {
     if (!text) return;
@@ -39,6 +40,35 @@ const CreatorDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          {canAccessAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-dark-800 border border-gray-700 hover:border-brand-500 font-semibold"
+            >
+              <ShieldCheck size={16} /> Admin Portal
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/studio')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-dark-800 border border-gray-700 hover:border-brand-500 font-semibold"
+          >
+            <Play size={16} /> Studio
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await logout();
+              } finally {
+                navigate('/');
+              }
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 font-semibold"
+          >
+            Sign Out
+          </button>
+        </div>
+
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <p className="text-sm text-gray-400">Welcome back</p>
