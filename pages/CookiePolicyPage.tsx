@@ -54,7 +54,7 @@ const CookiePolicyPage: React.FC = () => {
             <h2 className="text-2xl font-semibold text-white">Contact</h2>
             <p className="text-gray-300">
               For questions about cookies or privacy, email us at
-              <a href="mailto:legal@chatscream.com" className="text-brand-400 hover:text-brand-300"> legal@chatscream.com</a>.
+              <a href="mailto:legal@ChatScream.live" className="text-brand-400 hover:text-brand-300"> legal@ChatScream.live</a>.
             </p>
           </section>
         </div>

@@ -41,7 +41,7 @@ const CareersPage: React.FC = () => {
                   <p className="text-sm text-gray-400">{role.location}</p>
                 </div>
                 <a
-                  href="mailto:careers@chatscream.com"
+                  href="mailto:careers@ChatScream.live"
                   className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-full font-semibold text-white text-center"
                 >
                   Apply via Email

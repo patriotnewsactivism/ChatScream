@@ -79,7 +79,7 @@ const PrivacyPolicyPage: React.FC = () => {
             <h2 className="text-2xl font-semibold text-white">Contact</h2>
             <p className="text-gray-300">
               If you have questions about this policy or need to exercise your rights, email us at
-              <a href="mailto:legal@chatscream.com" className="text-brand-400 hover:text-brand-300"> legal@chatscream.com</a>.
+              <a href="mailto:legal@ChatScream.live" className="text-brand-400 hover:text-brand-300"> legal@ChatScream.live</a>.
             </p>
           </section>
         </div>
