@@ -18,6 +18,7 @@ PROJECT_ID="${GCLOUD_PROJECT_ID:-chatscream-prod}"
 PROJECT_NAME="ChatScream"
 BILLING_ACCOUNT="${GCLOUD_BILLING_ACCOUNT:-}"
 REGION="${GCLOUD_REGION:-us-central1}"
+RUN_REGION="${GCLOUD_RUN_REGION:-$REGION}"
 ZONE="${GCLOUD_ZONE:-us-central1-a}"
 
 echo -e "${BLUE}========================================${NC}"
@@ -114,8 +115,11 @@ echo ""
 echo -e "${BLUE}Step 4: Setting Default Region/Zone${NC}"
 gcloud config set compute/region "$REGION"
 gcloud config set compute/zone "$ZONE"
+gcloud config set run/region "$RUN_REGION"
+gcloud config set run/platform managed
 print_status "Default region: $REGION"
 print_status "Default zone: $ZONE"
+print_status "Cloud Run region: $RUN_REGION"
 
 # Create service account for the application
 echo ""

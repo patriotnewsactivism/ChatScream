@@ -310,6 +310,24 @@ gcloud compute instances get-serial-port-output chatscream-media-server \
    - `./infrastructure/setup-secrets.sh wtp-apps`
    - `firebase deploy --only functions --project wtp-apps`
 
+### Cloud Run deployment fails with quota exceeded
+
+Cloud Build can finish successfully while Cloud Run deployment fails with `Project failed to initialize in this region due to quota exceeded.`
+
+To unblock:
+
+1. Pick a region with available Cloud Run capacity (e.g., `us-east1` or `us-west1`).
+2. Export the region variables before running setup or deployments:
+
+   ```bash
+   export GCLOUD_REGION="us-east1"
+   export GCLOUD_RUN_REGION="us-east1" # optional; defaults to GCLOUD_REGION
+   export GCLOUD_ZONE="us-east1-b"      # keep zone in the same region
+   ./infrastructure/setup-gcloud-project.sh
+   ```
+
+3. Re-run your deployment command so Cloud Run uses the updated region.
+
 ## Support
 
 For issues with this infrastructure setup, please open an issue on the repository.
