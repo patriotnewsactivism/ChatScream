@@ -1,0 +1,29 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+/dist
+
+# Environment files
+.env
+.env.*
+
+# Firebase/CI artifacts
+.firebase
+.firebaserc
+
+# Git metadata
+.git
+.gitignore
+
+# Cloud Functions and legacy packages (not needed for frontend image)
+functions/
+payments/
+
+# Editor and OS files
+.DS_Store
+.vscode
+.idea
