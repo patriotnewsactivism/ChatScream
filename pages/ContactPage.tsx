@@ -17,24 +17,24 @@ const ContactPage: React.FC = () => {
           <div className="p-6 rounded-2xl border border-gray-800 bg-dark-800/80">
             <h2 className="text-xl font-semibold text-white mb-2">Support</h2>
             <p className="text-gray-300 mb-2">Live issues, streaming help, and account access.</p>
-            <a href="mailto:support@chatscream.com" className="text-brand-400 hover:text-brand-300 font-semibold">
-              support@chatscream.com
+            <a href="mailto:support@ChatScream.live" className="text-brand-400 hover:text-brand-300 font-semibold">
+              support@ChatScream.live
             </a>
           </div>
 
           <div className="p-6 rounded-2xl border border-gray-800 bg-dark-800/80">
             <h2 className="text-xl font-semibold text-white mb-2">Partnerships</h2>
             <p className="text-gray-300 mb-2">Brand deals, sponsorships, and community events.</p>
-            <a href="mailto:partnerships@chatscream.com" className="text-brand-400 hover:text-brand-300 font-semibold">
-              partnerships@chatscream.com
+            <a href="mailto:partnerships@ChatScream.live" className="text-brand-400 hover:text-brand-300 font-semibold">
+              partnerships@ChatScream.live
             </a>
           </div>
 
           <div className="p-6 rounded-2xl border border-gray-800 bg-dark-800/80">
             <h2 className="text-xl font-semibold text-white mb-2">Press</h2>
             <p className="text-gray-300 mb-2">Media inquiries and interview requests.</p>
-            <a href="mailto:press@chatscream.com" className="text-brand-400 hover:text-brand-300 font-semibold">
-              press@chatscream.com
+            <a href="mailto:press@ChatScream.live" className="text-brand-400 hover:text-brand-300 font-semibold">
+              press@ChatScream.live
             </a>
           </div>
         </div>

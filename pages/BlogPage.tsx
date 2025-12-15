@@ -44,7 +44,7 @@ const BlogPage: React.FC = () => {
               <h2 className="text-xl font-semibold text-white mb-3">{post.title}</h2>
               <p className="text-gray-300 flex-1">{post.summary}</p>
               <a
-                href="mailto:press@chatscream.com"
+                href="mailto:press@ChatScream.live"
                 className="mt-4 text-brand-400 hover:text-brand-300 font-semibold inline-flex items-center gap-2"
               >
                 Request full article
