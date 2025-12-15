@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import BackendStatusCard from '../components/BackendStatusCard';
 import {
   findUsersByEmail,
   getAccessListConfig,
@@ -490,6 +491,8 @@ const AdminPage: React.FC = () => {
                 Referrals are logged on signup to `referrals` with `referrerId` + `referredUserId`.
               </p>
             </div>
+
+            <BackendStatusCard />
           </>
         )}
       </div>

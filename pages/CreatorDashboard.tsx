@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Copy, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
+import BackendStatusCard from '../components/BackendStatusCard';
 
 const planMinutes: Record<string, number> = {
   free: 0,
@@ -158,6 +159,8 @@ const CreatorDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <BackendStatusCard />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 space-y-3">

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Destination, Platform } from '../types';
-import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff, Lock, AlertTriangle, Zap } from 'lucide-react';
+import { Trash2, Plus, Youtube, Facebook, Twitch, Globe, ToggleLeft, ToggleRight, Wifi, Info, Eye, EyeOff, Lock, AlertTriangle, Zap, Settings } from 'lucide-react';
 import { canAddDestination, getPlanById, type PlanTier } from '../services/stripe';
 import { initiateOAuth, getStreamKey, type OAuthPlatform as OAuthServicePlatform } from '../services/oauthService';
 
@@ -21,6 +21,7 @@ interface DestinationManagerProps {
   onUpgradeClick?: () => void;
   userId?: string;
   connectedPlatforms?: ConnectedPlatformsSummary;
+  onOpenAdmin?: () => void;
 }
 
 const DestinationManager: React.FC<DestinationManagerProps> = ({
@@ -33,7 +34,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   userPlan = 'free',
   onUpgradeClick,
   userId,
-  connectedPlatforms
+  connectedPlatforms,
+  onOpenAdmin
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);
@@ -236,14 +238,27 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 <span className={`text-[11px] truncate ${isPlatformConnected(option.oauthPlatform) ? 'text-emerald-300' : 'text-gray-500'}`}>
                   {isPlatformConnected(option.oauthPlatform) ? getConnectedLabel(option.oauthPlatform) : 'Not connected'}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleConnectOAuth(option.oauthPlatform)}
-                  disabled={isStreaming || !destinationLimit.allowed}
-                  className="text-[11px] px-2 py-1 rounded bg-brand-600/30 hover:bg-brand-600/40 border border-brand-500/20 text-brand-100 disabled:opacity-50"
-                >
-                  Connect
-                </button>
+                <div className="flex items-center gap-2">
+                  {onOpenAdmin && (
+                    <button
+                      type="button"
+                      onClick={onOpenAdmin}
+                      disabled={isStreaming}
+                      className="text-[11px] px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-gray-200 disabled:opacity-50"
+                      title="Open Admin Portal (OAuth IDs)"
+                    >
+                      <Settings size={14} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleConnectOAuth(option.oauthPlatform)}
+                    disabled={isStreaming || !destinationLimit.allowed}
+                    className="text-[11px] px-2 py-1 rounded bg-brand-600/30 hover:bg-brand-600/40 border border-brand-500/20 text-brand-100 disabled:opacity-50"
+                  >
+                    Connect
+                  </button>
+                </div>
               </div>
               <button
                 type="button"

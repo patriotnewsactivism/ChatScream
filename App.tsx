@@ -1194,6 +1194,7 @@ const App = () => {
                   twitch: userProfile?.connectedPlatforms?.twitch ? { channelName: userProfile.connectedPlatforms.twitch.channelName } : undefined,
                 }}
                 onUpgradeClick={() => navigate('/dashboard')}
+                onOpenAdmin={canAccessAdmin ? () => navigate('/admin') : undefined}
               />
             </div>
         </aside>
