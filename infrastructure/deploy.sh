@@ -52,17 +52,17 @@ case $DEPLOY_TARGET in
 
         echo ""
         echo -e "${BLUE}[3/5] Deploying Firestore rules and indexes...${NC}"
-        firebase deploy --only firestore
+        firebase deploy --only firestore --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Firestore deployed"
 
         echo ""
         echo -e "${BLUE}[4/5] Deploying Cloud Functions...${NC}"
-        firebase deploy --only functions
+        firebase deploy --only functions --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Functions deployed"
 
         echo ""
         echo -e "${BLUE}[5/5] Deploying Hosting...${NC}"
-        firebase deploy --only hosting
+        firebase deploy --only hosting:production --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Hosting deployed"
         ;;
 
@@ -72,7 +72,7 @@ case $DEPLOY_TARGET in
         npm install
         npm run build
         cd ..
-        firebase deploy --only functions
+        firebase deploy --only functions --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Functions deployed"
         ;;
 
@@ -80,13 +80,13 @@ case $DEPLOY_TARGET in
         echo -e "${BLUE}Building and deploying frontend...${NC}"
         npm install
         npm run build
-        firebase deploy --only hosting
+        firebase deploy --only hosting:production --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Hosting deployed"
         ;;
 
     "rules")
         echo -e "${BLUE}Deploying Firestore rules and indexes...${NC}"
-        firebase deploy --only firestore
+        firebase deploy --only firestore --project "$PROJECT_ID"
         echo -e "${GREEN}[✓]${NC} Firestore rules deployed"
         ;;
 
@@ -104,7 +104,7 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 
 # Get hosting URL
-HOSTING_URL=$(firebase hosting:channel:list --json 2>/dev/null | grep "url" | head -1 | cut -d'"' -f4)
+HOSTING_URL=$(firebase hosting:channel:list --json --project "$PROJECT_ID" 2>/dev/null | grep "url" | head -1 | cut -d'"' -f4)
 if [ -z "$HOSTING_URL" ]; then
     HOSTING_URL="https://${PROJECT_ID}.web.app"
 fi

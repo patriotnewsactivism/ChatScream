@@ -10,6 +10,13 @@ import CreatorDashboard from './pages/CreatorDashboard';
 import OAuthCallback from './pages/OAuthCallback';
 import AdminPage from './pages/AdminPage';
 import NotFoundPage from './pages/NotFoundPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsPage from './pages/TermsPage';
+import CookiePolicyPage from './pages/CookiePolicyPage';
+import AboutPage from './pages/AboutPage';
+import BlogPage from './pages/BlogPage';
+import CareersPage from './pages/CareersPage';
+import ContactPage from './pages/ContactPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,6 +52,13 @@ const AppRouter: React.FC = () => {
         <Route path="/signup" element={<AuthPage />} />
         <Route path="/reset-password" element={<AuthPage />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/cookie-policy" element={<CookiePolicyPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/careers" element={<CareersPage />} />
+        <Route path="/contact" element={<ContactPage />} />
 
         {/* Protected Routes */}
         <Route
