@@ -473,7 +473,21 @@ export const getLeaderboard = functions.https.onRequest(async (req: functions.ht
     const snapshot = await db.collection('scream_leaderboard').doc(weekId)
       .collection('entries').orderBy('screamCount', 'desc').limit(100).get();
 
-    const entries = snapshot.docs.map((doc, index) => ({ rank: index + 1, ...doc.data() }));
+    type LeaderboardEntry = {
+      donorName?: string;
+      streamerId?: string;
+      screamCount: number;
+      totalAmount?: number;
+      message?: string;
+    };
+
+    const entries = snapshot.docs.map(
+      (doc: FirebaseFirestore.QueryDocumentSnapshot<LeaderboardEntry>, index: number) => ({
+        rank: index + 1,
+        ...doc.data(),
+      })
+    );
+
     res.json({ weekId, entries, prizeValue: LEADERBOARD_PRIZE_VALUE });
   } catch (error: any) {
     console.error('Leaderboard error:', error);
