@@ -19,6 +19,13 @@ Browser-based multi-streaming studio (Vite + React + Firebase) with donation-tri
 - `npm run build` (outputs `dist/`)
 - `npm run preview`
 
+## Docker
+
+Build and run a production image using the included Dockerfile:
+
+- `docker build -t chatscream .`
+- `docker run -p 8080:80 chatscream`
+
 ## Deploy
 
 ### Hosting (recommended while Functions secrets are missing)
