@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0284c7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0369a1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#grad)"/>
+  <!-- Megaphone icon -->
+  <g transform="translate(96, 96) scale(0.625)" fill="white">
+    <!-- Main megaphone body -->
+    <path d="M228.1 128.5c-7.6-1.7-14.4-6.1-19.1-12.1L171.8 68c-4.7-6-11.5-10.4-19.1-12.1L96 43.5C75.1 38.6 64 48.5 64 70v372c0 21.5 11.1 31.4 32 26.5l56.7-12.4c7.6-1.7 14.4-6.1 19.1-12.1l37.2-48.4c4.7-6 11.5-10.4 19.1-12.1l56.7-12.4c20.9-4.6 32-14.5 32-36v-200c0-21.5-11.1-31.4-32-36.5l-56.7-12.4z" fill-opacity="0.9"/>
+    <!-- Sound waves -->
+    <path d="M352 192c26.5 0 48 28.7 48 64s-21.5 64-48 64" stroke="white" stroke-width="32" stroke-linecap="round" fill="none"/>
+    <path d="M400 144c44.2 0 80 50.1 80 112s-35.8 112-80 112" stroke="white" stroke-width="32" stroke-linecap="round" fill="none" opacity="0.7"/>
+  </g>
+  <!-- Chat bubble accent -->
+  <circle cx="400" cy="400" r="48" fill="white" opacity="0.3"/>
+</svg>

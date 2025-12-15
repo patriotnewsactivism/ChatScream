@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.oauthChannels = exports.oauthStreamKey = exports.oauthRefresh = exports.oauthExchange = exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = exports.accessOnUserCreate = exports.accessSetList = exports.accessSync = void 0;
+exports.getUserAnalytics = exports.logStreamEnd = exports.logStreamStart = exports.moderateChat = exports.generateStreamMetadata = exports.generateViralContent = exports.oauthChannels = exports.oauthStreamKey = exports.oauthRefresh = exports.oauthExchange = exports.awardWeeklyPrize = exports.getLeaderboard = exports.stripeWebhook = exports.createScreamDonation = exports.createPortalSession = exports.createCheckoutSession = exports.accessOnUserCreate = exports.accessSetList = exports.accessSync = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
@@ -952,4 +952,431 @@ async function getPlatformChannels(platform, accessToken, clientId) {
         }
     }
 }
+// --- AI GENERATION FUNCTIONS (Secure Server-Side) ---
+const AI_RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const AI_RATE_LIMIT_MAX = 10; // Max requests per window
+const aiRateLimitCache = new Map();
+function checkRateLimit(userId) {
+    const now = Date.now();
+    const userLimit = aiRateLimitCache.get(userId);
+    if (!userLimit || userLimit.resetAt < now) {
+        aiRateLimitCache.set(userId, { count: 1, resetAt: now + AI_RATE_LIMIT_WINDOW });
+        return true;
+    }
+    if (userLimit.count >= AI_RATE_LIMIT_MAX) {
+        return false;
+    }
+    userLimit.count++;
+    return true;
+}
+// AI runtime opts - CLAUDE_API_KEY is optional (fallback responses if not configured)
+const aiRuntimeOpts = {
+// secrets: ['CLAUDE_API_KEY'], // Uncomment when secret is configured in GCP Secret Manager
+};
+async function callClaudeAPI(systemPrompt, userMessage, maxTokens = 500) {
+    var _a, _b;
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) {
+        console.warn('CLAUDE_API_KEY not configured');
+        return '';
+    }
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+                model: 'claude-3-haiku-20240307',
+                max_tokens: maxTokens,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userMessage }],
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Claude API error: ${response.status}`);
+        }
+        const data = await response.json();
+        return ((_b = (_a = data.content) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.text) || '';
+    }
+    catch (error) {
+        console.error('Claude API call failed:', error);
+        return '';
+    }
+}
+/**
+ * Generate viral stream content (titles, descriptions, hashtags, tags)
+ * Secured server-side with rate limiting
+ */
+exports.generateViralContent = functions
+    .runWith(aiRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a, _b;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        // Rate limiting
+        if (!checkRateLimit(authUser.uid)) {
+            res.status(429).json({ error: 'Rate limit exceeded. Try again in a minute.' });
+            return;
+        }
+        const topic = sanitizeString(((_a = req.body) === null || _a === void 0 ? void 0 : _a.topic) || '', 200);
+        const platforms = Array.isArray((_b = req.body) === null || _b === void 0 ? void 0 : _b.platforms)
+            ? req.body.platforms.filter((p) => typeof p === 'string').slice(0, 5)
+            : ['youtube', 'twitch', 'facebook'];
+        if (!topic) {
+            res.status(400).json({ error: 'Topic is required' });
+            return;
+        }
+        const systemPrompt = `You are a growth-focused live streaming strategist.
+Generate viral, platform-aware stream copy and tags.
+Return ONLY valid JSON with keys: "titles" (string[]), "descriptions" (string[]), "hashtags" (string[]), "tags" (string[]).
+Constraints:
+- titles: 3 options, max 60 chars each, punchy and curiosity-driven
+- descriptions: 2 options, 120-220 chars each, include 1-2 keywords naturally
+- hashtags: 12 items, no duplicates, include the leading #, avoid banned/violent/NSFW terms
+- tags: 15 items, no hashtags, concise, SEO-friendly
+Target platforms: ${platforms.join(', ')}.`;
+        const userMessage = `Topic: ${topic}\nGenerate the JSON package.`;
+        const response = await callClaudeAPI(systemPrompt, userMessage, 700);
+        let result;
+        if (response) {
+            try {
+                const jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    result = {
+                        titles: Array.isArray(parsed.titles) ? parsed.titles.filter(Boolean).slice(0, 3) : [],
+                        descriptions: Array.isArray(parsed.descriptions) ? parsed.descriptions.filter(Boolean).slice(0, 2) : [],
+                        hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter(Boolean).slice(0, 12) : [],
+                        tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 15) : [],
+                    };
+                }
+                else {
+                    throw new Error('No JSON found');
+                }
+            }
+            catch (_c) {
+                result = generateFallbackPackage(topic);
+            }
+        }
+        else {
+            result = generateFallbackPackage(topic);
+        }
+        // Fill in any missing arrays
+        if (!result.titles.length)
+            result.titles = [`Live: ${topic}`.slice(0, 60)];
+        if (!result.descriptions.length)
+            result.descriptions = [`Going live about ${topic}. Join us!`.slice(0, 220)];
+        if (!result.hashtags.length)
+            result.hashtags = ['#Live', '#Streaming', '#Creator'];
+        if (!result.tags.length)
+            result.tags = [topic, 'live stream', 'streaming'];
+        res.json(result);
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Generate viral content error:', error);
+        res.status(500).json({ error: 'Failed to generate content' });
+    }
+});
+function generateFallbackPackage(topic) {
+    const normalized = topic.trim();
+    const slug = normalized.replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, '');
+    const baseHashtag = slug ? `#${slug}` : '#Live';
+    return {
+        titles: [
+            `Live: ${normalized}`.slice(0, 60),
+            `Let's talk ${normalized}`.slice(0, 60),
+            `${normalized} (Live Q&A)`.slice(0, 60),
+        ],
+        descriptions: [
+            `Going live on ${normalized}. Ask questions, share your takes! ${baseHashtag}`.slice(0, 220),
+            `Streaming ${normalized} right now—tips, demos, and chat. Drop in! ${baseHashtag}`.slice(0, 220),
+        ],
+        hashtags: [
+            baseHashtag, '#Live', '#Streaming', '#Creator', '#Community',
+            '#Tutorial', '#QandA', '#BehindTheScenes', '#ContentCreator',
+            '#Tech', '#Gaming', '#Podcast',
+        ].slice(0, 12),
+        tags: [
+            normalized, 'live stream', 'streaming', 'creator', 'community',
+            'how to', 'tips', 'tutorial', 'q&a', 'behind the scenes',
+            'discussion', 'highlights', 'chat', 'studio', 'multistream',
+        ].slice(0, 15),
+    };
+}
+/**
+ * Generate stream metadata (simpler endpoint)
+ */
+exports.generateStreamMetadata = functions
+    .runWith(aiRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        if (!checkRateLimit(authUser.uid)) {
+            res.status(429).json({ error: 'Rate limit exceeded' });
+            return;
+        }
+        const topic = sanitizeString(((_a = req.body) === null || _a === void 0 ? void 0 : _a.topic) || '', 200);
+        if (!topic) {
+            res.status(400).json({ error: 'Topic is required' });
+            return;
+        }
+        const systemPrompt = `You are a professional streaming assistant. Generate engaging, SEO-optimized stream titles and descriptions.
+Return your response in JSON format with "title" and "description" fields.
+Keep titles under 60 characters. Descriptions should be 100-150 characters, engaging, and include relevant keywords.`;
+        const response = await callClaudeAPI(systemPrompt, `Generate a catchy stream title and description for: ${topic}`, 300);
+        let result = { title: `Live: ${topic}`, description: `Join us for an exciting stream about ${topic}!` };
+        if (response) {
+            try {
+                const jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    result = {
+                        title: parsed.title || result.title,
+                        description: parsed.description || result.description,
+                    };
+                }
+            }
+            catch ( /* Use fallback */_b) { /* Use fallback */ }
+        }
+        res.json(result);
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Generate metadata error:', error);
+        res.status(500).json({ error: 'Failed to generate metadata' });
+    }
+});
+/**
+ * Moderate chat message
+ */
+exports.moderateChat = functions
+    .runWith(aiRuntimeOpts)
+    .https.onRequest(async (req, res) => {
+    var _a;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        if (!checkRateLimit(authUser.uid)) {
+            res.status(429).json({ error: 'Rate limit exceeded' });
+            return;
+        }
+        const message = sanitizeString(((_a = req.body) === null || _a === void 0 ? void 0 : _a.message) || '', 1000);
+        if (!message) {
+            res.status(400).json({ error: 'Message is required' });
+            return;
+        }
+        const systemPrompt = `You are a content moderator. Analyze if the message is appropriate for a family-friendly live stream.
+Return JSON with "isAppropriate" (boolean) and "reason" (string if inappropriate).
+Be lenient but flag obvious violations (hate speech, explicit content, spam).`;
+        const response = await callClaudeAPI(systemPrompt, `Analyze: ${message}`, 100);
+        let result = { isAppropriate: true, reason: null };
+        if (response) {
+            try {
+                const jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    result = {
+                        isAppropriate: parsed.isAppropriate !== false,
+                        reason: parsed.reason || null,
+                    };
+                }
+            }
+            catch ( /* Use fallback */_b) { /* Use fallback */ }
+        }
+        res.json(result);
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        // Default to allowing on error
+        res.json({ isAppropriate: true, reason: null });
+    }
+});
+// --- ANALYTICS FUNCTIONS ---
+/**
+ * Log stream session start
+ */
+exports.logStreamStart = functions.https.onRequest(async (req, res) => {
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { platforms, layout } = req.body;
+        const sessionRef = await db.collection('stream_sessions').add({
+            userId: authUser.uid,
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            platforms: Array.isArray(platforms) ? platforms.slice(0, 10) : [],
+            layout: sanitizeString(layout || 'FULL_CAM', 50),
+            status: 'active',
+        });
+        res.json({ sessionId: sessionRef.id });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Log stream start error:', error);
+        res.status(500).json({ error: 'Failed to log stream' });
+    }
+});
+/**
+ * Log stream session end
+ */
+exports.logStreamEnd = functions.https.onRequest(async (req, res) => {
+    var _a;
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const { sessionId, duration, peakViewers } = req.body;
+        if (!sessionId) {
+            res.status(400).json({ error: 'Session ID required' });
+            return;
+        }
+        const sessionRef = db.collection('stream_sessions').doc(sessionId);
+        const session = await sessionRef.get();
+        if (!session.exists || ((_a = session.data()) === null || _a === void 0 ? void 0 : _a.userId) !== authUser.uid) {
+            res.status(403).json({ error: 'Session not found or unauthorized' });
+            return;
+        }
+        await sessionRef.update({
+            endedAt: admin.firestore.FieldValue.serverTimestamp(),
+            duration: typeof duration === 'number' ? duration : 0,
+            peakViewers: typeof peakViewers === 'number' ? peakViewers : 0,
+            status: 'completed',
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Log stream end error:', error);
+        res.status(500).json({ error: 'Failed to log stream end' });
+    }
+});
+/**
+ * Get user analytics
+ */
+exports.getUserAnalytics = functions.https.onRequest(async (req, res) => {
+    if (!setCorsHeaders(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const authUser = await verifyAuth(req);
+        const days = parseInt(req.query.days) || 30;
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        // Get stream sessions
+        const sessionsSnap = await db.collection('stream_sessions')
+            .where('userId', '==', authUser.uid)
+            .where('startedAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
+            .orderBy('startedAt', 'desc')
+            .limit(100)
+            .get();
+        const sessions = sessionsSnap.docs.map(doc => {
+            var _a, _b, _c, _d, _e, _f;
+            return (Object.assign(Object.assign({ id: doc.id }, doc.data()), { startedAt: (_c = (_b = (_a = doc.data().startedAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString(), endedAt: (_f = (_e = (_d = doc.data().endedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString() }));
+        });
+        // Calculate stats
+        const totalStreams = sessions.length;
+        const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+        const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
+        const peakViewers = Math.max(...sessions.map((s) => s.peakViewers || 0), 0);
+        // Get scream donations received
+        const screamsSnap = await db.collection('screams')
+            .where('streamerId', '==', authUser.uid)
+            .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
+            .get();
+        const totalScreams = screamsSnap.size;
+        const totalRevenue = screamsSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+        res.json({
+            period: `${days} days`,
+            stats: {
+                totalStreams,
+                totalDuration,
+                avgDuration,
+                peakViewers,
+                totalScreams,
+                totalRevenue: Math.round(totalRevenue * 100) / 100,
+            },
+            recentSessions: sessions.slice(0, 10),
+        });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Get analytics error:', error);
+        res.status(500).json({ error: 'Failed to get analytics' });
+    }
+});
 //# sourceMappingURL=index.js.map
