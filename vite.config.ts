@@ -38,8 +38,12 @@ export default defineConfig(({ mode }) => {
         'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(env.VITE_FIREBASE_APP_ID || ''),
         // Stripe
         'import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY': JSON.stringify(env.VITE_STRIPE_PUBLISHABLE_KEY || ''),
+        // Canonical plan naming: free, starter, creator, pro
         'import.meta.env.VITE_STRIPE_STARTER_PRICE_ID': JSON.stringify(env.VITE_STRIPE_STARTER_PRICE_ID || ''),
+        'import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID': JSON.stringify(env.VITE_STRIPE_CREATOR_PRICE_ID || ''),
         'import.meta.env.VITE_STRIPE_PRO_PRICE_ID': JSON.stringify(env.VITE_STRIPE_PRO_PRICE_ID || ''),
+        // Back-compat (older env names)
+        'import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID': JSON.stringify(env.VITE_STRIPE_EXPERT_PRICE_ID || ''),
         'import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID': JSON.stringify(env.VITE_STRIPE_ENTERPRISE_PRICE_ID || ''),
       },
       resolve: {

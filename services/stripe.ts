@@ -50,8 +50,8 @@ export const PRICING_PLANS: PricingPlan[] = [
   },
   {
     id: 'pro',
-    name: 'Pro',
-    description: 'For creators getting started with multi-streaming',
+    name: 'Starter',
+    description: 'Multi-streaming basics + no watermark',
     price: 19,
     interval: 'month',
     features: [
@@ -70,13 +70,13 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 50,
       storage: 25,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
+    stripePriceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID || import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
     hasWatermark: false,
   },
   {
     id: 'expert',
-    name: 'Expert',
-    description: 'For growing streamers with higher capacity needs',
+    name: 'Creator',
+    description: 'More destinations + higher cloud hours',
     price: 29,
     interval: 'month',
     features: [
@@ -96,13 +96,13 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 200,
       storage: 100,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID || 'price_expert',
+    stripePriceId: import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID || import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID || 'price_expert',
     hasWatermark: false,
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
-    description: 'For influencers & power users',
+    name: 'Pro',
+    description: 'Unlimited destinations + maximum cloud hours',
     price: 59,
     interval: 'month',
     features: [
@@ -124,7 +124,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 999,
       storage: 500,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID || 'price_enterprise',
+    stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID || 'price_enterprise',
     popular: true,
     hasWatermark: false,
   },

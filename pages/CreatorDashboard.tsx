@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Copy, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
+import { getPlanById } from '../services/stripe';
 import BackendStatusCard from '../components/BackendStatusCard';
 
 const planMinutes: Record<string, number> = {
@@ -17,6 +18,7 @@ const CreatorDashboard: React.FC = () => {
   const { user, userProfile, logout } = useAuth();
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
+  const planLabel = getPlanById(plan)?.name || 'Free';
   const referralCode = userProfile?.affiliate?.code || '';
   const referralLink = typeof window === 'undefined' || !referralCode
     ? ''
@@ -98,7 +100,7 @@ const CreatorDashboard: React.FC = () => {
               <Gauge size={16} className="text-brand-400" />
             </div>
             <p className="text-3xl font-bold">{(includedMinutes / 60).toFixed(0)} hrs</p>
-            <p className="text-xs text-gray-400">Included with your {plan} plan</p>
+            <p className="text-xs text-gray-400">Included with your {planLabel} plan</p>
             <p className="text-[11px] text-gray-500 mt-2">Free: 0, $19: 3 hours, $29: 10 hours, $59: 50 hours.</p>
           </div>
           <div className="p-4 rounded-xl border border-gray-800 bg-dark-800/70 space-y-2">

@@ -21,7 +21,7 @@ import ChatStreamOverlay from './components/ChatStreamOverlay';
 import { generateViralStreamPackage, type ViralStreamPackage } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
-import { planHasWatermark, type PlanTier } from './services/stripe';
+import { getPlanById, planHasWatermark, type PlanTier } from './services/stripe';
 import {
   Mic, MicOff, Video, VideoOff, Megaphone, MonitorOff, Sparkles,
   Play, Square, AlertCircle, Camera, Sliders, ArrowRight,
@@ -44,6 +44,7 @@ const App = () => {
   const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org' || userProfile?.role === 'admin';
+  const planLabel = getPlanById(userProfile?.subscription?.plan || 'free')?.name || 'Free';
 
   // --- State ---
   const [destinations, setDestinations] = useState<Destination[]>([
@@ -849,7 +850,7 @@ const App = () => {
                           ? 'bg-green-500/20 text-green-400'
                           : 'bg-gray-500/20 text-gray-400'
                       }`}>
-                        {userProfile.subscription.plan.charAt(0).toUpperCase() + userProfile.subscription.plan.slice(1)} Plan
+                        {planLabel} Plan
                       </span>
                     )}
                   </div>
