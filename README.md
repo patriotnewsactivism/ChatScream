@@ -39,9 +39,18 @@ Functions deployment requires these Secret Manager entries to exist (or deployme
 - `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`
 - `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`
+- `CLAUDE_API_KEY` (for server-side AI generation)
 
 Set secrets (example):
+- `firebase functions:secrets:set STRIPE_SECRET_KEY --project wtp-apps`
+- `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --project wtp-apps`
 - `firebase functions:secrets:set YOUTUBE_CLIENT_ID --project wtp-apps`
+- `firebase functions:secrets:set YOUTUBE_CLIENT_SECRET --project wtp-apps`
+- `firebase functions:secrets:set FACEBOOK_APP_ID --project wtp-apps`
+- `firebase functions:secrets:set FACEBOOK_APP_SECRET --project wtp-apps`
+- `firebase functions:secrets:set TWITCH_CLIENT_ID --project wtp-apps`
+- `firebase functions:secrets:set TWITCH_CLIENT_SECRET --project wtp-apps`
+- `firebase functions:secrets:set CLAUDE_API_KEY --project wtp-apps`
 
 Then deploy:
 - `firebase deploy --project wtp-apps`

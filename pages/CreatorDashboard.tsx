@@ -5,10 +5,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
 import { getPlanById } from '../services/stripe';
 import BackendStatusCard from '../components/BackendStatusCard';
+import AuthStatusBanner from '../components/AuthStatusBanner';
 
 const planMinutes: Record<string, number> = {
   free: 0,
-  pro: 180,
+  pro: 600,
   expert: 600,
   enterprise: 3000,
 };
@@ -43,6 +44,7 @@ const CreatorDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
+        <AuthStatusBanner />
         <div className="flex items-center justify-end gap-2 flex-wrap">
           {canAccessAdmin && (
             <button
