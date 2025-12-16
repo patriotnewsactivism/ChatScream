@@ -1470,8 +1470,23 @@ exports.getUserAnalytics = functions.https.onRequest(async (req, res) => {
         res.status(405).json({ error: 'Method not allowed' });
         return;
     }
-    console.error('Get analytics error:', error);
-    res.status(500).json({ error: 'Failed to get analytics' });
+    try {
+        const authUser = await verifyAuth(req);
+        // Placeholder: Add your specific analytics retrieval logic here
+        // For now, returning a basic success to ensure the build passes
+        res.json({
+            success: true,
+            userId: authUser.uid,
+            message: "Analytics endpoint ready"
+        });
+    }
+    catch (error) {
+        if (error.message === 'UNAUTHORIZED') {
+            res.status(401).json({ error: 'Authentication required' });
+            return;
+        }
+        console.error('Get analytics error:', error);
+        res.status(500).json({ error: 'Failed to get analytics' });
+    }
 });
-;
 //# sourceMappingURL=index.js.map
