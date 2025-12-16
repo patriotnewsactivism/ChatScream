@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
+import { functionsEnv } from './config';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -65,14 +66,13 @@ const getAccessListConfig = async (): Promise<{ admins: string[]; betaTesters: s
 
 // Helper: Initialize Stripe lazily to ensure secrets are available
 const getStripe = () => {
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) throw new Error('STRIPE_SECRET_KEY is missing');
+  const secret = functionsEnv.STRIPE_SECRET_KEY;
   return new Stripe(secret, { apiVersion: '2023-10-16' });
 };
 
 // Helper: Get webhook secret lazily
 const getWebhookSecret = () => {
-  return process.env.STRIPE_WEBHOOK_SECRET || '';
+  return functionsEnv.STRIPE_WEBHOOK_SECRET;
 };
 
 // Helper: Set CORS headers
@@ -189,7 +189,16 @@ const runtimeOpts = {
 
 // OAuth runtime options with platform secrets
 const oauthRuntimeOpts = {
-  secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+  secrets: [
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'YOUTUBE_CLIENT_ID',
+    'YOUTUBE_CLIENT_SECRET',
+    'FACEBOOK_APP_ID',
+    'FACEBOOK_APP_SECRET',
+    'TWITCH_CLIENT_ID',
+    'TWITCH_CLIENT_SECRET',
+  ],
 };
 
 // OAuth platform configurations
@@ -279,20 +288,20 @@ const getOAuthCredentials = (platform: OAuthPlatform) => {
   switch (platform) {
     case 'youtube':
       return {
-        clientId: process.env.YOUTUBE_CLIENT_ID || '',
-        clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
+        clientId: functionsEnv.YOUTUBE_CLIENT_ID || '',
+        clientSecret: functionsEnv.YOUTUBE_CLIENT_SECRET || '',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
       };
     case 'facebook':
       return {
-        clientId: process.env.FACEBOOK_APP_ID || '',
-        clientSecret: process.env.FACEBOOK_APP_SECRET || '',
+        clientId: functionsEnv.FACEBOOK_APP_ID || '',
+        clientSecret: functionsEnv.FACEBOOK_APP_SECRET || '',
         tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
       };
     case 'twitch':
       return {
-        clientId: process.env.TWITCH_CLIENT_ID || '',
-        clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+        clientId: functionsEnv.TWITCH_CLIENT_ID || '',
+        clientSecret: functionsEnv.TWITCH_CLIENT_SECRET || '',
         tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
       };
   }
@@ -1038,7 +1047,7 @@ function checkRateLimit(userId: string): boolean {
 
 // AI runtime opts - CLAUDE_API_KEY is optional (fallback responses if not configured)
 const aiRuntimeOpts = {
-  // secrets: ['CLAUDE_API_KEY'], // Uncomment when secret is configured in GCP Secret Manager
+  secrets: ['CLAUDE_API_KEY'],
 };
 
 interface ViralStreamPackage {
@@ -1053,7 +1062,7 @@ async function callClaudeAPI(
   userMessage: string,
   maxTokens: number = 500
 ): Promise<string> {
-  const apiKey = process.env.CLAUDE_API_KEY;
+  const apiKey = functionsEnv.CLAUDE_API_KEY;
   if (!apiKey) {
     console.warn('CLAUDE_API_KEY not configured');
     return '';
@@ -1451,4 +1460,3 @@ export const getUserAnalytics = functions.https.onRequest(async (req: functions.
     res.status(500).json({ error: 'Failed to get analytics' });
   }
 });
-

@@ -1,3 +1,5 @@
+import { clientEnv } from './env';
+
 // Claude AI Service - Replacing Gemini/Amazon
 // Uses Anthropic's Claude API for AI features
 
@@ -20,7 +22,7 @@ interface ChatStreamResponse {
 
 // Claude API configuration
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY || '';
+const CLAUDE_API_KEY = clientEnv.VITE_CLAUDE_API_KEY || '';
 
 // Helper function to call Claude API
 async function callClaude(
