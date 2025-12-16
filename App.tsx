@@ -989,7 +989,7 @@ const App = () => {
 
           <button
             onClick={toggleRecording}
-            className={`w-9 h-9 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
+            className={`min-w-[48px] min-h-[48px] w-12 h-12 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
                 ${
                   appState.isRecording
                     ? 'bg-gray-800 border-red-500 text-red-500'
@@ -1005,7 +1005,7 @@ const App = () => {
             <div className="flex items-center gap-1 bg-gray-800/80 rounded-full p-1 shadow-lg">
               <button
                 onClick={() => setStreamingMode('local')}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`px-4 py-2.5 min-h-[48px] rounded-full text-xs font-medium transition-all ${
                   streamingMode === 'local'
                     ? 'bg-gray-700 text-white shadow-md'
                     : 'text-gray-400 hover:text-white'
@@ -1016,7 +1016,7 @@ const App = () => {
               </button>
               <button
                 onClick={() => setStreamingMode('cloud')}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`px-4 py-2.5 min-h-[48px] rounded-full text-xs font-medium transition-all ${
                   streamingMode === 'cloud'
                     ? 'bg-brand-600 text-white shadow-md shadow-brand-900/50'
                     : 'text-gray-400 hover:text-white'
@@ -1040,7 +1040,7 @@ const App = () => {
 
           <button
             onClick={toggleStream}
-            className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
+            className={`px-4 md:px-6 py-2.5 md:py-3 min-h-[48px] rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
                     ${
                       appState.isStreaming
                         ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50'
@@ -1062,7 +1062,7 @@ const App = () => {
           <div className={`relative ${showUserMenu ? 'z-50' : ''}`}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
+              className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
             >
               {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
             </button>
@@ -1223,7 +1223,7 @@ const App = () => {
 
           {/* MOBILE: Landscape Side Panel Logic (Hidden in Portrait) */}
           {isLandscape && mobilePanel !== 'none' && (
-            <div className="fixed inset-y-16 right-0 w-full sm:w-[50%] md:w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col shadow-2xl">
+            <div className="fixed inset-y-16 right-0 w-full sm:w-[55%] md:w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col shadow-2xl">
               <div className="flex items-center justify-between p-3 border-b border-gray-700">
                 <h3 className="text-xs font-bold uppercase">
                   {mobilePanel === 'media' && 'Media'}
@@ -1255,7 +1255,7 @@ const App = () => {
 
           {/* MOBILE: Portrait Bottom Sheet */}
           {!isLandscape && mobilePanel !== 'none' && (
-            <div className="fixed inset-x-0 bottom-0 top-auto max-h-[78vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 top-auto max-h-[65vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
               <div
                 className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0 cursor-pointer"
                 onClick={() => setMobilePanel('none')}
