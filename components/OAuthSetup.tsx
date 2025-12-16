@@ -3,31 +3,45 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
-  Youtube, Facebook, Twitch, ExternalLink, Check, AlertCircle,
-  Key, Globe, Copy, Eye, EyeOff, Save, RefreshCw
+  Youtube,
+  Facebook,
+  Twitch,
+  ExternalLink,
+  Check,
+  AlertCircle,
+  Key,
+  Globe,
+  Copy,
+  Eye,
+  EyeOff,
+  Save,
+  RefreshCw,
 } from 'lucide-react';
 
+type PlatformKey = keyof typeof PLATFORM_INFO;
+
+type ClientIdConfig = {
+  clientId: string;
+  redirectUri: string;
+  enabled: boolean;
+};
+
+type AppIdConfig = {
+  appId: string;
+  redirectUri: string;
+  enabled: boolean;
+};
+
+type PlatformConfig = ClientIdConfig | AppIdConfig;
+
 interface OAuthConfig {
-  youtube?: {
-    clientId: string;
-    redirectUri: string;
-    enabled: boolean;
-  };
-  facebook?: {
-    appId: string;
-    redirectUri: string;
-    enabled: boolean;
-  };
-  twitch?: {
-    clientId: string;
-    redirectUri: string;
-    enabled: boolean;
-  };
+  youtube?: ClientIdConfig;
+  facebook?: AppIdConfig;
+  twitch?: ClientIdConfig;
 }
 
-const DEFAULT_REDIRECT_URI = typeof window !== 'undefined'
-  ? `${window.location.origin}/oauth/callback`
-  : '';
+const DEFAULT_REDIRECT_URI =
+  typeof window !== 'undefined' ? `${window.location.origin}/oauth/callback` : '';
 
 const PLATFORM_INFO = {
   youtube: {
@@ -37,7 +51,10 @@ const PLATFORM_INFO = {
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/30',
     consoleUrl: 'https://console.cloud.google.com/apis/credentials',
-    scopes: ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'],
+    scopes: [
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/youtube.force-ssl',
+    ],
     instructions: [
       'Go to Google Cloud Console',
       'Create or select a project',
@@ -95,8 +112,20 @@ const OAuthSetup: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const isAdmin = userProfile?.role === 'admin' ||
-    user?.email?.toLowerCase() === 'mreardon@wtpnews.org';
+  const isAdmin =
+    userProfile?.role === 'admin' || user?.email?.toLowerCase() === 'mreardon@wtpnews.org';
+
+  const isFacebookPlatform = (platform: PlatformKey): platform is 'facebook' =>
+    platform === 'facebook';
+  const isAppIdConfig = (platformConfig?: PlatformConfig): platformConfig is AppIdConfig =>
+    Boolean(platformConfig && 'appId' in platformConfig);
+  const isClientIdConfig = (platformConfig?: PlatformConfig): platformConfig is ClientIdConfig =>
+    Boolean(platformConfig && 'clientId' in platformConfig);
+
+  const buildDefaultConfig = (platform: PlatformKey): PlatformConfig =>
+    isFacebookPlatform(platform)
+      ? { appId: '', redirectUri: DEFAULT_REDIRECT_URI, enabled: false }
+      : { clientId: '', redirectUri: DEFAULT_REDIRECT_URI, enabled: false };
 
   useEffect(() => {
     loadConfig();
@@ -104,6 +133,10 @@ const OAuthSetup: React.FC = () => {
 
   const loadConfig = async () => {
     try {
+      if (!db) {
+        setError('Firebase is not configured for OAuth management.');
+        return;
+      }
       const docRef = doc(db, 'config', 'oauth');
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -120,6 +153,11 @@ const OAuthSetup: React.FC = () => {
   const saveConfig = async () => {
     if (!isAdmin) {
       setError('Admin access required');
+      return;
+    }
+
+    if (!db) {
+      setError('Firebase is not configured for OAuth management.');
       return;
     }
 
@@ -140,19 +178,43 @@ const OAuthSetup: React.FC = () => {
     }
   };
 
-  const updatePlatformConfig = (
-    platform: keyof OAuthConfig,
-    field: string,
-    value: string | boolean
-  ) => {
-    setConfig(prev => ({
-      ...prev,
-      [platform]: {
-        ...prev[platform],
-        [field]: value,
-        redirectUri: DEFAULT_REDIRECT_URI,
-      },
-    }));
+  const updatePlatformEnabled = (platform: PlatformKey, enabled: boolean) => {
+    setConfig((prev) => {
+      const previous = prev[platform] ?? buildDefaultConfig(platform);
+      const nextConfig = isFacebookPlatform(platform)
+        ? { ...(previous as AppIdConfig), enabled, redirectUri: DEFAULT_REDIRECT_URI }
+        : { ...(previous as ClientIdConfig), enabled, redirectUri: DEFAULT_REDIRECT_URI };
+
+      return {
+        ...prev,
+        [platform]: nextConfig,
+      };
+    });
+  };
+
+  const updatePlatformId = (platform: PlatformKey, idValue: string) => {
+    setConfig((prev) => {
+      const previous = prev[platform] ?? buildDefaultConfig(platform);
+      const nextConfig = isFacebookPlatform(platform)
+        ? { ...(previous as AppIdConfig), appId: idValue, redirectUri: DEFAULT_REDIRECT_URI }
+        : { ...(previous as ClientIdConfig), clientId: idValue, redirectUri: DEFAULT_REDIRECT_URI };
+
+      return {
+        ...prev,
+        [platform]: nextConfig,
+      };
+    });
+  };
+
+  const getPlatformId = (platform: PlatformKey): string => {
+    const platformConfig = config[platform];
+    if (isFacebookPlatform(platform) && isAppIdConfig(platformConfig)) {
+      return platformConfig.appId;
+    }
+    if (isClientIdConfig(platformConfig)) {
+      return platformConfig.clientId;
+    }
+    return '';
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -165,14 +227,13 @@ const OAuthSetup: React.FC = () => {
     }
   };
 
-  const getAuthUrl = (platform: keyof typeof PLATFORM_INFO) => {
+  const getAuthUrl = (platform: PlatformKey) => {
     const platformConfig = config[platform];
-    if (!platformConfig?.clientId) return null;
-
+    const clientId = getPlatformId(platform);
+    if (!platformConfig || !clientId) return null;
     const info = PLATFORM_INFO[platform];
     const scopes = info.scopes.join(' ');
     const redirectUri = encodeURIComponent(platformConfig.redirectUri || DEFAULT_REDIRECT_URI);
-    const clientId = platformConfig.clientId;
 
     switch (platform) {
       case 'youtube':
@@ -251,7 +312,11 @@ const OAuthSetup: React.FC = () => {
             onClick={() => copyToClipboard(DEFAULT_REDIRECT_URI, 'redirect')}
             className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition-colors"
           >
-            {copied === 'redirect' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            {copied === 'redirect' ? (
+              <Check className="w-4 h-4 text-green-400" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
             Copy
           </button>
         </div>
@@ -297,7 +362,7 @@ const OAuthSetup: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={platformConfig?.enabled || false}
-                      onChange={(e) => updatePlatformConfig(platform, 'enabled', e.target.checked)}
+                      onChange={(e) => updatePlatformEnabled(platform, e.target.checked)}
                       disabled={!isAdmin}
                       className="sr-only peer"
                     />
@@ -315,22 +380,24 @@ const OAuthSetup: React.FC = () => {
                 <div className="relative">
                   <input
                     type={showSecrets[platform] ? 'text' : 'password'}
-                    value={platformConfig?.clientId || platformConfig?.appId || ''}
-                    onChange={(e) => updatePlatformConfig(
-                      platform,
-                      platform === 'facebook' ? 'appId' : 'clientId',
-                      e.target.value
-                    )}
+                    value={getPlatformId(platform)}
+                    onChange={(e) => updatePlatformId(platform, e.target.value)}
                     disabled={!isAdmin}
                     placeholder={`Enter ${info.name} ${platform === 'facebook' ? 'App' : 'Client'} ID`}
                     className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-2.5 pr-20 text-white placeholder-gray-500 focus:border-brand-500 outline-none disabled:opacity-50"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, [platform]: !prev[platform] }))}
+                    onClick={() =>
+                      setShowSecrets((prev) => ({ ...prev, [platform]: !prev[platform] }))
+                    }
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white"
                   >
-                    {showSecrets[platform] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showSecrets[platform] ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -386,11 +453,11 @@ const OAuthSetup: React.FC = () => {
           <div>
             <h4 className="font-semibold text-amber-300">Server-Side Configuration Required</h4>
             <p className="text-sm text-amber-200/80 mt-1">
-              Client Secrets must be configured in Firebase Functions environment variables for security.
-              Run these commands in your terminal:
+              Client Secrets must be configured in Firebase Functions environment variables for
+              security. Run these commands in your terminal:
             </p>
             <pre className="mt-3 p-3 bg-dark-900 rounded-lg text-xs text-gray-300 overflow-x-auto">
-{`firebase functions:secrets:set YOUTUBE_CLIENT_ID
+              {`firebase functions:secrets:set YOUTUBE_CLIENT_ID
 firebase functions:secrets:set YOUTUBE_CLIENT_SECRET
 firebase functions:secrets:set FACEBOOK_APP_ID
 firebase functions:secrets:set FACEBOOK_APP_SECRET

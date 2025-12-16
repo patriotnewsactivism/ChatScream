@@ -4,7 +4,17 @@ import Stripe from 'stripe';
 import { functionsEnv } from './config';
 
 admin.initializeApp();
-const db = admin.firestore();
+
+let db = admin.firestore();
+let stripeClient: Stripe | null = null;
+
+export const __setDb = (override: FirebaseFirestore.Firestore | null) => {
+  db = override ?? admin.firestore();
+};
+
+export const __setStripeClient = (client: Stripe | null) => {
+  stripeClient = client;
+};
 
 // --- CONFIGURATION & HELPERS ---
 
@@ -101,7 +111,9 @@ async function verifyAuth(req: functions.https.Request): Promise<{ uid: string; 
   return { uid: decodedToken.uid, email: decodedToken.email };
 }
 
-async function verifyDecodedToken(req: functions.https.Request): Promise<admin.auth.DecodedIdToken> {
+async function verifyDecodedToken(
+  req: functions.https.Request,
+): Promise<admin.auth.DecodedIdToken> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new Error('UNAUTHORIZED');
@@ -110,7 +122,10 @@ async function verifyDecodedToken(req: functions.https.Request): Promise<admin.a
   return await admin.auth().verifyIdToken(idToken);
 }
 
-async function applyAccessForUser(uid: string, email?: string | null): Promise<'admin' | 'beta_tester' | 'none'> {
+async function applyAccessForUser(
+  uid: string,
+  email?: string | null,
+): Promise<'admin' | 'beta_tester' | 'none'> {
   if (!email) return 'none';
 
   const normalized = normalizeEmail(email);
@@ -123,7 +138,11 @@ async function applyAccessForUser(uid: string, email?: string | null): Promise<'
 
   const userRecord = await admin.auth().getUser(uid);
   const claims = userRecord.customClaims || {};
-  const nextRole: 'admin' | 'beta_tester' = isAdmin ? 'admin' : (claims.role === 'admin' ? 'admin' : 'beta_tester');
+  const nextRole: 'admin' | 'beta_tester' = isAdmin
+    ? 'admin'
+    : claims.role === 'admin'
+      ? 'admin'
+      : 'beta_tester';
 
   await admin.auth().setCustomUserClaims(uid, {
     ...claims,
@@ -155,7 +174,7 @@ async function applyAccessForUser(uid: string, email?: string | null): Promise<'
       }),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
-    { merge: true }
+    { merge: true },
   );
 
   return nextRole;
@@ -171,6 +190,13 @@ function sanitizeString(input: string, maxLength: number): string {
     .slice(0, maxLength);
 }
 
+function normalizeIdempotencyKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 255) return null;
+  return trimmed;
+}
+
 // Chat Screamer thresholds
 const SCREAM_TIERS = {
   standard: { min: 5, max: 9.99 },
@@ -179,6 +205,44 @@ const SCREAM_TIERS = {
 };
 
 const LEADERBOARD_PRIZE_VALUE = 59;
+
+// --- STRIPE SAFETY HELPERS ---
+
+async function shouldProcessStripeEvent(eventId: string, eventType: string, paymentIntentId?: string | null) {
+  const eventRef = db.collection('stripe_events').doc(eventId);
+
+  const alreadyProcessed = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(eventRef);
+
+    if (snapshot.exists && (snapshot.data() as any)?.processed) {
+      return true;
+    }
+
+    if (!snapshot.exists) {
+      transaction.set(eventRef, {
+        type: eventType,
+        paymentIntentId: paymentIntentId || null,
+        processed: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    return false;
+  });
+
+  return !alreadyProcessed;
+}
+
+async function markStripeEventProcessed(eventId: string) {
+  const eventRef = db.collection('stripe_events').doc(eventId);
+  await eventRef.set(
+    {
+      processed: true,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
 
 // --- CLOUD FUNCTIONS ---
 
@@ -203,7 +267,7 @@ const oauthRuntimeOpts = {
 
 // OAuth platform configurations
 const OAUTH_PLATFORMS = ['youtube', 'facebook', 'twitch'] as const;
-type OAuthPlatform = typeof OAUTH_PLATFORMS[number];
+type OAuthPlatform = (typeof OAUTH_PLATFORMS)[number];
 
 const parseOAuthPlatform = (value: unknown): OAuthPlatform | null => {
   if (typeof value !== 'string') return null;
@@ -212,63 +276,88 @@ const parseOAuthPlatform = (value: unknown): OAuthPlatform | null => {
 
 // --- ACCESS CONTROL FUNCTIONS ---
 
-export const accessSync = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  if (!setCorsHeaders(req, res)) return;
-  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-  try {
-    const decoded = await verifyDecodedToken(req);
-    const role = await applyAccessForUser(decoded.uid, decoded.email);
-    res.json({ success: true, role });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') { res.status(401).json({ error: 'Authentication required' }); return; }
-    console.error('accessSync error:', error);
-    res.status(500).json({ error: 'Failed to sync access' });
-  }
-});
-
-export const accessSetList = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  if (!setCorsHeaders(req, res)) return;
-  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-  try {
-    const decoded = await verifyDecodedToken(req);
-    const requesterEmail = normalizeEmail(decoded.email || '');
-    const isMaster = MASTER_EMAILS.map(normalizeEmail).includes(requesterEmail);
-    const isAdminClaim = decoded.role === 'admin' || decoded.admin === true;
-
-    if (!isMaster && !isAdminClaim) {
-      res.status(403).json({ error: 'Forbidden' });
+export const accessSync = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
       return;
     }
 
-    const admins = safeEmailListFromUnknown(req.body?.admins, 200);
-    const betaTesters = safeEmailListFromUnknown(req.body?.betaTesters, 500);
+    try {
+      const decoded = await verifyDecodedToken(req);
+      const role = await applyAccessForUser(decoded.uid, decoded.email);
+      res.json({ success: true, role });
+    } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      console.error('accessSync error:', error);
+      res.status(500).json({ error: 'Failed to sync access' });
+    }
+  },
+);
 
-    if (!admins.length && !betaTesters.length) {
-      res.status(400).json({ error: 'Provide admins and/or betaTesters arrays' });
+export const accessSetList = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
       return;
     }
 
-    await db.collection('config').doc('access').set(
-      {
-        admins: admins.length ? admins : admin.firestore.FieldValue.delete(),
-        betaTesters: betaTesters.length ? betaTesters : admin.firestore.FieldValue.delete(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedBy: requesterEmail || decoded.uid,
-      },
-      { merge: true }
-    );
+    try {
+      const decoded = await verifyDecodedToken(req);
+      const requesterEmail = normalizeEmail(decoded.email || '');
+      const isMaster = MASTER_EMAILS.map(normalizeEmail).includes(requesterEmail);
+      const isAdminClaim = decoded.role === 'admin' || decoded.admin === true;
 
-    res.json({ success: true, adminsCount: admins.length, betaTestersCount: betaTesters.length });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') { res.status(401).json({ error: 'Authentication required' }); return; }
-    console.error('accessSetList error:', error);
-    res.status(500).json({ error: 'Failed to update access list' });
-  }
-});
+      if (!isMaster && !isAdminClaim) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+
+      const admins = safeEmailListFromUnknown(req.body?.admins, 200);
+      const betaTesters = safeEmailListFromUnknown(req.body?.betaTesters, 500);
+
+      if (!admins.length && !betaTesters.length) {
+        res.status(400).json({ error: 'Provide admins and/or betaTesters arrays' });
+        return;
+      }
+
+      await db
+        .collection('config')
+        .doc('access')
+        .set(
+          {
+            admins: admins.length ? admins : admin.firestore.FieldValue.delete(),
+            betaTesters: betaTesters.length ? betaTesters : admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedBy: requesterEmail || decoded.uid,
+          },
+          { merge: true },
+        );
+
+      res.json({ success: true, adminsCount: admins.length, betaTestersCount: betaTesters.length });
+    } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      console.error('accessSetList error:', error);
+      res.status(500).json({ error: 'Failed to update access list' });
+    }
+  },
+);
 
 export const accessOnUserCreate = functions.auth.user().onCreate(async (user) => {
   try {
@@ -314,19 +403,31 @@ export const createCheckoutSession = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
       const userId = authUser.uid;
       const { priceId, successUrl, cancelUrl, referralCode } = req.body;
 
-      if (!priceId) { res.status(400).json({ error: 'Price ID is required' }); return; }
+      if (!priceId) {
+        res.status(400).json({ error: 'Price ID is required' });
+        return;
+      }
 
       const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) { res.status(404).json({ error: 'User profile not found' }); return; }
-      
+      if (!userDoc.exists) {
+        res.status(404).json({ error: 'User profile not found' });
+        return;
+      }
+
       const userData = userDoc.data();
       const userEmail = userData?.email || authUser.email;
       let customerId = userData?.subscription?.stripeCustomerId;
@@ -339,7 +440,10 @@ export const createCheckoutSession = functions
           metadata: { firebaseUserId: userId, referralCode: referralCode || '' },
         });
         customerId = customer.id;
-        await db.collection('users').doc(userId).update({ 'subscription.stripeCustomerId': customerId });
+        await db
+          .collection('users')
+          .doc(userId)
+          .update({ 'subscription.stripeCustomerId': customerId });
       }
 
       // Referral Discounts
@@ -366,7 +470,10 @@ export const createCheckoutSession = functions
 
       res.json({ url: session.url, sessionId: session.id });
     } catch (error: any) {
-      if (error.message === 'UNAUTHORIZED') { res.status(401).json({ error: 'Authentication required' }); return; }
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
       console.error('Checkout error:', error);
       res.status(500).json({ error: 'Failed to create checkout session' });
     }
@@ -379,15 +486,24 @@ export const createPortalSession = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
       const userDoc = await db.collection('users').doc(authUser.uid).get();
       const customerId = userDoc.data()?.subscription?.stripeCustomerId;
 
-      if (!customerId) { res.status(400).json({ error: 'No billing account found.' }); return; }
+      if (!customerId) {
+        res.status(400).json({ error: 'No billing account found.' });
+        return;
+      }
 
       const stripe = getStripe();
       const session = await stripe.billingPortal.sessions.create({
@@ -397,7 +513,10 @@ export const createPortalSession = functions
 
       res.json({ url: session.url });
     } catch (error: any) {
-      if (error.message === 'UNAUTHORIZED') { res.status(401).json({ error: 'Authentication required' }); return; }
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
       console.error('Portal error:', error);
       res.status(500).json({ error: 'Failed to create portal session' });
     }
@@ -410,32 +529,43 @@ export const createScreamDonation = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
-      const { amount, message, donorName, streamerId, donorEmail } = req.body;
+      const { amount, message, donorName, streamerId, donorEmail, idempotencyKey: rawIdempotencyKey } = req.body;
       if (!amount || !streamerId || amount < 5 || amount > 10000) {
         res.status(400).json({ error: 'Invalid amount or streamer ID' });
         return;
       }
 
+      const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
+
       const tier = getScreamTier(amount);
       const stripe = getStripe();
-      
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100),
-        currency: 'usd',
-        metadata: {
-          type: 'chat_screamer',
-          streamerId,
-          donorName: sanitizeString(donorName || 'Anonymous', 50),
-          message: sanitizeString(message || '', 500),
-          screamTier: tier,
+
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: Math.round(amount * 100),
+          currency: 'usd',
+          metadata: {
+            type: 'chat_screamer',
+            streamerId,
+            donorName: sanitizeString(donorName || 'Anonymous', 50),
+            message: sanitizeString(message || '', 500),
+            screamTier: tier,
+          },
+          receipt_email: donorEmail,
+          description: `ChatScream - ${tier} Scream`,
         },
-        receipt_email: donorEmail,
-        description: `ChatScream - ${tier} Scream`,
-      });
+        idempotencyKey ? { idempotencyKey } : undefined
+      );
 
       res.json({ clientSecret: paymentIntent.client_secret, screamTier: tier });
     } catch (error: any) {
@@ -450,12 +580,29 @@ export const createScreamDonation = functions
 export const stripeWebhook = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
     const sig = req.headers['stripe-signature'];
-    if (!sig) { res.status(400).send('Missing signature'); return; }
+    if (!sig || Array.isArray(sig)) { res.status(400).send('Missing signature'); return; }
 
     try {
       const stripe = getStripe();
-      const event = stripe.webhooks.constructEvent(req.rawBody, sig, getWebhookSecret());
+      const webhookSecret = getWebhookSecret();
+      const event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+
+      const paymentIntent = event.data?.object as Stripe.PaymentIntent | undefined;
+
+      const shouldProcess = await shouldProcessStripeEvent(
+        event.id,
+        event.type,
+        paymentIntent?.id || null
+      );
+
+      if (!shouldProcess) {
+        res.json({ received: true, duplicate: true });
+        return;
+      }
 
       if (event.type === 'payment_intent.succeeded') {
         const pi = event.data.object as Stripe.PaymentIntent;
@@ -463,6 +610,7 @@ export const stripeWebhook = functions
       }
       // Add other event handlers (subscription updated, etc.) as needed here
 
+      await markStripeEventProcessed(event.id);
       res.json({ received: true });
     } catch (err: any) {
       console.error('Webhook error:', err.message);
@@ -473,36 +621,47 @@ export const stripeWebhook = functions
 /**
  * Get Leaderboard (Public)
  */
-export const getLeaderboard = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
+export const getLeaderboard = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    if (req.method !== 'GET') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
-  try {
-    const weekId = getCurrentWeekId();
-    const snapshot = await db.collection('scream_leaderboard').doc(weekId)
-      .collection('entries').orderBy('screamCount', 'desc').limit(100).get();
+    try {
+      const weekId = getCurrentWeekId();
+      const snapshot = await db
+        .collection('scream_leaderboard')
+        .doc(weekId)
+        .collection('entries')
+        .orderBy('screamCount', 'desc')
+        .limit(100)
+        .get();
 
-    type LeaderboardEntry = {
-      donorName?: string;
-      streamerId?: string;
-      screamCount: number;
-      totalAmount?: number;
-      message?: string;
-    };
+      type LeaderboardEntry = {
+        donorName?: string;
+        streamerId?: string;
+        screamCount: number;
+        totalAmount?: number;
+        message?: string;
+      };
 
-    const entries = snapshot.docs.map(
-      (doc: FirebaseFirestore.QueryDocumentSnapshot<LeaderboardEntry>, index: number) => ({
-        rank: index + 1,
-        ...doc.data(),
-      })
-    );
+      const entries = snapshot.docs.map((docSnapshot, index) => {
+        const data = docSnapshot.data() as LeaderboardEntry;
+        return {
+          rank: index + 1,
+          ...data,
+        };
+      });
 
-    res.json({ weekId, entries, prizeValue: LEADERBOARD_PRIZE_VALUE });
-  } catch (error: any) {
-    console.error('Leaderboard error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      res.json({ weekId, entries, prizeValue: LEADERBOARD_PRIZE_VALUE });
+    } catch (error: any) {
+      console.error('Leaderboard error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
 
 /**
  * Award Weekly Prize (Scheduled)
@@ -513,7 +672,7 @@ export const awardWeeklyPrize = functions.pubsub
   .onRun(async () => {
     // Logic to award prize (simplified for brevity, implementation matches original logic)
     console.log('Running weekly prize award...');
-    return null; 
+    return null;
   });
 
 // --- LOGIC HELPERS ---
@@ -532,19 +691,38 @@ async function getOrCreateAffiliateCoupon(stripe: Stripe, code: string): Promise
         name: `Referral from ${code.toUpperCase()}`,
       });
       return couponId;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 }
 
 async function processScreamDonation(pi: Stripe.PaymentIntent) {
+  if (!pi.metadata || !pi.metadata.streamerId) {
+    console.warn('Skipping scream processing due to missing metadata');
+    return;
+  }
+
   const { streamerId, donorName, message, screamTier } = pi.metadata;
   const amount = pi.amount / 100;
-  
-  await db.collection('screams').add({
-    streamerId, donorName, message, amount, tier: screamTier,
-    paymentIntentId: pi.id, createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+  const screamRef = db.collection('screams').doc(pi.id);
+  const existing = await screamRef.get();
+  if (existing.exists) {
+    console.log(`Skipping duplicate scream for paymentIntent ${pi.id}`);
+    return;
+  }
+
+  await screamRef.set({
+    streamerId,
+    donorName,
+    message,
+    amount,
+    tier: screamTier,
+    paymentIntentId: pi.id,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  
+
   // Logic to update leaderboard would go here (omitted for brevity but preserved from original)
   console.log(`Processed scream for ${streamerId}`);
 }
@@ -559,7 +737,7 @@ function getScreamTier(amount: number): string {
 function getCurrentWeekId(): string {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 1);
-  const weeks = Math.ceil((((now.getTime() - start.getTime()) / 86400000) + start.getDay() + 1) / 7);
+  const weeks = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
   return `${now.getFullYear()}-W${weeks.toString().padStart(2, '0')}`;
 }
 
@@ -572,8 +750,14 @@ export const oauthExchange = functions
   .runWith(oauthRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -625,25 +809,28 @@ export const oauthExchange = functions
       const accountInfo = await getPlatformAccountInfo(
         platform,
         tokens.access_token,
-        creds.clientId
+        creds.clientId,
       );
 
       // Calculate expiration time
       const expiresAt = admin.firestore.Timestamp.fromDate(
-        new Date(Date.now() + (tokens.expires_in || 3600) * 1000)
+        new Date(Date.now() + (tokens.expires_in || 3600) * 1000),
       );
 
       // Store tokens in user profile (encrypted at rest by Firestore)
-      await db.collection('users').doc(authUser.uid).update({
-        [`connectedPlatforms.${platform}`]: {
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token || null,
-          expiresAt,
-          channelId: accountInfo.channelId,
-          channelName: accountInfo.channelName,
-          profileImage: accountInfo.profileImage,
-        },
-      });
+      await db
+        .collection('users')
+        .doc(authUser.uid)
+        .update({
+          [`connectedPlatforms.${platform}`]: {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token || null,
+            expiresAt,
+            channelId: accountInfo.channelId,
+            channelName: accountInfo.channelName,
+            profileImage: accountInfo.profileImage,
+          },
+        });
 
       res.json({ success: true, accountName: accountInfo.channelName });
     } catch (error: any) {
@@ -663,8 +850,14 @@ export const oauthRefresh = functions
   .runWith(oauthRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -706,16 +899,19 @@ export const oauthRefresh = functions
 
       const tokens = await tokenResponse.json();
       const expiresAt = admin.firestore.Timestamp.fromDate(
-        new Date(Date.now() + (tokens.expires_in || 3600) * 1000)
+        new Date(Date.now() + (tokens.expires_in || 3600) * 1000),
       );
 
-      await db.collection('users').doc(authUser.uid).update({
-        [`connectedPlatforms.${platform}.accessToken`]: tokens.access_token,
-        [`connectedPlatforms.${platform}.expiresAt`]: expiresAt,
-        ...(tokens.refresh_token && {
-          [`connectedPlatforms.${platform}.refreshToken`]: tokens.refresh_token,
-        }),
-      });
+      await db
+        .collection('users')
+        .doc(authUser.uid)
+        .update({
+          [`connectedPlatforms.${platform}.accessToken`]: tokens.access_token,
+          [`connectedPlatforms.${platform}.expiresAt`]: expiresAt,
+          ...(tokens.refresh_token && {
+            [`connectedPlatforms.${platform}.refreshToken`]: tokens.refresh_token,
+          }),
+        });
 
       res.json({ success: true });
     } catch (error: any) {
@@ -735,8 +931,14 @@ export const oauthStreamKey = functions
   .runWith(oauthRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -761,7 +963,7 @@ export const oauthStreamKey = functions
         platform,
         platformData.accessToken,
         creds.clientId,
-        channelId || platformData.channelId
+        channelId || platformData.channelId,
       );
 
       res.json(streamInfo);
@@ -782,8 +984,14 @@ export const oauthChannels = functions
   .runWith(oauthRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -806,7 +1014,7 @@ export const oauthChannels = functions
       const channels = await getPlatformChannels(
         platform,
         platformData.accessToken,
-        creds.clientId
+        creds.clientId,
       );
 
       res.json({ channels });
@@ -825,13 +1033,13 @@ export const oauthChannels = functions
 async function getPlatformAccountInfo(
   platform: OAuthPlatform,
   accessToken: string,
-  clientId: string
+  clientId: string,
 ): Promise<{ channelId: string; channelName: string; profileImage?: string }> {
   switch (platform) {
     case 'youtube': {
       const response = await fetch(
         'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       );
       const data = await response.json();
       const channel = data.items?.[0];
@@ -844,7 +1052,7 @@ async function getPlatformAccountInfo(
 
     case 'facebook': {
       const response = await fetch(
-        `https://graph.facebook.com/me?fields=id,name,picture&access_token=${accessToken}`
+        `https://graph.facebook.com/me?fields=id,name,picture&access_token=${accessToken}`,
       );
       const data = await response.json();
       return {
@@ -876,7 +1084,7 @@ async function getPlatformStreamKey(
   platform: OAuthPlatform,
   accessToken: string,
   clientId: string,
-  channelId: string
+  channelId: string,
 ): Promise<{ streamKey?: string; ingestUrl?: string; error?: string }> {
   switch (platform) {
     case 'youtube': {
@@ -897,7 +1105,7 @@ async function getPlatformStreamKey(
             status: { privacyStatus: 'public' },
             contentDetails: { enableAutoStart: true, enableAutoStop: true },
           }),
-        }
+        },
       );
 
       if (!broadcastResponse.ok) {
@@ -909,7 +1117,7 @@ async function getPlatformStreamKey(
       // Get the stream key for this broadcast
       const streamResponse = await fetch(
         `https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn&id=${broadcast.contentDetails?.boundStreamId}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       );
 
       const stream = await streamResponse.json();
@@ -929,7 +1137,7 @@ async function getPlatformStreamKey(
             Authorization: `Bearer ${accessToken}`,
             'Client-Id': clientId,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -945,18 +1153,15 @@ async function getPlatformStreamKey(
 
     case 'facebook': {
       // Create a live video to get the stream URL
-      const response = await fetch(
-        `https://graph.facebook.com/v18.0/${channelId}/live_videos`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            access_token: accessToken,
-            title: 'ChatScream Live Stream',
-            status: 'SCHEDULED_UNPUBLISHED',
-          }),
-        }
-      );
+      const response = await fetch(`https://graph.facebook.com/v18.0/${channelId}/live_videos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: accessToken,
+          title: 'ChatScream Live Stream',
+          status: 'SCHEDULED_UNPUBLISHED',
+        }),
+      });
 
       if (!response.ok) {
         return { error: 'Failed to create Facebook live video' };
@@ -974,14 +1179,14 @@ async function getPlatformStreamKey(
 async function getPlatformChannels(
   platform: OAuthPlatform,
   accessToken: string,
-  clientId: string
+  clientId: string,
 ): Promise<Array<{ id: string; name: string; thumbnailUrl?: string }>> {
   switch (platform) {
     case 'youtube': {
       // Get all channels the user has access to (including brand accounts)
       const response = await fetch(
         'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&maxResults=50',
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       );
       const data = await response.json();
       return (data.items || []).map((ch: any) => ({
@@ -994,7 +1199,7 @@ async function getPlatformChannels(
     case 'facebook': {
       // Get pages the user manages
       const response = await fetch(
-        `https://graph.facebook.com/me/accounts?fields=id,name,picture&access_token=${accessToken}`
+        `https://graph.facebook.com/me/accounts?fields=id,name,picture&access_token=${accessToken}`,
       );
       const data = await response.json();
       return (data.data || []).map((page: any) => ({
@@ -1060,7 +1265,7 @@ interface ViralStreamPackage {
 async function callClaudeAPI(
   systemPrompt: string,
   userMessage: string,
-  maxTokens: number = 500
+  maxTokens: number = 500,
 ): Promise<string> {
   const apiKey = functionsEnv.CLAUDE_API_KEY;
   if (!apiKey) {
@@ -1104,8 +1309,14 @@ export const generateViralContent = functions
   .runWith(aiRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -1148,8 +1359,12 @@ Target platforms: ${platforms.join(', ')}.`;
             const parsed = JSON.parse(jsonMatch[0]);
             result = {
               titles: Array.isArray(parsed.titles) ? parsed.titles.filter(Boolean).slice(0, 3) : [],
-              descriptions: Array.isArray(parsed.descriptions) ? parsed.descriptions.filter(Boolean).slice(0, 2) : [],
-              hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter(Boolean).slice(0, 12) : [],
+              descriptions: Array.isArray(parsed.descriptions)
+                ? parsed.descriptions.filter(Boolean).slice(0, 2)
+                : [],
+              hashtags: Array.isArray(parsed.hashtags)
+                ? parsed.hashtags.filter(Boolean).slice(0, 12)
+                : [],
               tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 15) : [],
             };
           } else {
@@ -1164,7 +1379,8 @@ Target platforms: ${platforms.join(', ')}.`;
 
       // Fill in any missing arrays
       if (!result.titles.length) result.titles = [`Live: ${topic}`.slice(0, 60)];
-      if (!result.descriptions.length) result.descriptions = [`Going live about ${topic}. Join us!`.slice(0, 220)];
+      if (!result.descriptions.length)
+        result.descriptions = [`Going live about ${topic}. Join us!`.slice(0, 220)];
       if (!result.hashtags.length) result.hashtags = ['#Live', '#Streaming', '#Creator'];
       if (!result.tags.length) result.tags = [topic, 'live stream', 'streaming'];
 
@@ -1192,17 +1408,41 @@ function generateFallbackPackage(topic: string): ViralStreamPackage {
     ],
     descriptions: [
       `Going live on ${normalized}. Ask questions, share your takes! ${baseHashtag}`.slice(0, 220),
-      `Streaming ${normalized} right now—tips, demos, and chat. Drop in! ${baseHashtag}`.slice(0, 220),
+      `Streaming ${normalized} right now—tips, demos, and chat. Drop in! ${baseHashtag}`.slice(
+        0,
+        220,
+      ),
     ],
     hashtags: [
-      baseHashtag, '#Live', '#Streaming', '#Creator', '#Community',
-      '#Tutorial', '#QandA', '#BehindTheScenes', '#ContentCreator',
-      '#Tech', '#Gaming', '#Podcast',
+      baseHashtag,
+      '#Live',
+      '#Streaming',
+      '#Creator',
+      '#Community',
+      '#Tutorial',
+      '#QandA',
+      '#BehindTheScenes',
+      '#ContentCreator',
+      '#Tech',
+      '#Gaming',
+      '#Podcast',
     ].slice(0, 12),
     tags: [
-      normalized, 'live stream', 'streaming', 'creator', 'community',
-      'how to', 'tips', 'tutorial', 'q&a', 'behind the scenes',
-      'discussion', 'highlights', 'chat', 'studio', 'multistream',
+      normalized,
+      'live stream',
+      'streaming',
+      'creator',
+      'community',
+      'how to',
+      'tips',
+      'tutorial',
+      'q&a',
+      'behind the scenes',
+      'discussion',
+      'highlights',
+      'chat',
+      'studio',
+      'multistream',
     ].slice(0, 15),
   };
 }
@@ -1214,8 +1454,14 @@ export const generateStreamMetadata = functions
   .runWith(aiRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -1235,9 +1481,16 @@ export const generateStreamMetadata = functions
 Return your response in JSON format with "title" and "description" fields.
 Keep titles under 60 characters. Descriptions should be 100-150 characters, engaging, and include relevant keywords.`;
 
-      const response = await callClaudeAPI(systemPrompt, `Generate a catchy stream title and description for: ${topic}`, 300);
+      const response = await callClaudeAPI(
+        systemPrompt,
+        `Generate a catchy stream title and description for: ${topic}`,
+        300,
+      );
 
-      let result = { title: `Live: ${topic}`, description: `Join us for an exciting stream about ${topic}!` };
+      let result = {
+        title: `Live: ${topic}`,
+        description: `Join us for an exciting stream about ${topic}!`,
+      };
 
       if (response) {
         try {
@@ -1249,7 +1502,9 @@ Keep titles under 60 characters. Descriptions should be 100-150 characters, enga
               description: parsed.description || result.description,
             };
           }
-        } catch { /* Use fallback */ }
+        } catch {
+          /* Use fallback */
+        }
       }
 
       res.json(result);
@@ -1270,8 +1525,14 @@ export const moderateChat = functions
   .runWith(aiRuntimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
     if (!setCorsHeaders(req, res)) return;
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     try {
       const authUser = await verifyAuth(req);
@@ -1305,7 +1566,9 @@ Be lenient but flag obvious violations (hate speech, explicit content, spam).`;
               reason: parsed.reason || null,
             };
           }
-        } catch { /* Use fallback */ }
+        } catch {
+          /* Use fallback */
+        }
       }
 
       res.json(result);
@@ -1324,136 +1587,105 @@ Be lenient but flag obvious violations (hate speech, explicit content, spam).`;
 /**
  * Log stream session start
  */
-export const logStreamStart = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  if (!setCorsHeaders(req, res)) return;
-  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-  try {
-    const authUser = await verifyAuth(req);
-    const { platforms, layout } = req.body;
-
-    const sessionRef = await db.collection('stream_sessions').add({
-      userId: authUser.uid,
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
-      platforms: Array.isArray(platforms) ? platforms.slice(0, 10) : [],
-      layout: sanitizeString(layout || 'FULL_CAM', 50),
-      status: 'active',
-    });
-
-    res.json({ sessionId: sessionRef.id });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') {
-      res.status(401).json({ error: 'Authentication required' });
+export const logStreamStart = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
       return;
     }
-    console.error('Log stream start error:', error);
-    res.status(500).json({ error: 'Failed to log stream' });
-  }
-});
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const authUser = await verifyAuth(req);
+      const { platforms, layout } = req.body;
+
+      const sessionRef = await db.collection('stream_sessions').add({
+        userId: authUser.uid,
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        platforms: Array.isArray(platforms) ? platforms.slice(0, 10) : [],
+        layout: sanitizeString(layout || 'FULL_CAM', 50),
+        status: 'active',
+      });
+
+      res.json({ sessionId: sessionRef.id });
+    } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      console.error('Log stream start error:', error);
+      res.status(500).json({ error: 'Failed to log stream' });
+    }
+  },
+);
 
 /**
  * Log stream session end
  */
-export const logStreamEnd = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  if (!setCorsHeaders(req, res)) return;
-  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-  try {
-    const authUser = await verifyAuth(req);
-    const { sessionId, duration, peakViewers } = req.body;
-
-    if (!sessionId) {
-      res.status(400).json({ error: 'Session ID required' });
+export const logStreamEnd = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
       return;
     }
 
-    const sessionRef = db.collection('stream_sessions').doc(sessionId);
-    const session = await sessionRef.get();
+    try {
+      const authUser = await verifyAuth(req);
+      const { sessionId, duration, peakViewers } = req.body;
 
-    if (!session.exists || session.data()?.userId !== authUser.uid) {
-      res.status(403).json({ error: 'Session not found or unauthorized' });
-      return;
+      if (!sessionId) {
+        res.status(400).json({ error: 'Session ID required' });
+        return;
+      }
+
+      const sessionRef = db.collection('stream_sessions').doc(sessionId);
+      const session = await sessionRef.get();
+
+      if (!session.exists || session.data()?.userId !== authUser.uid) {
+        res.status(403).json({ error: 'Session not found or unauthorized' });
+        return;
+      }
+
+      await sessionRef.update({
+        endedAt: admin.firestore.FieldValue.serverTimestamp(),
+        duration: typeof duration === 'number' ? duration : 0,
+        peakViewers: typeof peakViewers === 'number' ? peakViewers : 0,
+        status: 'completed',
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      console.error('Log stream end error:', error);
+      res.status(500).json({ error: 'Failed to log stream end' });
     }
-
-    await sessionRef.update({
-      endedAt: admin.firestore.FieldValue.serverTimestamp(),
-      duration: typeof duration === 'number' ? duration : 0,
-      peakViewers: typeof peakViewers === 'number' ? peakViewers : 0,
-      status: 'completed',
-    });
-
-    res.json({ success: true });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    console.error('Log stream end error:', error);
-    res.status(500).json({ error: 'Failed to log stream end' });
-  }
-});
+  },
+);
 
 /**
  * Get user analytics
  */
-export const getUserAnalytics = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-  if (!setCorsHeaders(req, res)) return;
-  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-  if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-  try {
-    const authUser = await verifyAuth(req);
-    const days = parseInt(req.query.days as string) || 30;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    // Get stream sessions
-    const sessionsSnap = await db.collection('stream_sessions')
-      .where('userId', '==', authUser.uid)
-      .where('startedAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
-      .orderBy('startedAt', 'desc')
-      .limit(100)
-      .get();
-
-    const sessions = sessionsSnap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      startedAt: doc.data().startedAt?.toDate?.()?.toISOString(),
-      endedAt: doc.data().endedAt?.toDate?.()?.toISOString(),
-    }));
-
-    // Calculate stats
-    const totalStreams = sessions.length;
-    const totalDuration = sessions.reduce((sum, s: any) => sum + (s.duration || 0), 0);
-    const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
-    const peakViewers = Math.max(...sessions.map((s: any) => s.peakViewers || 0), 0);
-
-    // Get scream donations received
-    const screamsSnap = await db.collection('screams')
-      .where('streamerId', '==', authUser.uid)
-      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
-      .get();
-
-    const totalScreams = screamsSnap.size;
-    const totalRevenue = screamsSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
-
-    res.json({
-      period: `${days} days`,
-      stats: {
-        totalStreams,
-        totalDuration,
-        avgDuration,
-        peakViewers,
-        totalScreams,
-        totalRevenue: Math.round(totalRevenue * 100) / 100,
-      },
-      recentSessions: sessions.slice(0, 10),
-    });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') {
-      res.status(401).json({ error: 'Authentication required' });
+export const getUserAnalytics = functions.https.onRequest(
+  async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'GET') {
+      res.status(405).json({ error: 'Method not allowed' });
       return;
     }
     console.error('Get analytics error:', error);

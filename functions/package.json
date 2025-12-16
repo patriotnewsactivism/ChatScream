@@ -8,7 +8,8 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "mocha -r ts-node/register test/**/*.test.ts"
   },
   "engines": {
     "node": "20"
@@ -21,7 +22,15 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
     "@types/node": "^20.9.0",
+    "@types/sinon": "^10.0.20",
+    "chai": "^4.4.1",
+    "firebase-functions-test": "^3.4.1",
+    "mocha": "^10.7.3",
+    "sinon": "^17.0.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.2.2"
   },
   "private": true

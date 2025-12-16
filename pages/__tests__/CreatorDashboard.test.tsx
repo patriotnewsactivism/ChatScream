@@ -14,9 +14,19 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
+    user: { email: 'tester@example.com' },
     userProfile: {
       subscription: { plan: 'pro' },
     },
+    logout: vi.fn(),
+    loading: false,
+    error: null,
+    configError: null,
+    clearError: vi.fn(),
+    sessionToken: null,
+    refreshProfile: vi.fn(),
+    refreshSession: vi.fn(),
+    isAuthenticated: true,
   }),
 }));
 
