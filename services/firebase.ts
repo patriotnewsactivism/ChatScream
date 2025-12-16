@@ -15,7 +15,8 @@ import {
   signInWithRedirect,
   getRedirectResult,
   sendPasswordResetEmail,
-  User
+  User,
+  onIdTokenChanged
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -28,11 +29,13 @@ import {
   where,
   getDocs,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  FieldValue,
 } from 'firebase/firestore';
 
 const MASTER_EMAILS = ['mreardon@wtpnews.org'];
 const DEFAULT_BETA_TESTERS = ['leroytruth247@gmail.com'];
+type FirestoreTimestamp = Timestamp | FieldValue;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -49,10 +52,10 @@ const requiredEnvVars = [
   'VITE_FIREBASE_PROJECT_ID',
   'VITE_FIREBASE_STORAGE_BUCKET',
   'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID'
+  'VITE_FIREBASE_APP_ID',
 ] as const;
 
-const missingVars = requiredEnvVars.filter(key => !import.meta.env[key]);
+const missingVars = requiredEnvVars.filter((key) => !import.meta.env[key]);
 export const firebaseConfigError =
   missingVars.length > 0
     ? `Missing Firebase config: ${missingVars.join(', ')}. Check your .env file.`
@@ -67,7 +70,7 @@ const firebaseConfig = firebaseConfigError
       projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
       storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID
+      appId: import.meta.env.VITE_FIREBASE_APP_ID,
     };
 
 // Initialize Firebase only when we have a valid configuration
@@ -131,22 +134,22 @@ export interface UserProfile {
   email: string;
   displayName: string;
   photoURL?: string;
-  createdAt: Timestamp;
+  createdAt: FirestoreTimestamp;
   role?: 'admin' | 'beta_tester' | 'user' | string;
   betaTester?: boolean;
   subscription: {
     plan: PlanTier;
     status: 'trialing' | 'active' | 'canceled' | 'past_due';
-    trialEndsAt?: Timestamp;
-    currentPeriodEnd?: Timestamp;
+    trialEndsAt?: FirestoreTimestamp;
+    currentPeriodEnd?: FirestoreTimestamp;
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
     betaOverride?: boolean;
   };
   usage: {
     cloudHoursUsed: number; // Cloud VM streaming hours used this billing period
-    cloudHoursResetAt?: Timestamp; // When cloud hours reset (next billing date)
-    lastStreamDate?: Timestamp; // When user last streamed
+    cloudHoursResetAt?: FirestoreTimestamp; // When cloud hours reset (next billing date)
+    lastStreamDate?: FirestoreTimestamp; // When user last streamed
   };
   affiliate?: {
     code: string;
@@ -165,21 +168,21 @@ export interface UserProfile {
     youtube?: {
       accessToken: string;
       refreshToken: string;
-      expiresAt: Timestamp;
+      expiresAt: FirestoreTimestamp;
       channelId: string;
       channelName: string;
     };
     facebook?: {
       accessToken: string;
       refreshToken: string;
-      expiresAt: Timestamp;
+      expiresAt: FirestoreTimestamp;
       pageId?: string;
       pageName?: string;
     };
     twitch?: {
       accessToken: string;
       refreshToken: string;
-      expiresAt: Timestamp;
+      expiresAt: FirestoreTimestamp;
       channelId: string;
       channelName: string;
     };
@@ -196,7 +199,7 @@ export interface AffiliateCode {
   bonusTrialDays: number; // Extra days added to trial
   totalReferrals: number;
   totalEarnings: number;
-  createdAt: Timestamp;
+  createdAt: FirestoreTimestamp;
   isActive: boolean;
 }
 
@@ -205,7 +208,7 @@ export const signUpWithEmail = async (
   email: string,
   password: string,
   displayName: string,
-  referralCode?: string
+  referralCode?: string,
 ): Promise<User> => {
   const authClient = getAuthInstance();
   const db = getDbInstanceSafe();
@@ -225,9 +228,7 @@ export const signUpWithEmail = async (
     }
   }
 
-  const trialEndsAt = Timestamp.fromDate(
-    new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
-  );
+  const trialEndsAt = Timestamp.fromDate(new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000));
 
   const personalAffiliateCode = await createUniqueAffiliateCode();
 
@@ -245,19 +246,21 @@ export const signUpWithEmail = async (
     usage: {
       cloudHoursUsed: 0,
     },
-    affiliate: referredBy ? {
-      code: personalAffiliateCode,
-      referredBy: referredBy.code,
-      referredByUserId: referredBy.ownerId,
-      referrals: 0,
-      totalEarnings: 0,
-      pendingPayout: 0,
-    } : {
-      code: personalAffiliateCode,
-      referrals: 0,
-      totalEarnings: 0,
-      pendingPayout: 0,
-    },
+    affiliate: referredBy
+      ? {
+          code: personalAffiliateCode,
+          referredBy: referredBy.code,
+          referredByUserId: referredBy.ownerId,
+          referrals: 0,
+          totalEarnings: 0,
+          pendingPayout: 0,
+        }
+      : {
+          code: personalAffiliateCode,
+          referrals: 0,
+          totalEarnings: 0,
+          pendingPayout: 0,
+        },
     settings: {
       emailNotifications: true,
       marketingEmails: true,
@@ -303,9 +306,7 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
     }
   }
 
-  const trialEndsAt = Timestamp.fromDate(
-    new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
-  );
+  const trialEndsAt = Timestamp.fromDate(new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000));
 
   const normalizedEmail = normalizeEmail(user.email || '');
   const personalAffiliateCode = await createUniqueAffiliateCode();
@@ -324,19 +325,21 @@ const ensureUserProfileForOAuthUser = async (user: User, referralCode?: string):
     usage: {
       cloudHoursUsed: 0,
     },
-    affiliate: referredBy ? {
-      code: personalAffiliateCode,
-      referredBy: referredBy.code,
-      referredByUserId: referredBy.ownerId,
-      referrals: 0,
-      totalEarnings: 0,
-      pendingPayout: 0,
-    } : {
-      code: personalAffiliateCode,
-      referrals: 0,
-      totalEarnings: 0,
-      pendingPayout: 0,
-    },
+    affiliate: referredBy
+      ? {
+          code: personalAffiliateCode,
+          referredBy: referredBy.code,
+          referredByUserId: referredBy.ownerId,
+          referrals: 0,
+          totalEarnings: 0,
+          pendingPayout: 0,
+        }
+      : {
+          code: personalAffiliateCode,
+          referrals: 0,
+          totalEarnings: 0,
+          pendingPayout: 0,
+        },
     settings: {
       emailNotifications: true,
       marketingEmails: true,
@@ -366,7 +369,7 @@ const shouldPreferRedirect = (): boolean => {
 
 const signInWithPopupOrRedirect = async (
   provider: FirebaseAuthProvider,
-  referralCode?: string
+  referralCode?: string,
 ): Promise<{ user?: User; didRedirect: boolean }> => {
   const authClient = getAuthInstance();
 
@@ -380,7 +383,10 @@ const signInWithPopupOrRedirect = async (
     const userCredential = await signInWithPopup(authClient, provider);
     return { user: userCredential.user, didRedirect: false };
   } catch (err: any) {
-    if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-supported-in-this-environment') {
+    if (
+      err?.code === 'auth/popup-blocked' ||
+      err?.code === 'auth/operation-not-supported-in-this-environment'
+    ) {
       storePendingReferralCode(referralCode);
       await signInWithRedirect(authClient, provider);
       return { didRedirect: true };
@@ -416,28 +422,36 @@ export const syncAccess = async (): Promise<void> => {
   });
 };
 
-export const signInWithGoogle = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+export const signInWithGoogle = async (
+  referralCode?: string,
+): Promise<{ didRedirect: boolean }> => {
   const { user, didRedirect } = await signInWithPopupOrRedirect(googleProvider, referralCode);
   if (didRedirect) return { didRedirect: true };
   await ensureUserProfileForOAuthUser(user!, referralCode);
   return { didRedirect: false };
 };
 
-export const signInWithFacebook = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+export const signInWithFacebook = async (
+  referralCode?: string,
+): Promise<{ didRedirect: boolean }> => {
   const { user, didRedirect } = await signInWithPopupOrRedirect(facebookProvider, referralCode);
   if (didRedirect) return { didRedirect: true };
   await ensureUserProfileForOAuthUser(user!, referralCode);
   return { didRedirect: false };
 };
 
-export const signInWithGithub = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+export const signInWithGithub = async (
+  referralCode?: string,
+): Promise<{ didRedirect: boolean }> => {
   const { user, didRedirect } = await signInWithPopupOrRedirect(githubProvider, referralCode);
   if (didRedirect) return { didRedirect: true };
   await ensureUserProfileForOAuthUser(user!, referralCode);
   return { didRedirect: false };
 };
 
-export const signInWithTwitter = async (referralCode?: string): Promise<{ didRedirect: boolean }> => {
+export const signInWithTwitter = async (
+  referralCode?: string,
+): Promise<{ didRedirect: boolean }> => {
   const { user, didRedirect } = await signInWithPopupOrRedirect(twitterProvider, referralCode);
   if (didRedirect) return { didRedirect: true };
   await ensureUserProfileForOAuthUser(user!, referralCode);
@@ -492,18 +506,18 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
   if (!normalizedCode) return null;
   // Check for special codes first (like MMM)
   const specialCodes: Record<string, AffiliateCode> = {
-    'MMM': {
+    MMM: {
       code: 'MMM',
       ownerId: 'mythical-meta',
       ownerEmail: 'contact@mythicalmeta.com',
       ownerName: 'Mythical Meta',
-      commissionRate: 0.40, // 40%
+      commissionRate: 0.4, // 40%
       bonusTrialDays: 7, // +7 days = 14 total
       totalReferrals: 0,
       totalEarnings: 0,
       createdAt: Timestamp.now(),
       isActive: true,
-    }
+    },
   };
 
   if (specialCodes[normalizedCode]) {
@@ -539,7 +553,12 @@ const createUniqueAffiliateCode = async (): Promise<string> => {
   throw new Error('Failed to generate a unique affiliate code');
 };
 
-const ensureAffiliateDocForUser = async (input: { code: string; ownerId: string; ownerEmail: string; ownerName: string }): Promise<void> => {
+const ensureAffiliateDocForUser = async (input: {
+  code: string;
+  ownerId: string;
+  ownerEmail: string;
+  ownerName: string;
+}): Promise<void> => {
   const db = getDbInstanceSafe();
   const code = input.code.trim().toUpperCase();
   if (!code) return;
@@ -552,7 +571,7 @@ const ensureAffiliateDocForUser = async (input: { code: string; ownerId: string;
     ownerId: input.ownerId,
     ownerEmail: normalizeEmail(input.ownerEmail),
     ownerName: input.ownerName || 'User',
-    commissionRate: 0.20,
+    commissionRate: 0.2,
     bonusTrialDays: 3,
     totalReferrals: 0,
     totalEarnings: 0,
@@ -561,7 +580,11 @@ const ensureAffiliateDocForUser = async (input: { code: string; ownerId: string;
   } satisfies AffiliateCode as any);
 };
 
-export const updateAffiliateReferral = async (code: string, referrerId: string, referredUserId: string): Promise<void> => {
+export const updateAffiliateReferral = async (
+  code: string,
+  referrerId: string,
+  referredUserId: string,
+): Promise<void> => {
   const db = getDbInstanceSafe();
   const normalizedCode = code.trim().toUpperCase();
   // Skip for special codes - they're tracked differently
@@ -598,7 +621,7 @@ export const updateAffiliateReferral = async (code: string, referrerId: string, 
 export const createAffiliateCode = async (
   userId: string,
   userEmail: string,
-  userName: string
+  userName: string,
 ): Promise<string> => {
   const db = getDbInstanceSafe();
   const code = await createUniqueAffiliateCode();
@@ -608,7 +631,7 @@ export const createAffiliateCode = async (
     ownerId: userId,
     ownerEmail: userEmail,
     ownerName: userName,
-    commissionRate: 0.20, // 20% default for regular affiliates
+    commissionRate: 0.2, // 20% default for regular affiliates
     bonusTrialDays: 3, // +3 days for referrals
     totalReferrals: 0,
     totalEarnings: 0,
@@ -668,7 +691,7 @@ export const setOAuthPublicConfig = async (patch: Partial<OAuthPublicConfig>): P
       updatedAt: serverTimestamp(),
       updatedBy: authClient.currentUser.uid,
     },
-    { merge: true }
+    { merge: true },
   );
 };
 
@@ -683,11 +706,17 @@ export const getAccessListConfig = async (): Promise<AccessListConfig> => {
       };
     }
     const data = snap.data() as any;
-    const admins = Array.isArray(data?.admins) ? data.admins.filter((e: any) => typeof e === 'string').map(normalizeEmail) : [];
-    const betaTesters = Array.isArray(data?.betaTesters) ? data.betaTesters.filter((e: any) => typeof e === 'string').map(normalizeEmail) : [];
+    const admins = Array.isArray(data?.admins)
+      ? data.admins.filter((e: any) => typeof e === 'string').map(normalizeEmail)
+      : [];
+    const betaTesters = Array.isArray(data?.betaTesters)
+      ? data.betaTesters.filter((e: any) => typeof e === 'string').map(normalizeEmail)
+      : [];
     return {
       admins: Array.from(new Set((admins.length ? admins : MASTER_EMAILS).map(normalizeEmail))),
-      betaTesters: Array.from(new Set((betaTesters.length ? betaTesters : DEFAULT_BETA_TESTERS).map(normalizeEmail))),
+      betaTesters: Array.from(
+        new Set((betaTesters.length ? betaTesters : DEFAULT_BETA_TESTERS).map(normalizeEmail)),
+      ),
     };
   } catch (err) {
     return {
@@ -697,12 +726,16 @@ export const getAccessListConfig = async (): Promise<AccessListConfig> => {
   }
 };
 
-export const setAccessListConfig = async (admins: string[], betaTesters: string[]): Promise<void> => {
+export const setAccessListConfig = async (
+  admins: string[],
+  betaTesters: string[],
+): Promise<void> => {
   const authClient = getAuthInstance();
   const db = getDbInstanceSafe();
   if (!authClient.currentUser) throw new Error('Not signed in');
 
-  const unique = (emails: string[]) => Array.from(new Set(emails.map(normalizeEmail).filter(Boolean)));
+  const unique = (emails: string[]) =>
+    Array.from(new Set(emails.map(normalizeEmail).filter(Boolean)));
   await setDoc(
     doc(db, 'config', 'access'),
     {
@@ -711,7 +744,7 @@ export const setAccessListConfig = async (admins: string[], betaTesters: string[
       updatedAt: serverTimestamp(),
       updatedBy: authClient.currentUser.uid,
     },
-    { merge: true }
+    { merge: true },
   );
 };
 
@@ -737,7 +770,12 @@ export const findUsersByEmail = async (email: string): Promise<UserProfile[]> =>
 
 export const setUserAccessOverrides = async (
   uid: string,
-  patch: { role: 'admin' | 'beta_tester'; betaTester: boolean; plan: PlanTier; status: UserProfile['subscription']['status'] }
+  patch: {
+    role: 'admin' | 'beta_tester';
+    betaTester: boolean;
+    plan: PlanTier;
+    status: UserProfile['subscription']['status'];
+  },
 ): Promise<void> => {
   const db = getDbInstanceSafe();
   const userRef = doc(db, 'users', uid);
@@ -782,7 +820,10 @@ export const ensureAffiliateForSignedInUser = async (): Promise<string> => {
   return code;
 };
 
-export const applyLocalAccessOverrides = (profile: UserProfile | null, email?: string | null): UserProfile | null => {
+export const applyLocalAccessOverrides = (
+  profile: UserProfile | null,
+  email?: string | null,
+): UserProfile | null => {
   if (!profile) return profile;
   if (!isMasterEmail(email)) return profile;
 
@@ -808,4 +849,14 @@ export const onAuthChange = (callback: (user: User | null) => void) => {
   }
 
   return onAuthStateChanged(authInstance, callback);
+};
+
+export const onIdTokenChange = (callback: (user: User | null) => void) => {
+  if (!authInstance) {
+    console.error(firebaseConfigError ?? 'Firebase auth is not initialized.');
+    callback(null);
+    return () => {};
+  }
+
+  return onIdTokenChanged(authInstance, callback);
 };
