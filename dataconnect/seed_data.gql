@@ -1,0 +1,74 @@
+mutation CreateDemoData @transaction @auth(level: PUBLIC, insecureReason: "This mutation is only used for seeding data and does not require authentication") {
+  user_insertMany(data: [
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      username: "demouser1",
+      email: "demouser1@example.com",
+      createdAt: "2024-04-26T00:00:00Z",
+      isStreamer: false
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      username: "demouser2",
+      email: "demouser2@example.com",
+      createdAt: "2024-04-26T00:00:00Z",
+      isStreamer: true
+    }
+  ])
+  stream_insertMany(data: [
+    {
+      id: "650e8400-e29b-41d4-a716-446655440000",
+      streamerId: "550e8400-e29b-41d4-a716-446655440001",
+      createdAt: "2024-04-26T00:00:00Z",
+      startTime: "2024-04-26T00:00:00Z",
+      title: "Demo Stream 1",
+      streamUrl: "http://example.com/stream1",
+      isLive: false
+    },
+    {
+      id: "650e8400-e29b-41d4-a716-446655440001",
+      streamerId: "550e8400-e29b-41d4-a716-446655440001",
+      createdAt: "2024-04-27T00:00:00Z",
+      startTime: "2024-04-27T00:00:00Z",
+      title: "Demo Stream 2",
+      streamUrl: "http://example.com/stream2",
+      isLive: true
+    }
+  ])
+ donationGoal_insertMany(data: [
+    {
+      id: "750e8400-e29b-41d4-a716-446655440000",
+      streamerId: "550e8400-e29b-41d4-a716-446655440001",
+      createdAt: "2024-04-26T00:00:00Z",
+      description: "Demo Goal 1",
+      goalAmount: 100.0,
+      currentAmount: 50.0
+    },
+    {
+      id: "750e8400-e29b-41d4-a716-446655440001",
+      streamerId: "550e8400-e29b-41d4-a716-446655440001",
+      createdAt: "2024-04-27T00:00:00Z",
+      description: "Demo Goal 2",
+      goalAmount: 200.0,
+      currentAmount: 150.0
+    }
+  ])
+  donation_insertMany(data: [
+    {
+      id: "850e8400-e29b-41d4-a716-446655440000",
+      donorId: "550e8400-e29b-41d4-a716-446655440000",
+      streamId: "650e8400-e29b-41d4-a716-446655440000",
+      amount: 10.0,
+      createdAt: "2024-04-26T00:00:00Z",
+      currency: "USD"
+    },
+    {
+      id: "850e8400-e29b-41d4-a716-446655440001",
+      donorId: "550e8400-e29b-41d4-a716-446655440000",
+      streamId: "650e8400-e29b-41d4-a716-446655440001",
+      amount: 20.0,
+      createdAt: "2024-04-27T00:00:00Z",
+      currency: "USD"
+    }
+  ])
+}

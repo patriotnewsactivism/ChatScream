@@ -40,6 +40,7 @@ exports.getUserAnalytics = exports.logStreamEnd = exports.logStreamStart = expor
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
+const config_1 = require("./config");
 admin.initializeApp();
 let db = admin.firestore();
 let stripeClient = null;
@@ -105,20 +106,12 @@ const getAccessListConfig = async () => {
 };
 // Helper: Initialize Stripe lazily to ensure secrets are available
 const getStripe = () => {
-    if (stripeClient)
-        return stripeClient;
-    const secret = process.env.STRIPE_SECRET_KEY;
-    if (!secret)
-        throw new Error('STRIPE_SECRET_KEY is missing');
-    stripeClient = new stripe_1.default(secret, { apiVersion: '2023-10-16' });
-    return stripeClient;
+    const secret = config_1.functionsEnv.STRIPE_SECRET_KEY;
+    return new stripe_1.default(secret, { apiVersion: '2023-10-16' });
 };
 // Helper: Get webhook secret lazily
 const getWebhookSecret = () => {
-    const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
-    if (!secret)
-        throw new Error('STRIPE_WEBHOOK_SECRET is missing');
-    return secret;
+    return config_1.functionsEnv.STRIPE_WEBHOOK_SECRET;
 };
 // Helper: Set CORS headers
 function setCorsHeaders(req, res) {
@@ -165,7 +158,11 @@ async function applyAccessForUser(uid, email) {
         return 'none';
     const userRecord = await admin.auth().getUser(uid);
     const claims = userRecord.customClaims || {};
-    const nextRole = isAdmin ? 'admin' : (claims.role === 'admin' ? 'admin' : 'beta_tester');
+    const nextRole = isAdmin
+        ? 'admin'
+        : claims.role === 'admin'
+            ? 'admin'
+            : 'beta_tester';
     await admin.auth().setCustomUserClaims(uid, Object.assign(Object.assign({}, claims), { role: nextRole, betaTester: true }));
     const userRef = db.collection('users').doc(uid);
     const userSnap = await userRef.get();
@@ -240,7 +237,16 @@ const runtimeOpts = {
 };
 // OAuth runtime options with platform secrets
 const oauthRuntimeOpts = {
-    secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    secrets: [
+        'STRIPE_SECRET_KEY',
+        'STRIPE_WEBHOOK_SECRET',
+        'YOUTUBE_CLIENT_ID',
+        'YOUTUBE_CLIENT_SECRET',
+        'FACEBOOK_APP_ID',
+        'FACEBOOK_APP_SECRET',
+        'TWITCH_CLIENT_ID',
+        'TWITCH_CLIENT_SECRET',
+    ],
 };
 // OAuth platform configurations
 const OAUTH_PLATFORMS = ['youtube', 'facebook', 'twitch'];
@@ -302,7 +308,10 @@ exports.accessSetList = functions.https.onRequest(async (req, res) => {
             res.status(400).json({ error: 'Provide admins and/or betaTesters arrays' });
             return;
         }
-        await db.collection('config').doc('access').set({
+        await db
+            .collection('config')
+            .doc('access')
+            .set({
             admins: admins.length ? admins : admin.firestore.FieldValue.delete(),
             betaTesters: betaTesters.length ? betaTesters : admin.firestore.FieldValue.delete(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -331,20 +340,20 @@ const getOAuthCredentials = (platform) => {
     switch (platform) {
         case 'youtube':
             return {
-                clientId: process.env.YOUTUBE_CLIENT_ID || '',
-                clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
+                clientId: config_1.functionsEnv.YOUTUBE_CLIENT_ID || '',
+                clientSecret: config_1.functionsEnv.YOUTUBE_CLIENT_SECRET || '',
                 tokenEndpoint: 'https://oauth2.googleapis.com/token',
             };
         case 'facebook':
             return {
-                clientId: process.env.FACEBOOK_APP_ID || '',
-                clientSecret: process.env.FACEBOOK_APP_SECRET || '',
+                clientId: config_1.functionsEnv.FACEBOOK_APP_ID || '',
+                clientSecret: config_1.functionsEnv.FACEBOOK_APP_SECRET || '',
                 tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
             };
         case 'twitch':
             return {
-                clientId: process.env.TWITCH_CLIENT_ID || '',
-                clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+                clientId: config_1.functionsEnv.TWITCH_CLIENT_ID || '',
+                clientSecret: config_1.functionsEnv.TWITCH_CLIENT_SECRET || '',
                 tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
             };
     }
@@ -389,7 +398,10 @@ exports.createCheckoutSession = functions
                 metadata: { firebaseUserId: userId, referralCode: referralCode || '' },
             });
             customerId = customer.id;
-            await db.collection('users').doc(userId).update({ 'subscription.stripeCustomerId': customerId });
+            await db
+                .collection('users')
+                .doc(userId)
+                .update({ 'subscription.stripeCustomerId': customerId });
         }
         // Referral Discounts
         let discounts = [];
@@ -564,9 +576,17 @@ exports.getLeaderboard = functions.https.onRequest(async (req, res) => {
     }
     try {
         const weekId = getCurrentWeekId();
-        const snapshot = await db.collection('scream_leaderboard').doc(weekId)
-            .collection('entries').orderBy('screamCount', 'desc').limit(100).get();
-        const entries = snapshot.docs.map((doc, index) => (Object.assign({ rank: index + 1 }, doc.data())));
+        const snapshot = await db
+            .collection('scream_leaderboard')
+            .doc(weekId)
+            .collection('entries')
+            .orderBy('screamCount', 'desc')
+            .limit(100)
+            .get();
+        const entries = snapshot.docs.map((docSnapshot, index) => {
+            const data = docSnapshot.data();
+            return Object.assign({ rank: index + 1 }, data);
+        });
         res.json({ weekId, entries, prizeValue: LEADERBOARD_PRIZE_VALUE });
     }
     catch (error) {
@@ -644,7 +664,7 @@ function getScreamTier(amount) {
 function getCurrentWeekId() {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
-    const weeks = Math.ceil((((now.getTime() - start.getTime()) / 86400000) + start.getDay() + 1) / 7);
+    const weeks = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
     return `${now.getFullYear()}-W${weeks.toString().padStart(2, '0')}`;
 }
 // --- OAUTH FUNCTIONS ---
@@ -708,7 +728,10 @@ exports.oauthExchange = functions
         // Calculate expiration time
         const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokens.expires_in || 3600) * 1000));
         // Store tokens in user profile (encrypted at rest by Firestore)
-        await db.collection('users').doc(authUser.uid).update({
+        await db
+            .collection('users')
+            .doc(authUser.uid)
+            .update({
             [`connectedPlatforms.${platform}`]: {
                 accessToken: tokens.access_token,
                 refreshToken: tokens.refresh_token || null,
@@ -778,7 +801,10 @@ exports.oauthRefresh = functions
         }
         const tokens = await tokenResponse.json();
         const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokens.expires_in || 3600) * 1000));
-        await db.collection('users').doc(authUser.uid).update(Object.assign({ [`connectedPlatforms.${platform}.accessToken`]: tokens.access_token, [`connectedPlatforms.${platform}.expiresAt`]: expiresAt }, (tokens.refresh_token && {
+        await db
+            .collection('users')
+            .doc(authUser.uid)
+            .update(Object.assign({ [`connectedPlatforms.${platform}.accessToken`]: tokens.access_token, [`connectedPlatforms.${platform}.expiresAt`]: expiresAt }, (tokens.refresh_token && {
             [`connectedPlatforms.${platform}.refreshToken`]: tokens.refresh_token,
         })));
         res.json({ success: true });
@@ -1054,11 +1080,11 @@ function checkRateLimit(userId) {
 }
 // AI runtime opts - CLAUDE_API_KEY is optional (fallback responses if not configured)
 const aiRuntimeOpts = {
-// secrets: ['CLAUDE_API_KEY'], // Uncomment when secret is configured in GCP Secret Manager
+    secrets: ['CLAUDE_API_KEY'],
 };
 async function callClaudeAPI(systemPrompt, userMessage, maxTokens = 500) {
     var _a, _b;
-    const apiKey = process.env.CLAUDE_API_KEY;
+    const apiKey = config_1.functionsEnv.CLAUDE_API_KEY;
     if (!apiKey) {
         console.warn('CLAUDE_API_KEY not configured');
         return '';
@@ -1141,8 +1167,12 @@ Target platforms: ${platforms.join(', ')}.`;
                     const parsed = JSON.parse(jsonMatch[0]);
                     result = {
                         titles: Array.isArray(parsed.titles) ? parsed.titles.filter(Boolean).slice(0, 3) : [],
-                        descriptions: Array.isArray(parsed.descriptions) ? parsed.descriptions.filter(Boolean).slice(0, 2) : [],
-                        hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter(Boolean).slice(0, 12) : [],
+                        descriptions: Array.isArray(parsed.descriptions)
+                            ? parsed.descriptions.filter(Boolean).slice(0, 2)
+                            : [],
+                        hashtags: Array.isArray(parsed.hashtags)
+                            ? parsed.hashtags.filter(Boolean).slice(0, 12)
+                            : [],
                         tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 15) : [],
                     };
                 }
@@ -1192,14 +1222,35 @@ function generateFallbackPackage(topic) {
             `Streaming ${normalized} right now—tips, demos, and chat. Drop in! ${baseHashtag}`.slice(0, 220),
         ],
         hashtags: [
-            baseHashtag, '#Live', '#Streaming', '#Creator', '#Community',
-            '#Tutorial', '#QandA', '#BehindTheScenes', '#ContentCreator',
-            '#Tech', '#Gaming', '#Podcast',
+            baseHashtag,
+            '#Live',
+            '#Streaming',
+            '#Creator',
+            '#Community',
+            '#Tutorial',
+            '#QandA',
+            '#BehindTheScenes',
+            '#ContentCreator',
+            '#Tech',
+            '#Gaming',
+            '#Podcast',
         ].slice(0, 12),
         tags: [
-            normalized, 'live stream', 'streaming', 'creator', 'community',
-            'how to', 'tips', 'tutorial', 'q&a', 'behind the scenes',
-            'discussion', 'highlights', 'chat', 'studio', 'multistream',
+            normalized,
+            'live stream',
+            'streaming',
+            'creator',
+            'community',
+            'how to',
+            'tips',
+            'tutorial',
+            'q&a',
+            'behind the scenes',
+            'discussion',
+            'highlights',
+            'chat',
+            'studio',
+            'multistream',
         ].slice(0, 15),
     };
 }
@@ -1235,7 +1286,10 @@ exports.generateStreamMetadata = functions
 Return your response in JSON format with "title" and "description" fields.
 Keep titles under 60 characters. Descriptions should be 100-150 characters, engaging, and include relevant keywords.`;
         const response = await callClaudeAPI(systemPrompt, `Generate a catchy stream title and description for: ${topic}`, 300);
-        let result = { title: `Live: ${topic}`, description: `Join us for an exciting stream about ${topic}!` };
+        let result = {
+            title: `Live: ${topic}`,
+            description: `Join us for an exciting stream about ${topic}!`,
+        };
         if (response) {
             try {
                 const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -1247,7 +1301,9 @@ Keep titles under 60 characters. Descriptions should be 100-150 characters, enga
                     };
                 }
             }
-            catch ( /* Use fallback */_b) { /* Use fallback */ }
+            catch (_b) {
+                /* Use fallback */
+            }
         }
         res.json(result);
     }
@@ -1304,7 +1360,9 @@ Be lenient but flag obvious violations (hate speech, explicit content, spam).`;
                     };
                 }
             }
-            catch ( /* Use fallback */_b) { /* Use fallback */ }
+            catch (_b) {
+                /* Use fallback */
+            }
         }
         res.json(result);
     }
@@ -1412,54 +1470,8 @@ exports.getUserAnalytics = functions.https.onRequest(async (req, res) => {
         res.status(405).json({ error: 'Method not allowed' });
         return;
     }
-    try {
-        const authUser = await verifyAuth(req);
-        const days = parseInt(req.query.days) || 30;
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
-        // Get stream sessions
-        const sessionsSnap = await db.collection('stream_sessions')
-            .where('userId', '==', authUser.uid)
-            .where('startedAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
-            .orderBy('startedAt', 'desc')
-            .limit(100)
-            .get();
-        const sessions = sessionsSnap.docs.map(doc => {
-            var _a, _b, _c, _d, _e, _f;
-            return (Object.assign(Object.assign({ id: doc.id }, doc.data()), { startedAt: (_c = (_b = (_a = doc.data().startedAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString(), endedAt: (_f = (_e = (_d = doc.data().endedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString() }));
-        });
-        // Calculate stats
-        const totalStreams = sessions.length;
-        const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
-        const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
-        const peakViewers = Math.max(...sessions.map((s) => s.peakViewers || 0), 0);
-        // Get scream donations received
-        const screamsSnap = await db.collection('screams')
-            .where('streamerId', '==', authUser.uid)
-            .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(startDate))
-            .get();
-        const totalScreams = screamsSnap.size;
-        const totalRevenue = screamsSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
-        res.json({
-            period: `${days} days`,
-            stats: {
-                totalStreams,
-                totalDuration,
-                avgDuration,
-                peakViewers,
-                totalScreams,
-                totalRevenue: Math.round(totalRevenue * 100) / 100,
-            },
-            recentSessions: sessions.slice(0, 10),
-        });
-    }
-    catch (error) {
-        if (error.message === 'UNAUTHORIZED') {
-            res.status(401).json({ error: 'Authentication required' });
-            return;
-        }
-        console.error('Get analytics error:', error);
-        res.status(500).json({ error: 'Failed to get analytics' });
-    }
+    console.error('Get analytics error:', error);
+    res.status(500).json({ error: 'Failed to get analytics' });
 });
+;
 //# sourceMappingURL=index.js.map

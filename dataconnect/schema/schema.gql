@@ -1,0 +1,39 @@
+type User @table {
+  username: String!
+  email: String!
+  createdAt: Timestamp!
+  profilePictureUrl: String
+  bio: String
+  isStreamer: Boolean
+}
+
+type Stream @table {
+  title: String!
+  startTime: Timestamp!
+  streamUrl: String!
+  createdAt: Timestamp!
+  description: String
+  endTime: Timestamp
+  thumbnailUrl: String
+  isLive: Boolean
+  streamer: User
+}
+
+type Donation @table {
+  amount: Float!
+  currency: String!
+  createdAt: Timestamp!
+  message: String
+  donorUsername: String
+  donor: User
+  stream: Stream
+}
+
+type DonationGoal @table {
+  goalAmount: Float!
+  description: String!
+  createdAt: Timestamp!
+  currentAmount: Float
+  achievedAt: Timestamp
+  streamer: User
+}
