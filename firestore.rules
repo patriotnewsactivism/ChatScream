@@ -152,6 +152,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // --- STRIPE EVENTS (DEDUPLICATION) ---
+
+    match /stripe_events/{eventId} {
+      allow read, write: if false;
+    }
+
     // --- SCREAM ALERTS ---
 
     match /scream_alerts/{alertId} {

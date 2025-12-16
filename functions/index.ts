@@ -3,7 +3,17 @@ import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
 
 admin.initializeApp();
-const db = admin.firestore();
+
+let db = admin.firestore();
+let stripeClient: Stripe | null = null;
+
+export const __setDb = (override: FirebaseFirestore.Firestore | null) => {
+  db = override ?? admin.firestore();
+};
+
+export const __setStripeClient = (client: Stripe | null) => {
+  stripeClient = client;
+};
 
 // --- CONFIGURATION & HELPERS ---
 
@@ -65,14 +75,20 @@ const getAccessListConfig = async (): Promise<{ admins: string[]; betaTesters: s
 
 // Helper: Initialize Stripe lazily to ensure secrets are available
 const getStripe = () => {
+  if (stripeClient) return stripeClient;
+
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) throw new Error('STRIPE_SECRET_KEY is missing');
-  return new Stripe(secret, { apiVersion: '2023-10-16' });
+
+  stripeClient = new Stripe(secret, { apiVersion: '2023-10-16' });
+  return stripeClient;
 };
 
 // Helper: Get webhook secret lazily
 const getWebhookSecret = () => {
-  return process.env.STRIPE_WEBHOOK_SECRET || '';
+  const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  if (!secret) throw new Error('STRIPE_WEBHOOK_SECRET is missing');
+  return secret;
 };
 
 // Helper: Set CORS headers
@@ -171,6 +187,13 @@ function sanitizeString(input: string, maxLength: number): string {
     .slice(0, maxLength);
 }
 
+function normalizeIdempotencyKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 255) return null;
+  return trimmed;
+}
+
 // Chat Screamer thresholds
 const SCREAM_TIERS = {
   standard: { min: 5, max: 9.99 },
@@ -179,6 +202,44 @@ const SCREAM_TIERS = {
 };
 
 const LEADERBOARD_PRIZE_VALUE = 59;
+
+// --- STRIPE SAFETY HELPERS ---
+
+async function shouldProcessStripeEvent(eventId: string, eventType: string, paymentIntentId?: string | null) {
+  const eventRef = db.collection('stripe_events').doc(eventId);
+
+  const alreadyProcessed = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(eventRef);
+
+    if (snapshot.exists && (snapshot.data() as any)?.processed) {
+      return true;
+    }
+
+    if (!snapshot.exists) {
+      transaction.set(eventRef, {
+        type: eventType,
+        paymentIntentId: paymentIntentId || null,
+        processed: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    return false;
+  });
+
+  return !alreadyProcessed;
+}
+
+async function markStripeEventProcessed(eventId: string) {
+  const eventRef = db.collection('stripe_events').doc(eventId);
+  await eventRef.set(
+    {
+      processed: true,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
 
 // --- CLOUD FUNCTIONS ---
 
@@ -405,28 +466,33 @@ export const createScreamDonation = functions
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
     try {
-      const { amount, message, donorName, streamerId, donorEmail } = req.body;
+      const { amount, message, donorName, streamerId, donorEmail, idempotencyKey: rawIdempotencyKey } = req.body;
       if (!amount || !streamerId || amount < 5 || amount > 10000) {
         res.status(400).json({ error: 'Invalid amount or streamer ID' });
         return;
       }
 
+      const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
+
       const tier = getScreamTier(amount);
       const stripe = getStripe();
-      
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100),
-        currency: 'usd',
-        metadata: {
-          type: 'chat_screamer',
-          streamerId,
-          donorName: sanitizeString(donorName || 'Anonymous', 50),
-          message: sanitizeString(message || '', 500),
-          screamTier: tier,
+
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: Math.round(amount * 100),
+          currency: 'usd',
+          metadata: {
+            type: 'chat_screamer',
+            streamerId,
+            donorName: sanitizeString(donorName || 'Anonymous', 50),
+            message: sanitizeString(message || '', 500),
+            screamTier: tier,
+          },
+          receipt_email: donorEmail,
+          description: `ChatScream - ${tier} Scream`,
         },
-        receipt_email: donorEmail,
-        description: `ChatScream - ${tier} Scream`,
-      });
+        idempotencyKey ? { idempotencyKey } : undefined
+      );
 
       res.json({ clientSecret: paymentIntent.client_secret, screamTier: tier });
     } catch (error: any) {
@@ -441,12 +507,29 @@ export const createScreamDonation = functions
 export const stripeWebhook = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
     const sig = req.headers['stripe-signature'];
-    if (!sig) { res.status(400).send('Missing signature'); return; }
+    if (!sig || Array.isArray(sig)) { res.status(400).send('Missing signature'); return; }
 
     try {
       const stripe = getStripe();
-      const event = stripe.webhooks.constructEvent(req.rawBody, sig, getWebhookSecret());
+      const webhookSecret = getWebhookSecret();
+      const event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+
+      const paymentIntent = event.data?.object as Stripe.PaymentIntent | undefined;
+
+      const shouldProcess = await shouldProcessStripeEvent(
+        event.id,
+        event.type,
+        paymentIntent?.id || null
+      );
+
+      if (!shouldProcess) {
+        res.json({ received: true, duplicate: true });
+        return;
+      }
 
       if (event.type === 'payment_intent.succeeded') {
         const pi = event.data.object as Stripe.PaymentIntent;
@@ -454,6 +537,7 @@ export const stripeWebhook = functions
       }
       // Add other event handlers (subscription updated, etc.) as needed here
 
+      await markStripeEventProcessed(event.id);
       res.json({ received: true });
     } catch (err: any) {
       console.error('Webhook error:', err.message);
@@ -528,14 +612,31 @@ async function getOrCreateAffiliateCoupon(stripe: Stripe, code: string): Promise
 }
 
 async function processScreamDonation(pi: Stripe.PaymentIntent) {
+  if (!pi.metadata || !pi.metadata.streamerId) {
+    console.warn('Skipping scream processing due to missing metadata');
+    return;
+  }
+
   const { streamerId, donorName, message, screamTier } = pi.metadata;
   const amount = pi.amount / 100;
-  
-  await db.collection('screams').add({
-    streamerId, donorName, message, amount, tier: screamTier,
-    paymentIntentId: pi.id, createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+  const screamRef = db.collection('screams').doc(pi.id);
+  const existing = await screamRef.get();
+  if (existing.exists) {
+    console.log(`Skipping duplicate scream for paymentIntent ${pi.id}`);
+    return;
+  }
+
+  await screamRef.set({
+    streamerId,
+    donorName,
+    message,
+    amount,
+    tier: screamTier,
+    paymentIntentId: pi.id,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  
+
   // Logic to update leaderboard would go here (omitted for brevity but preserved from original)
   console.log(`Processed scream for ${streamerId}`);
 }
@@ -1451,4 +1552,3 @@ export const getUserAnalytics = functions.https.onRequest(async (req: functions.
     res.status(500).json({ error: 'Failed to get analytics' });
   }
 });
-
