@@ -15,7 +15,8 @@ import {
   signInWithRedirect,
   getRedirectResult,
   sendPasswordResetEmail,
-  User
+  User,
+  onIdTokenChanged
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -808,4 +809,14 @@ export const onAuthChange = (callback: (user: User | null) => void) => {
   }
 
   return onAuthStateChanged(authInstance, callback);
+};
+
+export const onIdTokenChange = (callback: (user: User | null) => void) => {
+  if (!authInstance) {
+    console.error(firebaseConfigError ?? 'Firebase auth is not initialized.');
+    callback(null);
+    return () => {};
+  }
+
+  return onIdTokenChanged(authInstance, callback);
 };

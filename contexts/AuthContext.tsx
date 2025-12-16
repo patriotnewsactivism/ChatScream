@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from 'firebase/auth';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { IdTokenResult, User } from 'firebase/auth';
 import {
-  onAuthChange,
+  onIdTokenChange,
   signUpWithEmail,
   signInWithEmail,
   signInWithGoogle,
@@ -14,7 +14,6 @@ import {
   logOut,
   resetPassword,
   getUserProfile,
-  updateUserProfile,
   UserProfile,
   applyLocalAccessOverrides,
   ensureAffiliateForSignedInUser,
@@ -24,8 +23,10 @@ import {
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
+  sessionToken: string | null;
   loading: boolean;
   error: string | null;
+  isAuthenticated: boolean;
   signUp: (email: string, password: string, displayName: string, referralCode?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInGoogle: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
@@ -36,6 +37,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshSession: () => Promise<string | null>;
   clearError: () => void;
   configError: string | null;
 }
@@ -57,9 +59,18 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tokenRefreshTimeout = useRef<number>();
   const configError = firebaseConfigError;
+
+  const clearScheduledRefresh = () => {
+    if (tokenRefreshTimeout.current) {
+      window.clearTimeout(tokenRefreshTimeout.current);
+      tokenRefreshTimeout.current = undefined;
+    }
+  };
 
   const guardConfig = () => {
     if (configError) {
@@ -75,6 +86,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
+    let isMounted = true;
+
+    const scheduleTokenRefresh = (tokenResult: IdTokenResult, firebaseUser: User) => {
+      clearScheduledRefresh();
+      const expirationMs = new Date(tokenResult.expirationTime).getTime();
+      const refreshInMs = Math.max(expirationMs - Date.now() - 5 * 60 * 1000, 5 * 60 * 1000);
+
+      tokenRefreshTimeout.current = window.setTimeout(async () => {
+        try {
+          const nextToken = await firebaseUser.getIdToken(true);
+          if (!isMounted) return;
+          setSessionToken(nextToken);
+        } catch (err: any) {
+          if (!isMounted) return;
+          setError('Session expired. Please sign in again.');
+          setUser(null);
+          setUserProfile(null);
+          setSessionToken(null);
+        }
+      }, refreshInMs);
+    };
+
     (async () => {
       try {
         await completeRedirectSignIn();
@@ -84,31 +117,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     })();
 
-    const unsubscribe = onAuthChange(async (firebaseUser) => {
+    const unsubscribe = onIdTokenChange(async (firebaseUser) => {
+      setLoading(true);
       setUser(firebaseUser);
+      setSessionToken(null);
+      clearScheduledRefresh();
 
       if (firebaseUser) {
         try {
           try {
             await syncAccess();
-            await firebaseUser.getIdToken(true);
           } catch (err) {
             console.warn('Access sync skipped:', err);
           }
+
+          const tokenResult = await firebaseUser.getIdTokenResult(true);
+          if (!isMounted) return;
+          setSessionToken(tokenResult.token);
+
           const profile = await getUserProfile(firebaseUser.uid);
           setUserProfile(applyLocalAccessOverrides(profile, firebaseUser.email));
           ensureAffiliateForSignedInUser().catch(() => {});
-        } catch (err) {
-          console.error('Failed to load user profile:', err);
+          scheduleTokenRefresh(tokenResult, firebaseUser);
+        } catch (err: any) {
+          if (!isMounted) return;
+          const message = getErrorMessage(err?.code);
+          setError(message);
         }
       } else {
         setUserProfile(null);
       }
 
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      clearScheduledRefresh();
+      unsubscribe();
+    };
   }, []);
 
   const signUp = async (
@@ -227,6 +276,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await logOut();
       setUserProfile(null);
+      setSessionToken(null);
+      clearScheduledRefresh();
+      setUser(null);
     } catch (err: any) {
       setError('Failed to log out. Please try again.');
       throw err;
@@ -248,8 +300,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const refreshProfile = async (): Promise<void> => {
     guardConfig();
     if (user) {
-      const profile = await getUserProfile(user.uid);
-      setUserProfile(applyLocalAccessOverrides(profile, user.email));
+      try {
+        const profile = await getUserProfile(user.uid);
+        setUserProfile(applyLocalAccessOverrides(profile, user.email));
+      } catch (err: any) {
+        const message = getErrorMessage(err?.code);
+        setError(message);
+      }
+    }
+  };
+
+  const refreshSession = async (): Promise<string | null> => {
+    guardConfig();
+    if (!user) return null;
+
+    try {
+      const token = await user.getIdToken(true);
+      setSessionToken(token);
+      return token;
+    } catch (err: any) {
+      const message = getErrorMessage(err?.code);
+      setError(message);
+      throw new Error(message);
     }
   };
 
@@ -260,8 +332,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     userProfile,
+    sessionToken,
     loading,
     error,
+    isAuthenticated: !!user,
     signUp,
     signIn,
     signInGoogle,
@@ -272,6 +346,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     sendResetEmail,
     refreshProfile,
+    refreshSession,
     clearError,
     configError,
   };
@@ -280,7 +355,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 };
 
 // Helper function to convert Firebase error codes to user-friendly messages
-function getErrorMessage(errorCode: string): string {
+function getErrorMessage(errorCode?: string): string {
   switch (errorCode) {
     case 'auth/email-already-in-use':
       return 'This email is already registered. Please sign in instead.';
