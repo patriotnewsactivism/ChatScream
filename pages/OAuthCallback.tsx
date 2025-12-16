@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { handleOAuthCallback } from '../services/oauthService';
 import { Megaphone, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import AuthStatusBanner from '../components/AuthStatusBanner';
 
 const OAuthCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -63,6 +64,7 @@ const OAuthCallback: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-dark-800/80 border border-gray-700 rounded-2xl shadow-2xl p-6">
+        <AuthStatusBanner />
         <div className="flex items-center gap-2 mb-4">
           <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-2 rounded-xl shadow-lg shadow-brand-500/30">
             <Megaphone size={20} className="text-white" />
@@ -101,4 +103,3 @@ const OAuthCallback: React.FC = () => {
 };
 
 export default OAuthCallback;
-

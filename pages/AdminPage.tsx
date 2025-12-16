@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Copy, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import BackendStatusCard from '../components/BackendStatusCard';
+import AuthStatusBanner from '../components/AuthStatusBanner';
 import {
   findUsersByEmail,
   getAccessListConfig,
@@ -216,6 +217,7 @@ const AdminPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
+        <AuthStatusBanner />
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="text-xs text-gray-400">Admin</p>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import AuthStatusBanner from '../components/AuthStatusBanner';
 import { PRICING_PLANS, formatPrice } from '../services/stripe';
 import {
   Megaphone, Play, Zap, Globe, MessageSquare, Shield, ShieldCheck, ChevronRight,
@@ -207,6 +208,10 @@ const LandingPage: React.FC = () => {
           </div>
         )}
       </nav>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <AuthStatusBanner />
+      </div>
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 md:pt-40 md:pb-32 overflow-hidden">

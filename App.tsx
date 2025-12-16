@@ -18,6 +18,7 @@ import BackgroundSelector, { PRESET_BACKGROUNDS } from './components/BackgroundS
 import BrandingPanel from './components/BrandingPanel';
 import ChatStream from './components/ChatStream';
 import ChatStreamOverlay from './components/ChatStreamOverlay';
+import AuthStatusBanner from './components/AuthStatusBanner';
 import { generateViralStreamPackage, type ViralStreamPackage } from './services/claudeService';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
@@ -1011,6 +1012,10 @@ const App = () => {
           onClick={() => setShowUserMenu(false)}
         />
       )}
+
+      <div className="px-4 md:px-6 pt-2">
+        <AuthStatusBanner />
+      </div>
 
       {/* --- MAIN CONTENT --- */}
       <div className="flex-1 flex overflow-hidden relative">
