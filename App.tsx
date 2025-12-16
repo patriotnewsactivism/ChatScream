@@ -117,6 +117,7 @@ const App = () => {
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCamMuted, setIsCamMuted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
   // Audio Mixer State
   const [micVolume, setMicVolume] = useState(1.0);
@@ -190,6 +191,20 @@ const App = () => {
     handleResize(); // Init
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Detect if device has multiple cameras
+  useEffect(() => {
+    const checkCameras = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        setHasMultipleCameras(videoInputs.length > 1);
+      } catch {
+        setHasMultipleCameras(false);
+      }
+    };
+    checkCameras();
   }, []);
 
   useEffect(() => {
@@ -1345,14 +1360,16 @@ const App = () => {
                 >
                   {isCamMuted ? <VideoOff size={20} /> : <Video size={20} />}
                 </button>
-                <button
-                  onClick={handleSwitchCamera}
-                  disabled={!cameraStream}
-                  aria-label="Switch camera"
-                  className={`min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation bg-gray-700 text-white hover:bg-gray-600 ${!cameraStream && 'opacity-50'}`}
-                >
-                  <SwitchCamera size={20} />
-                </button>
+                {hasMultipleCameras && cameraStream && (
+                  <button
+                    onClick={handleSwitchCamera}
+                    aria-label={`Switch to ${cameraFacingMode === 'user' ? 'back' : 'front'} camera`}
+                    title={`Switch to ${cameraFacingMode === 'user' ? 'back' : 'front'} camera`}
+                    className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 touch-manipulation bg-gray-700 text-white hover:bg-gray-600"
+                  >
+                    <SwitchCamera size={20} />
+                  </button>
+                )}
               </div>
 
               {/* Mixer Toggle - Proper spacing from other buttons */}
