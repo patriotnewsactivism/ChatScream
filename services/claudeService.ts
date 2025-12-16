@@ -303,3 +303,275 @@ Highlights: ${highlights.join(', ')}`;
 
   return `Just finished an amazing ${Math.floor(duration / 60)}-minute stream about ${streamTopic}! Thanks to everyone who joined!`;
 }
+
+// ============================================================
+// ENHANCED AI FEATURES - Moderation, Content Analysis, Voice
+// ============================================================
+
+// Advanced moderation result with detailed categories
+export interface AdvancedModerationResult {
+  isAllowed: boolean;
+  toxicityScore: number;
+  categories: ('spam' | 'harassment' | 'hate' | 'nsfw' | 'violence')[];
+  suggestedAction: 'allow' | 'warn' | 'delete' | 'timeout';
+  reason?: string;
+  autoResponse?: string;
+}
+
+// Content analysis result
+export interface ContentAnalysis {
+  sentiment: 'positive' | 'neutral' | 'negative';
+  topics: string[];
+  engagementSuggestions: string[];
+  warnings: string[];
+  audienceMood: string;
+}
+
+// Voice configuration for TTS
+export interface VoiceConfig {
+  voiceId: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+}
+
+// Advanced chat moderation with detailed analysis
+export async function advancedModerateMessage(
+  message: string,
+  context?: { streamerName?: string; recentMessages?: string[] }
+): Promise<AdvancedModerationResult> {
+  const systemPrompt = `You are an advanced content moderator for live streams.
+Analyze the message for toxicity and appropriateness.
+Return ONLY valid JSON with these exact keys:
+{
+  "isAllowed": boolean,
+  "toxicityScore": number (0-1, where 0 is clean and 1 is highly toxic),
+  "categories": array of strings from ["spam", "harassment", "hate", "nsfw", "violence"] (empty if clean),
+  "suggestedAction": "allow" | "warn" | "delete" | "timeout",
+  "reason": string (only if not allowed),
+  "autoResponse": string (optional friendly redirect if borderline)
+}
+Be lenient with mild language but firm on hate speech, explicit content, and harassment.`;
+
+  const contextStr = context?.recentMessages?.slice(-3).join('\n') || '';
+  const userMessage = `Stream context: ${context?.streamerName || 'General stream'}
+Recent chat:\n${contextStr}
+\nMessage to analyze: "${message}"`;
+
+  try {
+    const response = await callClaude(systemPrompt, userMessage, 300);
+
+    if (response) {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          isAllowed: parsed.isAllowed !== false,
+          toxicityScore: typeof parsed.toxicityScore === 'number' ? parsed.toxicityScore : 0,
+          categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+          suggestedAction: parsed.suggestedAction || 'allow',
+          reason: parsed.reason,
+          autoResponse: parsed.autoResponse,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Advanced moderation failed:', error);
+  }
+
+  // Default: allow message if moderation fails
+  return {
+    isAllowed: true,
+    toxicityScore: 0,
+    categories: [],
+    suggestedAction: 'allow',
+  };
+}
+
+// Analyze stream content and chat for insights
+export async function analyzeStreamContent(
+  recentChat: string[],
+  streamTitle: string,
+  streamTopic?: string
+): Promise<ContentAnalysis> {
+  const systemPrompt = `You are a stream analytics AI. Analyze the chat messages and stream context.
+Return ONLY valid JSON with:
+{
+  "sentiment": "positive" | "neutral" | "negative",
+  "topics": array of 3-5 trending topics being discussed,
+  "engagementSuggestions": array of 2-3 suggestions to boost engagement,
+  "warnings": array of any content warnings or issues noticed,
+  "audienceMood": brief description of audience mood
+}`;
+
+  const chatSample = recentChat.slice(-30).join('\n');
+  const userMessage = `Stream: "${streamTitle}"
+Topic: ${streamTopic || 'General'}
+Recent chat messages (last 30):
+${chatSample}
+
+Analyze the stream's content and audience.`;
+
+  try {
+    const response = await callClaude(systemPrompt, userMessage, 400);
+
+    if (response) {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          sentiment: parsed.sentiment || 'neutral',
+          topics: Array.isArray(parsed.topics) ? parsed.topics.slice(0, 5) : [],
+          engagementSuggestions: Array.isArray(parsed.engagementSuggestions)
+            ? parsed.engagementSuggestions.slice(0, 3)
+            : [],
+          warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+          audienceMood: parsed.audienceMood || 'Unknown',
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Content analysis failed:', error);
+  }
+
+  return {
+    sentiment: 'neutral',
+    topics: [],
+    engagementSuggestions: ['Ask the audience a question', 'Respond to recent comments'],
+    warnings: [],
+    audienceMood: 'Unable to analyze',
+  };
+}
+
+// Generate AI-powered auto-response for common questions
+export async function generateAutoResponse(
+  question: string,
+  streamContext: string,
+  faqData?: Record<string, string>
+): Promise<string | null> {
+  // Check FAQ first
+  if (faqData) {
+    const lowerQuestion = question.toLowerCase();
+    for (const [key, value] of Object.entries(faqData)) {
+      if (lowerQuestion.includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+  }
+
+  const systemPrompt = `You are a helpful stream assistant. Answer common viewer questions briefly (under 50 words).
+If you can't confidently answer, return null.
+The stream is about: ${streamContext}`;
+
+  try {
+    const response = await callClaude(systemPrompt, `Question: ${question}`, 100);
+    if (response && response.trim() && !response.includes('null')) {
+      return response.trim();
+    }
+  } catch (error) {
+    console.error('Auto-response generation failed:', error);
+  }
+
+  return null;
+}
+
+// Get available browser voices for TTS
+export function getAvailableVoices(): SpeechSynthesisVoice[] {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    return [];
+  }
+  return speechSynthesis.getVoices().filter(voice =>
+    voice.lang.startsWith('en') // English voices only
+  );
+}
+
+// Speak donation message with enhanced TTS
+export async function speakDonationMessage(
+  message: string,
+  config?: Partial<VoiceConfig>
+): Promise<void> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    console.warn('Speech synthesis not available');
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    const utterance = new SpeechSynthesisUtterance(message);
+
+    // Apply configuration
+    utterance.rate = config?.rate ?? 1.0;
+    utterance.pitch = config?.pitch ?? 1.0;
+    utterance.volume = config?.volume ?? 1.0;
+
+    // Find voice by ID or use default
+    if (config?.voiceId) {
+      const voices = speechSynthesis.getVoices();
+      const selectedVoice = voices.find(v => v.voiceURI === config.voiceId);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+    }
+
+    utterance.onend = () => resolve();
+    utterance.onerror = (e) => reject(e);
+
+    // Cancel any ongoing speech
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utterance);
+  });
+}
+
+// Preload voices (call on app init)
+export function preloadVoices(): Promise<SpeechSynthesisVoice[]> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    return Promise.resolve([]);
+  }
+
+  return new Promise((resolve) => {
+    const voices = speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      resolve(voices);
+      return;
+    }
+
+    speechSynthesis.onvoiceschanged = () => {
+      resolve(speechSynthesis.getVoices());
+    };
+
+    // Timeout fallback
+    setTimeout(() => resolve(speechSynthesis.getVoices()), 1000);
+  });
+}
+
+// Generate engagement prompts based on stream progress
+export async function generateEngagementPrompt(
+  streamTopic: string,
+  streamDurationMinutes: number,
+  viewerCount?: number
+): Promise<string> {
+  const systemPrompt = `You are a stream engagement expert. Generate a single, brief engagement prompt
+(poll question, discussion starter, or call-to-action) appropriate for the stream's current state.
+Keep it under 100 characters. Be creative and relevant to the topic.`;
+
+  const userMessage = `Topic: ${streamTopic}
+Stream duration: ${streamDurationMinutes} minutes
+Viewers: ${viewerCount || 'unknown'}
+Generate one engagement prompt.`;
+
+  try {
+    const response = await callClaude(systemPrompt, userMessage, 50);
+    if (response) return response.trim().slice(0, 150);
+  } catch (error) {
+    console.error('Failed to generate engagement prompt:', error);
+  }
+
+  // Fallback prompts based on duration
+  const prompts = [
+    "What brought you to the stream today?",
+    "Drop a like if you're enjoying the content!",
+    "Any questions so far? I'd love to hear them!",
+    "Where are you watching from?",
+    "What topic should we cover next?",
+  ];
+  return prompts[Math.floor(Math.random() * prompts.length)];
+}
