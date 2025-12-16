@@ -7,7 +7,7 @@ import BackendStatusCard from '../components/BackendStatusCard';
 
 const planMinutes: Record<string, number> = {
   free: 0,
-  pro: 180,
+  pro: 600,
   expert: 600,
   enterprise: 3000,
 };

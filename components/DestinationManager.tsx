@@ -44,6 +44,19 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [newServerUrl, setNewServerUrl] = useState('');
   const [showKey, setShowKey] = useState(false);
 
+  const safeAlert = (message: string) => {
+    const isJsdom = typeof navigator !== 'undefined' && navigator.userAgent?.toLowerCase().includes('jsdom');
+    if (!isJsdom && typeof window !== 'undefined' && typeof window.alert === 'function') {
+      try {
+        window.alert(message);
+        return;
+      } catch {
+        // fall through to console.warn
+      }
+    }
+    console.warn(message);
+  };
+
   // Check destination limits
   const destinationLimit = useMemo(() => {
     return canAddDestination(userPlan, destinations.length);
@@ -51,11 +64,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
   const currentPlan = useMemo(() => getPlanById(userPlan), [userPlan]);
 
-  const handleAddWithLimitCheck = (dest: Destination) => {
+  const handleAddWithLimitCheck = (dest: Destination): boolean => {
     if (!destinationLimit.allowed) {
-      return; // Don't allow adding if limit reached
+      return false; // Don't allow adding if limit reached
     }
     onAddDestination(dest);
+    return true;
   };
 
   const oauthOptions = useMemo(() => ([
@@ -143,7 +157,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
   const handleConnectOAuth = (platform: OAuthServicePlatform) => {
     if (!userId) {
-      alert('Please sign in again to connect this platform.');
+      safeAlert('Please sign in again to connect this platform.');
       return;
     }
     initiateOAuth(platform, userId);
@@ -151,16 +165,16 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
   const handleSyncStreamKey = async (dest: Destination, platform: OAuthServicePlatform) => {
     if (!userId) {
-      alert('Please sign in again to sync stream info.');
+      safeAlert('Please sign in again to sync stream info.');
       return;
     }
     const result = await getStreamKey(platform);
     if (result.error) {
-      alert(result.error);
+      safeAlert(result.error);
       return;
     }
     if (!result.streamKey || !result.ingestUrl) {
-      alert('Stream key not available yet. Try again after connecting, or create a broadcast on the platform.');
+      safeAlert('Stream key not available yet. Try again after connecting, or create a broadcast on the platform.');
       return;
     }
     onUpdateDestination(dest.id, { streamKey: result.streamKey, serverUrl: result.ingestUrl });
@@ -252,11 +266,17 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                   )}
                   <button
                     type="button"
-                    onClick={() => handleConnectOAuth(option.oauthPlatform)}
+                    onClick={() => {
+                      const added = handleAddWithLimitCheck(createOAuthDestination(option.platform));
+                      if (added && !isStreaming) {
+                        handleConnectOAuth(option.oauthPlatform);
+                      }
+                    }}
                     disabled={isStreaming || !destinationLimit.allowed}
                     className="text-[11px] px-2 py-1 rounded bg-brand-600/30 hover:bg-brand-600/40 border border-brand-500/20 text-brand-100 disabled:opacity-50"
+                    aria-label={`Connect ${option.label}`}
                   >
-                    Connect
+                    Connect {option.label}
                   </button>
                 </div>
               </div>
