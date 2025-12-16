@@ -20,9 +20,16 @@ import ChatStream from './components/ChatStream';
 import ChatStreamOverlay from './components/ChatStreamOverlay';
 import AuthStatusBanner from './components/AuthStatusBanner';
 import { generateViralStreamPackage, type ViralStreamPackage } from './services/claudeService';
-import { RTMPSender } from './services/RTMPSender';
+import { RTMPSender, type RTMPSenderConfig } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
 import { planHasWatermark, type PlanTier } from './services/stripe';
+import {
+  getCloudStreamingStatus,
+  startCloudSession,
+  endCloudSession,
+  type CloudStreamingStatus,
+} from './services/cloudStreamingService';
+import type { StreamingMode } from './services/streamingPipeline';
 import {
   Mic,
   MicOff,
@@ -98,6 +105,11 @@ const App = () => {
     isRecording: false,
     streamDuration: 0,
   });
+
+  // Streaming Mode & Cloud Status
+  const [streamingMode, setStreamingMode] = useState<StreamingMode>('local');
+  const [cloudStatus, setCloudStatus] = useState<CloudStreamingStatus | null>(null);
+  const [cloudSessionId, setCloudSessionId] = useState<string | null>(null);
 
   // Media Streams
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -197,18 +209,41 @@ const App = () => {
     return () => window.clearTimeout(timeoutId);
   }, [mobileTip]);
 
-  // Initialize RTMPSender
+  // Load cloud streaming status when user profile changes
+  useEffect(() => {
+    if (user && userProfile) {
+      const loadCloudStatus = async () => {
+        const status = await getCloudStreamingStatus(
+          user.uid,
+          userProfile.subscription?.plan || 'free',
+        );
+        setCloudStatus(status);
+      };
+      loadCloudStatus();
+    }
+  }, [user, userProfile]);
+
+  // Initialize RTMPSender with config
   useEffect(() => {
     const statusUpdater = (id: string, status: Destination['status']) => {
       setDestinations((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
     };
 
-    rtmpSenderRef.current = new RTMPSender(statusUpdater);
+    if (user && userProfile) {
+      const config: RTMPSenderConfig = {
+        userPlan: (userProfile.subscription?.plan || 'free') as PlanTier,
+        userId: user.uid,
+        cloudHoursUsed: userProfile.usage?.cloudHoursUsed || 0,
+        streamingMode: streamingMode,
+      };
+
+      rtmpSenderRef.current = new RTMPSender(statusUpdater, config);
+    }
 
     return () => {
       rtmpSenderRef.current?.disconnect();
     };
-  }, []);
+  }, [user, userProfile, streamingMode]);
 
   // Audio Player Logic (Background Music)
   useEffect(() => {
@@ -482,19 +517,36 @@ const App = () => {
     handleInteraction();
   };
 
-  const toggleStream = () => {
+  const toggleStream = async () => {
     handleInteraction();
-    if (!rtmpSenderRef.current) return;
+    if (!rtmpSenderRef.current || !user || !userProfile) return;
     ensureAudioContext();
 
     if (appState.isStreaming) {
-      rtmpSenderRef.current.disconnect();
+      // Stop streaming
+      await rtmpSenderRef.current.disconnect();
+
+      // End cloud session if applicable
+      if (streamingMode === 'cloud' && cloudSessionId) {
+        const result = await endCloudSession(user.uid, cloudSessionId);
+        console.log('Cloud session ended:', result.message);
+        setCloudSessionId(null);
+
+        // Reload cloud status
+        const status = await getCloudStreamingStatus(
+          user.uid,
+          userProfile.subscription?.plan || 'free',
+        );
+        setCloudStatus(status);
+      }
+
       setAppState({
         ...appState,
         isStreaming: false,
         streamDuration: appState.isRecording ? appState.streamDuration : 0,
       });
     } else {
+      // Start streaming
       if (window.innerWidth < 1024) {
         if (!isLandscape) {
           setMobileTip('Tip: rotate to landscape for more room while streaming.');
@@ -507,6 +559,23 @@ const App = () => {
       if (enabled.length === 0) {
         alert('Please enable at least one destination!');
         return;
+      }
+
+      // Start cloud session if cloud mode
+      if (streamingMode === 'cloud') {
+        const result = await startCloudSession(
+          user.uid,
+          userProfile.subscription?.plan || 'free',
+          enabled.length,
+        );
+
+        if (!result.success) {
+          alert(result.message);
+          return;
+        }
+
+        setCloudSessionId(result.sessionId || null);
+        console.log('Cloud session started:', result.message);
       }
 
       const canvasStream = canvasRef.current?.getStream();
@@ -522,8 +591,19 @@ const App = () => {
         ...combinedAudioStream.getAudioTracks(),
       ]);
 
-      rtmpSenderRef.current.connect(combinedStream, enabled);
-      setAppState({ ...appState, isStreaming: true });
+      try {
+        await rtmpSenderRef.current.connect(combinedStream, enabled);
+        setAppState({ ...appState, isStreaming: true });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to start stream';
+        alert(`Stream failed: ${errorMessage}`);
+
+        // Clean up cloud session if it was started
+        if (streamingMode === 'cloud' && cloudSessionId) {
+          await endCloudSession(user.uid, cloudSessionId);
+          setCloudSessionId(null);
+        }
+      }
     }
   };
 
@@ -909,7 +989,7 @@ const App = () => {
 
           <button
             onClick={toggleRecording}
-            className={`w-9 h-9 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
+            className={`min-w-[48px] min-h-[48px] w-12 h-12 md:w-auto md:h-auto md:px-4 md:py-2 rounded-full font-bold transition-all border flex items-center justify-center gap-2
                 ${
                   appState.isRecording
                     ? 'bg-gray-800 border-red-500 text-red-500'
@@ -920,9 +1000,47 @@ const App = () => {
             <span className="hidden md:inline">REC</span>
           </button>
 
+          {/* Streaming Mode Selector */}
+          {!appState.isStreaming && (
+            <div className="flex items-center gap-1 bg-gray-800/80 rounded-full p-1 shadow-lg">
+              <button
+                onClick={() => setStreamingMode('local')}
+                className={`px-4 py-2.5 min-h-[48px] rounded-full text-xs font-medium transition-all ${
+                  streamingMode === 'local'
+                    ? 'bg-gray-700 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Unlimited local device streaming"
+              >
+                📱 Local
+              </button>
+              <button
+                onClick={() => setStreamingMode('cloud')}
+                className={`px-4 py-2.5 min-h-[48px] rounded-full text-xs font-medium transition-all ${
+                  streamingMode === 'cloud'
+                    ? 'bg-brand-600 text-white shadow-md shadow-brand-900/50'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title={
+                  cloudStatus
+                    ? `${cloudStatus.hoursRemaining.toFixed(1)}h cloud hours remaining`
+                    : 'Cloud VM streaming'
+                }
+                disabled={!cloudStatus?.canStream}
+              >
+                ☁️ Cloud
+                {cloudStatus && cloudStatus.hoursTotal > 0 && (
+                  <span className="ml-1 text-[10px] opacity-75">
+                    ({cloudStatus.hoursRemaining.toFixed(1)}h)
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
           <button
             onClick={toggleStream}
-            className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
+            className={`px-4 md:px-6 py-2.5 md:py-3 min-h-[48px] rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
                     ${
                       appState.isStreaming
                         ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50'
@@ -944,7 +1062,7 @@ const App = () => {
           <div className={`relative ${showUserMenu ? 'z-50' : ''}`}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
+              className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform"
             >
               {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
             </button>
@@ -1105,7 +1223,7 @@ const App = () => {
 
           {/* MOBILE: Landscape Side Panel Logic (Hidden in Portrait) */}
           {isLandscape && mobilePanel !== 'none' && (
-            <div className="fixed inset-y-16 right-0 w-full sm:w-[50%] md:w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col shadow-2xl">
+            <div className="fixed inset-y-16 right-0 w-full sm:w-[55%] md:w-[40%] bg-dark-900/95 backdrop-blur border-l border-gray-700 z-40 animate-slide-up flex flex-col shadow-2xl">
               <div className="flex items-center justify-between p-3 border-b border-gray-700">
                 <h3 className="text-xs font-bold uppercase">
                   {mobilePanel === 'media' && 'Media'}
@@ -1137,7 +1255,7 @@ const App = () => {
 
           {/* MOBILE: Portrait Bottom Sheet */}
           {!isLandscape && mobilePanel !== 'none' && (
-            <div className="fixed inset-x-0 bottom-0 top-auto max-h-[78vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 top-auto max-h-[65vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
               <div
                 className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0 cursor-pointer"
                 onClick={() => setMobilePanel('none')}
