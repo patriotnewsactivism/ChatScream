@@ -1,3 +1,5 @@
+import { clientEnv } from './env';
+
 /**
  * Sentry Error Tracking Integration
  *
@@ -9,7 +11,7 @@
  */
 
 // Sentry configuration
-const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN || '';
+const SENTRY_DSN = clientEnv.VITE_SENTRY_DSN || '';
 const ENVIRONMENT = import.meta.env.MODE || 'development';
 const RELEASE = `chatscream@${import.meta.env.VITE_APP_VERSION || '1.1.0'}`;
 

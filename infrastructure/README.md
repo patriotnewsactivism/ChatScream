@@ -101,6 +101,22 @@ Then deploy functions:
 firebase deploy --only functions --project wtp-apps
 ```
 
+### Setting Firebase Secrets (macOS / Linux)
+
+If you prefer to create Secret Manager entries manually, run:
+
+```bash
+firebase functions:secrets:set STRIPE_SECRET_KEY --project wtp-apps
+firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --project wtp-apps
+firebase functions:secrets:set YOUTUBE_CLIENT_ID --project wtp-apps
+firebase functions:secrets:set YOUTUBE_CLIENT_SECRET --project wtp-apps
+firebase functions:secrets:set FACEBOOK_APP_ID --project wtp-apps
+firebase functions:secrets:set FACEBOOK_APP_SECRET --project wtp-apps
+firebase functions:secrets:set TWITCH_CLIENT_ID --project wtp-apps
+firebase functions:secrets:set TWITCH_CLIENT_SECRET --project wtp-apps
+firebase functions:secrets:set CLAUDE_API_KEY --project wtp-apps
+```
+
 ### `setup-gcloud-project.sh`
 
 Creates and configures the Google Cloud project:
