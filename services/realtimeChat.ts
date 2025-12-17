@@ -37,6 +37,9 @@ export function subscribeToChat(
   onError?: (error: Error) => void,
   messageLimit: number = 100
 ): () => void {
+  if (!db) {
+    throw new Error('Firestore is not initialized');
+  }
   const chatRef = collection(db, 'chat_messages');
   const q = query(
     chatRef,
@@ -81,6 +84,9 @@ export async function sendChatMessage(
   displayName: string,
   content: string
 ): Promise<string> {
+  if (!db) {
+    throw new Error('Firestore is not initialized');
+  }
   const chatRef = collection(db, 'chat_messages');
 
   const docRef = await addDoc(chatRef, {

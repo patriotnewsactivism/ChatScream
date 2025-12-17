@@ -62,7 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const tokenRefreshTimeout = useRef<number>();
+  const tokenRefreshTimeout = useRef<number | undefined>(undefined);
   const configError = firebaseConfigError;
 
   const clearScheduledRefresh = () => {

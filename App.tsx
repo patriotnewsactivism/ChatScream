@@ -162,13 +162,20 @@ const App = () => {
     const statusUpdater = (id: string, status: Destination['status']) => {
         setDestinations(prev => prev.map(d => d.id === id ? { ...d, status } : d));
     };
-    
-    rtmpSenderRef.current = new RTMPSender(statusUpdater);
-    
+
+    const config = {
+      userPlan: userProfile?.subscription?.plan || 'free',
+      userId: user?.uid || '',
+      cloudHoursUsed: 0,
+      streamingMode: 'local' as const
+    };
+
+    rtmpSenderRef.current = new RTMPSender(statusUpdater, config);
+
     return () => {
         rtmpSenderRef.current?.disconnect();
     };
-  }, []);
+  }, [user, userProfile]);
 
   // Audio Player Logic (Background Music)
   useEffect(() => {
@@ -325,10 +332,9 @@ const App = () => {
 
       if (audioPlayerRef.current) {
           try {
-              // @ts-ignore
               const musicSrc = ctx.createMediaElementSource(audioPlayerRef.current);
               musicSrc.connect(musicGain);
-              musicSourceRef.current = musicSrc;
+              musicSourceRef.current = musicSrc as any;
           } catch (e) { console.warn("Could not connect music source", e); }
       }
 
@@ -951,7 +957,7 @@ const App = () => {
                             <h3 className="text-lg font-bold text-white mb-2">Camera Access Required</h3>
                             <p className="text-gray-400 mb-6 text-sm">{permissionError}</p>
                             <div className="flex flex-col gap-3">
-                                <button onClick={initCam} className="w-full bg-brand-600 text-white px-4 py-3 rounded-lg font-bold">Try Again</button>
+                                <button onClick={() => initCam()} className="w-full bg-brand-600 text-white px-4 py-3 rounded-lg font-bold">Try Again</button>
                                 <button onClick={handleContinueWithoutCam} className="w-full bg-gray-700 text-gray-200 px-4 py-3 rounded-lg font-semibold">Continue without Camera</button>
                             </div>
                         </div>

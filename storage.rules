@@ -1,10 +1,101 @@
 rules_version = '2';
-
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidFileSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isValidVideoType() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    function isValidAudioType() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+
+    function isValidMediaType() {
+      return isValidImageType() || isValidVideoType() || isValidAudioType();
+    }
+
+    // User media uploads (images, videos, audio for streaming)
+    match /user-media/{userId}/{mediaId} {
+      // Users can read their own media
+      allow read: if isOwner(userId);
+
+      // Users can upload media with size limits
+      allow create: if isOwner(userId)
+        && isValidMediaType()
+        && isValidFileSize(500); // 500MB max for videos
+
+      // Users can update/delete their own media
+      allow update, delete: if isOwner(userId);
+    }
+
+    // User profile pictures
+    match /profile-pictures/{userId} {
+      // Profile pictures are publicly readable
+      allow read: if true;
+
+      // Only the user can upload their profile picture
+      allow create, update: if isOwner(userId)
+        && isValidImageType()
+        && isValidFileSize(5); // 5MB max for profile pics
+
+      // Only the user can delete their profile picture
+      allow delete: if isOwner(userId);
+    }
+
+    // Overlay images for branding
+    match /overlays/{userId}/{overlayId} {
+      // Users can read their own overlays
+      allow read: if isOwner(userId);
+
+      // Users can upload overlay images
+      allow create: if isOwner(userId)
+        && isValidImageType()
+        && isValidFileSize(10); // 10MB max for overlays
+
+      // Users can update/delete their overlays
+      allow update, delete: if isOwner(userId);
+    }
+
+    // Stream recordings (if implemented)
+    match /recordings/{userId}/{recordingId} {
+      // Users can read their own recordings
+      allow read: if isOwner(userId);
+
+      // Only allow creation from authenticated users
+      allow create: if isOwner(userId)
+        && isValidVideoType()
+        && isValidFileSize(2000); // 2GB max for recordings
+
+      // Users can delete their recordings
+      allow delete: if isOwner(userId);
+    }
+
+    // Public assets (logos, backgrounds, etc.)
+    match /public/{asset} {
+      // Public assets are readable by anyone
+      allow read: if true;
+
+      // Only admins can write public assets (controlled server-side)
+      allow write: if false;
+    }
+
+    // Default deny all other paths
     match /{allPaths=**} {
       allow read, write: if false;
     }

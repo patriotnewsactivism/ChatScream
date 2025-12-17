@@ -1,4 +1,5 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
 import { AuthProvider, useAuth } from '../AuthContext';
 import type { User } from 'firebase/auth';
 import { logOut } from '../../services/firebase';
@@ -9,9 +10,14 @@ const mockUser = {
   getIdTokenResult: vi.fn(async () => ({
     token: 'initial-token',
     expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    authTime: '',
+    issuedAtTime: '',
+    signInProvider: '',
+    signInSecondFactor: null,
+    claims: {},
   })),
   getIdToken: vi.fn(async () => 'refreshed-token'),
-} as Partial<User>;
+} as unknown as Partial<User>;
 
 const mockProfile = {
   uid: 'user-123',

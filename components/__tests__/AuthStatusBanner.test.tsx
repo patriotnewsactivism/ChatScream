@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 import AuthStatusBanner from '../AuthStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -6,7 +7,7 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-const mockUseAuth = useAuth as unknown as vi.Mock;
+const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 
 describe('AuthStatusBanner', () => {
   beforeEach(() => {

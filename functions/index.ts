@@ -77,12 +77,19 @@ const getAccessListConfig = async (): Promise<{ admins: string[]; betaTesters: s
 // Helper: Initialize Stripe lazily to ensure secrets are available
 const getStripe = () => {
   const secret = functionsEnv.STRIPE_SECRET_KEY;
+  if (!secret) {
+    throw new Error('STRIPE_SECRET_KEY is not configured');
+  }
   return new Stripe(secret, { apiVersion: '2023-10-16' });
 };
 
 // Helper: Get webhook secret lazily
 const getWebhookSecret = () => {
-  return functionsEnv.STRIPE_WEBHOOK_SECRET;
+  const secret = functionsEnv.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+  }
+  return secret;
 };
 
 // Helper: Set CORS headers

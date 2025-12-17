@@ -13,7 +13,7 @@
  * - Real-time status tracking per destination
  */
 
-import { Destination } from '../types';
+import { Destination, Platform } from '../types';
 import { canAddDestination } from './stripe';
 
 export type RouterStatus = 'idle' | 'routing' | 'error';
@@ -157,7 +157,7 @@ export class DestinationRouter {
         throw new Error('Stream key required');
       }
 
-      if (destination.platform === 'custom' && !destination.serverUrl) {
+      if (destination.platform === Platform.CUSTOM_RTMP && !destination.serverUrl) {
         throw new Error('Server URL required for custom RTMP');
       }
 

@@ -11,7 +11,9 @@
       "Bash(npm run build:*)",
       "Bash(firebase deploy:*)",
       "Bash(firebase functions:secrets:access:*)",
-      "Bash(firebase functions:secrets:set:*)"
+      "Bash(firebase functions:secrets:set:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

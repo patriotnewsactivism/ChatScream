@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from '../ProtectedRoute';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,7 +8,7 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-const mockUseAuth = useAuth as unknown as vi.Mock;
+const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 
 describe('ProtectedRoute', () => {
   beforeEach(() => {
