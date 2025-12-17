@@ -16,6 +16,8 @@ export default [
       'coverage',
       'playwright-report',
       'test-results',
+      'src/dataconnect-generated/**/*',
+      '**/dataconnect-generated/**/*',
     ],
   },
   {
