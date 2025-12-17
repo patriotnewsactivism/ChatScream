@@ -717,9 +717,12 @@ exports.oauthExchange = functions
             body: tokenParams.toString(),
         });
         if (!tokenResponse.ok) {
-            const errorData = await tokenResponse.json();
-            console.error('Token exchange failed:', errorData);
-            res.status(400).json({ error: 'Token exchange failed' });
+            const errorData = await tokenResponse.json().catch(() => ({}));
+            console.error('Token exchange failed:', platform, errorData);
+            const errorMessage = errorData.error_description || errorData.error || 'Failed to connect account';
+            res.status(400).json({
+                error: `${platform} authentication failed: ${errorMessage}. Please try again.`
+            });
             return;
         }
         const tokens = await tokenResponse.json();
@@ -796,7 +799,12 @@ exports.oauthRefresh = functions
             body: tokenParams.toString(),
         });
         if (!tokenResponse.ok) {
-            res.status(400).json({ error: 'Token refresh failed' });
+            const errorData = await tokenResponse.json().catch(() => ({}));
+            console.error('Token refresh failed:', platform, errorData);
+            const errorMessage = errorData.error_description || errorData.error || 'Failed to refresh token';
+            res.status(400).json({
+                error: `${platform} token refresh failed: ${errorMessage}. Please reconnect your account.`
+            });
             return;
         }
         const tokens = await tokenResponse.json();
@@ -946,73 +954,132 @@ async function getPlatformAccountInfo(platform, accessToken, clientId) {
     }
 }
 async function getPlatformStreamKey(platform, accessToken, clientId, channelId) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e;
     switch (platform) {
         case 'youtube': {
-            // Create a live broadcast and get stream key
-            const broadcastResponse = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    snippet: {
-                        title: 'ChatScream Live Stream',
-                        scheduledStartTime: new Date().toISOString(),
+            try {
+                // First, try to get existing streams (most users already have a default stream)
+                const existingStreamsResponse = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn&mine=true', { headers: { Authorization: `Bearer ${accessToken}` } });
+                if (existingStreamsResponse.ok) {
+                    const existingStreams = await existingStreamsResponse.json();
+                    if (existingStreams.items && existingStreams.items.length > 0) {
+                        const streamData = (_a = existingStreams.items[0].cdn) === null || _a === void 0 ? void 0 : _a.ingestionInfo;
+                        if ((streamData === null || streamData === void 0 ? void 0 : streamData.streamName) && (streamData === null || streamData === void 0 ? void 0 : streamData.ingestionAddress)) {
+                            return {
+                                streamKey: streamData.streamName,
+                                ingestUrl: streamData.ingestionAddress,
+                            };
+                        }
+                    }
+                }
+                // If no existing stream, create a new one
+                const createStreamResponse = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
                     },
-                    status: { privacyStatus: 'public' },
-                    contentDetails: { enableAutoStart: true, enableAutoStop: true },
-                }),
-            });
-            if (!broadcastResponse.ok) {
-                return { error: 'Failed to create YouTube broadcast' };
+                    body: JSON.stringify({
+                        snippet: {
+                            title: 'ChatScream Stream',
+                        },
+                        cdn: {
+                            frameRate: 'variable',
+                            ingestionType: 'rtmp',
+                            resolution: 'variable',
+                        },
+                    }),
+                });
+                if (!createStreamResponse.ok) {
+                    const errorData = await createStreamResponse.text();
+                    console.error('Failed to create YouTube stream:', errorData);
+                    return { error: 'Failed to create YouTube stream. Please ensure your channel is verified for live streaming.' };
+                }
+                const newStream = await createStreamResponse.json();
+                const streamData = (_b = newStream.cdn) === null || _b === void 0 ? void 0 : _b.ingestionInfo;
+                if (!(streamData === null || streamData === void 0 ? void 0 : streamData.streamName) || !(streamData === null || streamData === void 0 ? void 0 : streamData.ingestionAddress)) {
+                    return { error: 'Stream created but missing ingestion info. Please try again.' };
+                }
+                return {
+                    streamKey: streamData.streamName,
+                    ingestUrl: streamData.ingestionAddress,
+                };
             }
-            const broadcast = await broadcastResponse.json();
-            // Get the stream key for this broadcast
-            const streamResponse = await fetch(`https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn&id=${(_a = broadcast.contentDetails) === null || _a === void 0 ? void 0 : _a.boundStreamId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-            const stream = await streamResponse.json();
-            const streamData = (_d = (_c = (_b = stream.items) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.cdn) === null || _d === void 0 ? void 0 : _d.ingestionInfo;
-            return {
-                streamKey: streamData === null || streamData === void 0 ? void 0 : streamData.streamName,
-                ingestUrl: streamData === null || streamData === void 0 ? void 0 : streamData.ingestionAddress,
-            };
+            catch (error) {
+                console.error('YouTube stream key error:', error);
+                return { error: 'Failed to get YouTube stream key. Please ensure your channel is enabled for live streaming.' };
+            }
         }
         case 'twitch': {
-            const response = await fetch(`https://api.twitch.tv/helix/streams/key?broadcaster_id=${channelId}`, {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    'Client-Id': clientId,
-                },
-            });
-            if (!response.ok) {
-                return { error: 'Failed to get Twitch stream key' };
+            try {
+                const response = await fetch(`https://api.twitch.tv/helix/streams/key?broadcaster_id=${channelId}`, {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        'Client-Id': clientId,
+                    },
+                });
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    console.error('Failed to get Twitch stream key:', errorData);
+                    return { error: 'Failed to get Twitch stream key. Please ensure your Twitch account has streaming enabled.' };
+                }
+                const data = await response.json();
+                if (!((_d = (_c = data.data) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.stream_key)) {
+                    return { error: 'Twitch stream key not available. Please check your channel settings.' };
+                }
+                return {
+                    streamKey: data.data[0].stream_key,
+                    ingestUrl: 'rtmp://live.twitch.tv/app',
+                };
             }
-            const data = await response.json();
-            return {
-                streamKey: (_f = (_e = data.data) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.stream_key,
-                ingestUrl: 'rtmp://live.twitch.tv/app',
-            };
+            catch (error) {
+                console.error('Twitch stream key error:', error);
+                return { error: 'Failed to get Twitch stream key. Please try again.' };
+            }
         }
         case 'facebook': {
-            // Create a live video to get the stream URL
-            const response = await fetch(`https://graph.facebook.com/v18.0/${channelId}/live_videos`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    access_token: accessToken,
-                    title: 'ChatScream Live Stream',
-                    status: 'SCHEDULED_UNPUBLISHED',
-                }),
-            });
-            if (!response.ok) {
-                return { error: 'Failed to create Facebook live video' };
+            try {
+                // First, check for existing unpublished live videos to avoid hitting rate limits
+                const existingResponse = await fetch(`https://graph.facebook.com/v18.0/${channelId}/live_videos?fields=id,title,status,stream_url,secure_stream_url&access_token=${accessToken}`);
+                if (existingResponse.ok) {
+                    const existingData = await existingResponse.json();
+                    const unpublishedVideo = (_e = existingData.data) === null || _e === void 0 ? void 0 : _e.find((video) => video.status === 'SCHEDULED_UNPUBLISHED');
+                    if (unpublishedVideo && unpublishedVideo.stream_url) {
+                        return {
+                            streamKey: unpublishedVideo.stream_url.split('/').pop(),
+                            ingestUrl: unpublishedVideo.secure_stream_url || unpublishedVideo.stream_url,
+                        };
+                    }
+                }
+                // If no existing unpublished video, create a new one
+                const createResponse = await fetch(`https://graph.facebook.com/v18.0/${channelId}/live_videos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        access_token: accessToken,
+                        title: 'ChatScream Live Stream',
+                        description: 'Live stream powered by ChatScream',
+                        status: 'SCHEDULED_UNPUBLISHED',
+                    }),
+                });
+                if (!createResponse.ok) {
+                    const errorData = await createResponse.text();
+                    console.error('Failed to create Facebook live video:', errorData);
+                    return { error: 'Failed to create Facebook live video. Please check your page permissions.' };
+                }
+                const data = await createResponse.json();
+                if (!data.stream_url) {
+                    return { error: 'Live video created but missing stream URL. Please try again.' };
+                }
+                return {
+                    streamKey: data.stream_url.split('/').pop(),
+                    ingestUrl: data.secure_stream_url || data.stream_url,
+                };
             }
-            const data = await response.json();
-            return {
-                streamKey: (_g = data.stream_url) === null || _g === void 0 ? void 0 : _g.split('/').pop(),
-                ingestUrl: data.secure_stream_url || data.stream_url,
-            };
+            catch (error) {
+                console.error('Facebook stream key error:', error);
+                return { error: 'Failed to get Facebook stream key. Please ensure you have proper page permissions.' };
+            }
         }
     }
 }
