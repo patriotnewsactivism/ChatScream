@@ -9,7 +9,9 @@
       "Bash(firebase projects:list:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(firebase deploy:*)"
+      "Bash(firebase deploy:*)",
+      "Bash(firebase functions:secrets:access:*)",
+      "Bash(firebase functions:secrets:set:*)"
     ]
   }
 }
