@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateChatResponse, moderateMessage } from '../services/claudeService';
 import {
-  MessageSquare, Send, X, Sparkles, Settings, Eye, EyeOff,
-  Volume2, VolumeX, Trash2, Copy, Check, AlertCircle
+  MessageSquare,
+  Send,
+  X,
+  Sparkles,
+  Settings,
+  Eye,
+  EyeOff,
+  Volume2,
+  VolumeX,
+  Trash2,
+  Copy,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -17,9 +28,15 @@ interface ChatStreamProps {
   streamTopic: string;
   isStreaming: boolean;
   onBroadcast: (message: ChatMessage) => void;
+  authToken: string | null;
 }
 
-const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBroadcast }) => {
+const ChatStream: React.FC<ChatStreamProps> = ({
+  streamTopic,
+  isStreaming,
+  onBroadcast,
+  authToken,
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -48,15 +65,24 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
       displayOnStream: false,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
     // Generate AI response if enabled
     if (aiEnabled) {
+      if (!authToken) {
+        alert('Sign in to use AI chat assistance.');
+        return;
+      }
       setIsLoading(true);
       try {
-        const previousMessages = messages.slice(-5).map(m => m.content);
-        const response = await generateChatResponse(input, streamTopic, previousMessages);
+        const previousMessages = messages.slice(-5).map((m) => m.content);
+        const response = await generateChatResponse(
+          input,
+          streamTopic,
+          previousMessages,
+          authToken,
+        );
 
         const aiMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -66,7 +92,7 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
           displayOnStream: false,
         };
 
-        setMessages(prev => [...prev, aiMessage]);
+        setMessages((prev) => [...prev, aiMessage]);
       } catch (error) {
         console.error('Failed to generate AI response:', error);
       } finally {
@@ -76,8 +102,12 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
   };
 
   const handleBroadcast = async (message: ChatMessage) => {
-    // Moderate message before broadcasting
-    const moderation = await moderateMessage(message.content);
+    if (!authToken) {
+      alert('Sign in to broadcast AI-moderated messages.');
+      return;
+    }
+
+    const moderation = await moderateMessage(message.content, authToken);
 
     if (!moderation.isAppropriate) {
       alert(`Message blocked: ${moderation.reason || 'Content policy violation'}`);
@@ -91,7 +121,7 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
       displayOnStream: true,
     };
 
-    setMessages(prev => [...prev, broadcastMessage]);
+    setMessages((prev) => [...prev, broadcastMessage]);
     onBroadcast(broadcastMessage);
   };
 
@@ -106,13 +136,18 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
       displayOnStream: true,
     };
 
-    const moderation = await moderateMessage(input);
+    if (!authToken) {
+      alert('Sign in to broadcast AI-moderated messages.');
+      return;
+    }
+
+    const moderation = await moderateMessage(input, authToken);
     if (!moderation.isAppropriate) {
       alert(`Message blocked: ${moderation.reason || 'Content policy violation'}`);
       return;
     }
 
-    setMessages(prev => [...prev, message]);
+    setMessages((prev) => [...prev, message]);
     onBroadcast(message);
     setInput('');
   };
@@ -199,8 +234,8 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
                 message.type === 'broadcast'
                   ? 'bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30'
                   : message.type === 'ai'
-                  ? 'bg-indigo-600/10 border border-indigo-500/20'
-                  : 'bg-gray-800/50 border border-gray-700'
+                    ? 'bg-indigo-600/10 border border-indigo-500/20'
+                    : 'bg-gray-800/50 border border-gray-700'
               } rounded-xl p-3`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -220,7 +255,10 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
                       <span className="text-xs font-bold text-gray-400 uppercase">You</span>
                     )}
                     <span className="text-xs text-gray-500">
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {message.timestamp.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </span>
                   </div>
                   <p className="text-sm text-gray-200">{message.content}</p>
@@ -233,7 +271,11 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
                     className="p-1 text-gray-500 hover:text-gray-300 rounded"
                     title="Copy"
                   >
-                    {copied === message.id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                    {copied === message.id ? (
+                      <Check size={14} className="text-green-500" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
                   </button>
                   {message.type !== 'broadcast' && isStreaming && (
                     <button
@@ -253,9 +295,18 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
         {isLoading && (
           <div className="flex items-center gap-2 text-gray-400 text-sm">
             <div className="flex gap-1">
-              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <span
+                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <span
+                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
             <span>AI is thinking...</span>
           </div>
@@ -308,7 +359,10 @@ const ChatStream: React.FC<ChatStreamProps> = ({ streamTopic, isStreaming, onBro
 
         <p className="mt-2 text-xs text-gray-500 text-center">
           {isStreaming ? (
-            <>Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-400">Ctrl+Enter</kbd> to broadcast directly</>
+            <>
+              Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-400">Ctrl+Enter</kbd>{' '}
+              to broadcast directly
+            </>
           ) : (
             <>Start streaming to broadcast messages</>
           )}

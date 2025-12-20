@@ -3,6 +3,7 @@ import { StreamingPipeline, StreamingMode, PipelineState } from './streamingPipe
 import { DestinationRouter } from './destinationRouter';
 import { streamEnforcement, EnforcementResult } from './streamEnforcement';
 import type { PlanTier } from './stripe';
+import { captureException } from './sentry';
 
 /**
  * Enhanced RTMP Sender with Dual-Pipeline Architecture
@@ -146,6 +147,12 @@ export class RTMPSender {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('❌ Connection failed:', errorMessage);
+      captureException(new Error(errorMessage), {
+        stage: 'connect',
+        destinations: this.destinations.length,
+        userId: this.config.userId,
+        plan: this.config.userPlan,
+      });
 
       // Update all destinations to error
       this.destinations.forEach((dest) => {
@@ -273,6 +280,11 @@ export class RTMPSender {
     // Handle errors
     if (state.status === 'error' && state.error) {
       console.error('❌ Pipeline error:', state.error);
+      captureException(new Error(state.error), {
+        stage: 'pipeline',
+        userId: this.config.userId,
+        plan: this.config.userPlan,
+      });
       this.disconnect();
     }
   }
