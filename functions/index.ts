@@ -8,7 +8,7 @@ admin.initializeApp();
 let db = admin.firestore();
 let stripeClient: Stripe | null = null;
 
-export const __setDb = (override: FirebaseFirestore.Firestore | null) => {
+export const __setDb = (override: admin.firestore.Firestore | null) => {
   db = override ?? admin.firestore();
 };
 
@@ -215,7 +215,11 @@ const LEADERBOARD_PRIZE_VALUE = 59;
 
 // --- STRIPE SAFETY HELPERS ---
 
-async function shouldProcessStripeEvent(eventId: string, eventType: string, paymentIntentId?: string | null) {
+async function shouldProcessStripeEvent(
+  eventId: string,
+  eventType: string,
+  paymentIntentId?: string | null,
+) {
   const eventRef = db.collection('stripe_events').doc(eventId);
 
   const alreadyProcessed = await db.runTransaction(async (transaction) => {
@@ -247,7 +251,7 @@ async function markStripeEventProcessed(eventId: string) {
       processed: true,
       processedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
-    { merge: true }
+    { merge: true },
   );
 }
 
@@ -546,7 +550,14 @@ export const createScreamDonation = functions
     }
 
     try {
-      const { amount, message, donorName, streamerId, donorEmail, idempotencyKey: rawIdempotencyKey } = req.body;
+      const {
+        amount,
+        message,
+        donorName,
+        streamerId,
+        donorEmail,
+        idempotencyKey: rawIdempotencyKey,
+      } = req.body;
       if (!amount || !streamerId || amount < 5 || amount > 10000) {
         res.status(400).json({ error: 'Invalid amount or streamer ID' });
         return;
@@ -571,7 +582,7 @@ export const createScreamDonation = functions
           receipt_email: donorEmail,
           description: `ChatScream - ${tier} Scream`,
         },
-        idempotencyKey ? { idempotencyKey } : undefined
+        idempotencyKey ? { idempotencyKey } : undefined,
       );
 
       res.json({ clientSecret: paymentIntent.client_secret, screamTier: tier });
@@ -587,11 +598,20 @@ export const createScreamDonation = functions
 export const stripeWebhook = functions
   .runWith(runtimeOpts)
   .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
-    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     const sig = req.headers['stripe-signature'];
-    if (!sig || Array.isArray(sig)) { res.status(400).send('Missing signature'); return; }
+    if (!sig || Array.isArray(sig)) {
+      res.status(400).send('Missing signature');
+      return;
+    }
 
     try {
       const stripe = getStripe();
@@ -603,7 +623,7 @@ export const stripeWebhook = functions
       const shouldProcess = await shouldProcessStripeEvent(
         event.id,
         event.type,
-        paymentIntent?.id || null
+        paymentIntent?.id || null,
       );
 
       if (!shouldProcess) {
@@ -806,9 +826,10 @@ export const oauthExchange = functions
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json().catch(() => ({}));
         console.error('Token exchange failed:', platform, errorData);
-        const errorMessage = errorData.error_description || errorData.error || 'Failed to connect account';
+        const errorMessage =
+          errorData.error_description || errorData.error || 'Failed to connect account';
         res.status(400).json({
-          error: `${platform} authentication failed: ${errorMessage}. Please try again.`
+          error: `${platform} authentication failed: ${errorMessage}. Please try again.`,
         });
         return;
       }
@@ -905,9 +926,10 @@ export const oauthRefresh = functions
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json().catch(() => ({}));
         console.error('Token refresh failed:', platform, errorData);
-        const errorMessage = errorData.error_description || errorData.error || 'Failed to refresh token';
+        const errorMessage =
+          errorData.error_description || errorData.error || 'Failed to refresh token';
         res.status(400).json({
-          error: `${platform} token refresh failed: ${errorMessage}. Please reconnect your account.`
+          error: `${platform} token refresh failed: ${errorMessage}. Please reconnect your account.`,
         });
         return;
       }
@@ -1148,7 +1170,10 @@ async function getPlatformStreamKey(
         if (!createStreamResponse.ok) {
           const errorData = await createStreamResponse.text();
           console.error('Failed to create YouTube stream:', errorData);
-          return { error: 'Failed to create YouTube stream. Please ensure your channel is verified for live streaming.' };
+          return {
+            error:
+              'Failed to create YouTube stream. Please ensure your channel is verified for live streaming.',
+          };
         }
 
         const newStream = await createStreamResponse.json();
@@ -1164,7 +1189,10 @@ async function getPlatformStreamKey(
         };
       } catch (error) {
         console.error('YouTube stream key error:', error);
-        return { error: 'Failed to get YouTube stream key. Please ensure your channel is enabled for live streaming.' };
+        return {
+          error:
+            'Failed to get YouTube stream key. Please ensure your channel is enabled for live streaming.',
+        };
       }
     }
 
@@ -1183,7 +1211,10 @@ async function getPlatformStreamKey(
         if (!response.ok) {
           const errorData = await response.text();
           console.error('Failed to get Twitch stream key:', errorData);
-          return { error: 'Failed to get Twitch stream key. Please ensure your Twitch account has streaming enabled.' };
+          return {
+            error:
+              'Failed to get Twitch stream key. Please ensure your Twitch account has streaming enabled.',
+          };
         }
 
         const data = await response.json();
@@ -1212,7 +1243,7 @@ async function getPlatformStreamKey(
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           const unpublishedVideo = existingData.data?.find(
-            (video: any) => video.status === 'SCHEDULED_UNPUBLISHED'
+            (video: any) => video.status === 'SCHEDULED_UNPUBLISHED',
           );
 
           if (unpublishedVideo && unpublishedVideo.stream_url) {
@@ -1241,7 +1272,9 @@ async function getPlatformStreamKey(
         if (!createResponse.ok) {
           const errorData = await createResponse.text();
           console.error('Failed to create Facebook live video:', errorData);
-          return { error: 'Failed to create Facebook live video. Please check your page permissions.' };
+          return {
+            error: 'Failed to create Facebook live video. Please check your page permissions.',
+          };
         }
 
         const data = await createResponse.json();
@@ -1256,7 +1289,10 @@ async function getPlatformStreamKey(
         };
       } catch (error) {
         console.error('Facebook stream key error:', error);
-        return { error: 'Failed to get Facebook stream key. Please ensure you have proper page permissions.' };
+        return {
+          error:
+            'Failed to get Facebook stream key. Please ensure you have proper page permissions.',
+        };
       }
     }
   }
@@ -1668,6 +1704,87 @@ Be lenient but flag obvious violations (hate speech, explicit content, spam).`;
     }
   });
 
+export const generateChatResponse = functions
+  .runWith(aiRuntimeOpts)
+  .https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
+    if (!setCorsHeaders(req, res)) return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const authUser = await verifyAuth(req);
+
+      if (!checkRateLimit(authUser.uid)) {
+        res.status(429).json({ error: 'Rate limit exceeded' });
+        return;
+      }
+
+      const viewerMessage = sanitizeString(req.body?.viewerMessage || '', 500);
+      const streamContext = sanitizeString(req.body?.streamContext || '', 200);
+      const previousMessages = Array.isArray(req.body?.previousMessages)
+        ? req.body.previousMessages
+            .filter((v: unknown) => typeof v === 'string')
+            .map((v: string) => sanitizeString(v, 200))
+            .slice(-5)
+        : [];
+
+      if (!viewerMessage) {
+        res.status(400).json({ error: 'Viewer message is required' });
+        return;
+      }
+
+      const systemPrompt = `You are a friendly, engaging live stream assistant helping interact with viewers.
+The stream is about: ${streamContext}
+Keep responses concise (under 100 words), friendly, and engaging.
+If appropriate, suggest follow-up questions or topics.
+Return JSON with "message" and optional "suggestions" array.`;
+
+      const userMessage = `Previous chat context:\n${previousMessages.join('\n')}\n\nViewer asks: ${viewerMessage}`;
+      const response = await callClaudeAPI(systemPrompt, userMessage, 300);
+
+      let result = {
+        message: 'Thanks for being here! Feel free to ask any questions about the stream.',
+      } as {
+        message: string;
+        suggestions?: string[];
+      };
+
+      if (response) {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            result = {
+              message: parsed.message || result.message,
+              suggestions: Array.isArray(parsed.suggestions)
+                ? parsed.suggestions.slice(0, 5)
+                : undefined,
+            };
+          } catch {
+            // fallback below
+          }
+        }
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED') {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      console.error('Generate chat response error:', error);
+      res.json({
+        message: 'Thanks for being here! Feel free to ask any questions about the stream.',
+      });
+    }
+  });
+
 // --- ANALYTICS FUNCTIONS ---
 
 /**
@@ -1777,15 +1894,14 @@ export const getUserAnalytics = functions.https.onRequest(
 
     try {
       const authUser = await verifyAuth(req);
-      
+
       // Placeholder: Add your specific analytics retrieval logic here
       // For now, returning a basic success to ensure the build passes
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         userId: authUser.uid,
-        message: "Analytics endpoint ready" 
+        message: 'Analytics endpoint ready',
       });
-
     } catch (error: any) {
       if (error.message === 'UNAUTHORIZED') {
         res.status(401).json({ error: 'Authentication required' });
@@ -1794,5 +1910,5 @@ export const getUserAnalytics = functions.https.onRequest(
       console.error('Get analytics error:', error);
       res.status(500).json({ error: 'Failed to get analytics' });
     }
-  }
+  },
 );

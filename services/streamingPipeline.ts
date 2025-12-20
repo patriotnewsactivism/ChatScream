@@ -13,7 +13,8 @@
  */
 
 import { Destination, StreamConfig } from '../types';
-import { planHasWatermark, getRemainingCloudHours, canUseCloudStreaming } from './stripe';
+import { planHasWatermark, canUseCloudStreaming } from './stripe';
+import { captureException, captureMessage } from './sentry';
 
 export type StreamingMode = 'local' | 'cloud';
 export type PipelineStatus = 'idle' | 'initializing' | 'connecting' | 'live' | 'stopping' | 'error';
@@ -100,6 +101,12 @@ export class StreamingPipeline {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('❌ Pipeline initialization failed:', errorMessage);
+      captureException(new Error(errorMessage), {
+        stage: 'initialize',
+        mode: config.mode,
+        userId: config.userId,
+        destinations: config.destinations?.length,
+      });
       this.updateState({
         status: 'error',
         error: errorMessage,
@@ -135,6 +142,11 @@ export class StreamingPipeline {
       activeDestinations: enabledDestinations.length,
       startTime: Date.now(),
       cloudSessionId: this.state.mode === 'cloud' ? this.generateSessionId() : null,
+    });
+
+    captureMessage('pipeline_start', 'info', {
+      mode: this.state.mode,
+      destinations: enabledDestinations.length,
     });
 
     // Start monitoring for cloud streams
