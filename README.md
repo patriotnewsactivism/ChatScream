@@ -1,7 +1,6 @@
-<div align="center">
-  <img width="100%" alt="ChatScream Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
   
-  <h1>Chat<span style="color: #38bdf8">Scream</span></h1>
+  <center><h1>Chat<span style="color: #38bdf8">Scream</span></h1></center>
   
   <p><strong>Stream Without Limits. Scream for Attention.</strong></p>
   
