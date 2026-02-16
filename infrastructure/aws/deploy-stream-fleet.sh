@@ -56,18 +56,33 @@ if [[ -z "$SUBNET_IDS" ]]; then
 fi
 
 if [[ -z "$AMI_ID" ]]; then
+  SSM_AMI_PARAMS=()
   if [[ "$INSTANCE_TYPE" == c7g* || "$INSTANCE_TYPE" == t4g* ]]; then
-    SSM_AMI_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
+    SSM_AMI_PARAMS+=("/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp3/ami-id")
+    SSM_AMI_PARAMS+=("/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id")
   else
-    SSM_AMI_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    SSM_AMI_PARAMS+=("/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id")
+    SSM_AMI_PARAMS+=("/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id")
   fi
-  AMI_ID="$(
-    aws ssm get-parameter \
-      --region "$AWS_REGION" \
-      --name "$SSM_AMI_PARAM" \
-      --query 'Parameter.Value' \
-      --output text
-  )"
+
+  for ssm_param in "${SSM_AMI_PARAMS[@]}"; do
+    maybe_ami="$(
+      aws ssm get-parameter \
+        --region "$AWS_REGION" \
+        --name "$ssm_param" \
+        --query 'Parameter.Value' \
+        --output text 2>/dev/null || true
+    )"
+    if [[ -n "$maybe_ami" && "$maybe_ami" != "None" ]]; then
+      AMI_ID="$maybe_ami"
+      break
+    fi
+  done
+
+  if [[ -z "$AMI_ID" ]]; then
+    echo "[ERR] Could not resolve AMI_ID from SSM for instance type $INSTANCE_TYPE in $AWS_REGION."
+    exit 1
+  fi
 fi
 
 if [[ -z "$SECURITY_GROUP_ID" ]]; then
