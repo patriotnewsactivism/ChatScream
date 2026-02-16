@@ -1,0 +1,595 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img [ref=e9]
+        - generic [ref=e12]: ChatScream
+      - generic [ref=e13]:
+        - link "Cloud Power" [ref=e14] [cursor=pointer]:
+          - /url: "#cloud-power"
+        - link "Chat Screamer" [ref=e15] [cursor=pointer]:
+          - /url: "#chat-screamer"
+        - link "Leaderboard" [ref=e16] [cursor=pointer]:
+          - /url: "#leaderboard"
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: "#pricing"
+      - generic [ref=e18]:
+        - button "Sign In" [ref=e19]
+        - button "Start Screaming" [ref=e20]:
+          - text: Start Screaming
+          - img [ref=e21]
+      - button [ref=e24]:
+        - img [ref=e25]
+  - generic [ref=e27]:
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - img [ref=e30]
+        - text: Zero Bandwidth Streaming - Your Upload, Our Power!
+      - heading "Stream Without Limits.Scream for Attention." [level=1] [ref=e32]
+      - paragraph [ref=e33]:
+        - text: Go live with
+        - strong [ref=e34]: unlimited local device streaming
+        - text: from your phone, tablet, or desktop. Upgrade anytime for
+        - strong [ref=e35]: cloud-powered streaming
+        - text: that uses ZERO of your bandwidth. Let viewers send donation-triggered
+        - strong [ref=e36]: "\"Screams\""
+        - text: that take over the screen for maximum engagement!
+      - generic [ref=e37]:
+        - button "Start Screaming Free" [ref=e38]:
+          - img [ref=e39]
+          - text: Start Screaming Free
+          - img [ref=e42]
+        - button "See It In Action" [ref=e44]:
+          - img [ref=e45]
+          - text: See It In Action
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - img [ref=e50]
+          - generic [ref=e57]:
+            - generic [ref=e58]: Zero Bandwidth
+            - generic [ref=e59]: Stream uses our servers, not yours
+        - generic [ref=e60]:
+          - img [ref=e61]
+          - generic [ref=e63]:
+            - generic [ref=e64]: Cloud Powered
+            - generic [ref=e65]: Constant high-bitrate CBR streaming
+      - generic [ref=e66]:
+        - generic [ref=e67]: 3,500+ Screamers
+        - generic [ref=e68]:
+          - img [ref=e69]
+          - img [ref=e71]
+          - img [ref=e73]
+          - img [ref=e75]
+          - img [ref=e77]
+          - text: 4.9/5 Rating
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - img [ref=e81]
+        - text: YouTube
+      - generic [ref=e84]:
+        - img [ref=e85]
+        - text: Facebook
+      - generic [ref=e87]:
+        - img [ref=e88]
+        - text: Twitch
+      - generic [ref=e90]:
+        - img [ref=e91]
+        - text: Custom RTMP
+  - generic [ref=e98]:
+    - generic [ref=e99]:
+      - generic [ref=e100]:
+        - img [ref=e101]
+        - text: Unlimited Local Streaming
+      - heading "Stream From Any Device" [level=2] [ref=e103]
+      - paragraph [ref=e104]: Use your phone, tablet, laptop, or desktop as a camera source. Go live instantly with unlimited local device streaming - no extra software needed!
+    - generic [ref=e105]:
+      - generic [ref=e106]:
+        - img [ref=e108]
+        - heading "Phone Camera" [level=3] [ref=e110]
+        - paragraph [ref=e111]: Turn your smartphone into a professional camera. Perfect for on-the-go streaming.
+      - generic [ref=e112]:
+        - img [ref=e114]
+        - heading "Laptop Webcam" [level=3] [ref=e116]
+        - paragraph [ref=e117]: Use your built-in webcam or external USB cameras without any configuration.
+      - generic [ref=e118]:
+        - img [ref=e120]
+        - heading "Desktop Setup" [level=3] [ref=e122]
+        - paragraph [ref=e123]: Full studio setup support with multiple camera sources and screen sharing.
+      - generic [ref=e124]:
+        - img [ref=e126]
+        - heading "Pro Cameras" [level=3] [ref=e129]
+        - paragraph [ref=e130]: Connect DSLR, mirrorless, and action cameras via capture cards.
+    - generic [ref=e132]:
+      - generic [ref=e133]:
+        - heading "Why Local Device Streaming?" [level=3] [ref=e134]
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - img [ref=e138]
+            - generic [ref=e140]:
+              - heading "Zero Latency Preview" [level=4] [ref=e141]
+              - paragraph [ref=e142]: See exactly what your viewers see in real-time
+          - generic [ref=e143]:
+            - img [ref=e145]
+            - generic [ref=e147]:
+              - heading "Browser-Based Studio" [level=4] [ref=e148]
+              - paragraph [ref=e149]: No downloads, no plugins - just open and stream
+          - generic [ref=e150]:
+            - img [ref=e152]
+            - generic [ref=e154]:
+              - heading "Multi-Device Support" [level=4] [ref=e155]
+              - paragraph [ref=e156]: Switch cameras or add multiple sources instantly
+          - generic [ref=e157]:
+            - img [ref=e159]
+            - generic [ref=e161]:
+              - heading "Mobile Optimized" [level=4] [ref=e162]
+              - paragraph [ref=e163]: Full-featured streaming studio on your phone
+      - generic [ref=e164]:
+        - generic [ref=e167]:
+          - generic [ref=e168]: LIVE
+          - generic [ref=e169]:
+            - img [ref=e171]
+            - img [ref=e175]
+          - img [ref=e177]
+        - generic [ref=e179]: Unlimited!
+  - generic [ref=e181]:
+    - generic [ref=e182]:
+      - generic [ref=e183]:
+        - img [ref=e184]
+        - text: The Cloud Engine
+      - heading "Your Stream, Our Servers" [level=2] [ref=e186]
+      - paragraph [ref=e187]: Upload your content to our cloud. We handle the heavy lifting with constant, high-bitrate streaming - regardless of YOUR internet connection.
+    - generic [ref=e188]:
+      - generic [ref=e190]:
+        - generic [ref=e191]:
+          - generic [ref=e192]:
+            - img [ref=e194]
+            - img [ref=e197]
+            - text: Your Upload
+          - img [ref=e201]
+          - generic [ref=e203]:
+            - text: Our Output
+            - img [ref=e204]
+            - generic [ref=e206]:
+              - img [ref=e207]
+              - img [ref=e210]
+              - img [ref=e212]
+        - generic [ref=e214]:
+          - generic [ref=e215]:
+            - generic [ref=e216]: 0%
+            - generic [ref=e217]: Your Bandwidth
+          - generic [ref=e218]:
+            - generic [ref=e219]: 8 Mbps
+            - generic [ref=e220]: Constant CBR
+          - generic [ref=e221]:
+            - generic [ref=e222]: 4K
+            - generic [ref=e223]: Max Quality
+      - generic [ref=e224]:
+        - generic [ref=e225]:
+          - img [ref=e227]
+          - generic [ref=e229]:
+            - heading "Cloud Storage Integration" [level=3] [ref=e230]
+            - paragraph [ref=e231]: Connect Google Drive, OneDrive, or Dropbox. Stream directly from your cloud files.
+        - generic [ref=e232]:
+          - img [ref=e234]
+          - generic [ref=e241]:
+            - heading "Zero-Bandwidth Promise" [level=3] [ref=e242]
+            - paragraph [ref=e243]: Upload once, stream forever. Your home internet is never the bottleneck.
+        - generic [ref=e244]:
+          - img [ref=e246]
+          - generic [ref=e248]:
+            - heading "Constant High-Bitrate" [level=3] [ref=e249]
+            - paragraph [ref=e250]: Our servers output constant bitrate (CBR) streams regardless of your connection quality.
+        - generic [ref=e251]:
+          - img [ref=e253]
+          - generic [ref=e256]:
+            - heading "Global Edge Network" [level=3] [ref=e257]
+            - paragraph [ref=e258]: Stream from the server closest to your audience for minimal latency.
+  - generic [ref=e260]:
+    - generic [ref=e261]:
+      - generic [ref=e262]:
+        - img [ref=e263]
+        - text: The USP - Unique Selling Point
+      - heading "The Chat Screamer" [level=2] [ref=e266]
+      - paragraph [ref=e267]: Donation-triggered alerts that DEMAND attention. The more they donate, the more OBNOXIOUS it gets!
+    - generic [ref=e268]:
+      - generic [ref=e269]:
+        - generic [ref=e270]:
+          - generic [ref=e273]: Live Stream Preview
+          - generic [ref=e276]:
+            - generic [ref=e277]:
+              - img [ref=e278]
+              - text: SCREAM ALERT!
+            - generic [ref=e280]: $10-20 - Loud Scream
+            - generic [ref=e281]: "\"Great stream!\""
+          - generic [ref=e282]: LIVE
+          - generic [ref=e283]:
+            - img [ref=e284]
+            - text: 1,234 viewers
+        - generic [ref=e289]:
+          - button "$5" [ref=e290]
+          - button "$10-20" [ref=e291]
+          - button "$50+" [ref=e292]
+      - generic [ref=e293]:
+        - 'heading "How It Works: Send a Scream" [level=3] [ref=e294]'
+        - generic [ref=e295]:
+          - generic [ref=e296]:
+            - img [ref=e298]
+            - generic [ref=e302]:
+              - generic [ref=e303]:
+                - text: $5 - $10
+                - heading "Standard Scream" [level=4] [ref=e304]
+              - paragraph [ref=e305]: A tasteful visual alert with Text-to-Speech reading your message aloud.
+          - generic [ref=e306]:
+            - img [ref=e308]
+            - generic [ref=e310]:
+              - generic [ref=e311]:
+                - text: $10 - $20
+                - heading "Loud Scream" [level=4] [ref=e312]
+              - paragraph [ref=e313]: Larger overlay, louder sound effects, distinct animation that grabs attention.
+          - generic [ref=e314]:
+            - img [ref=e316]
+            - generic [ref=e318]:
+              - generic [ref=e319]:
+                - text: $50+
+                - heading "MAXIMUM SCREAM" [level=4] [ref=e320]
+              - paragraph [ref=e321]: Full screen takeover effect with chaotic audio/visuals. TOS compliant but intentionally obnoxious!
+        - button "Enable Chat Screamer" [ref=e322]:
+          - img [ref=e323]
+          - text: Enable Chat Screamer
+          - img [ref=e326]
+  - generic [ref=e329]:
+    - generic [ref=e330]:
+      - generic [ref=e331]:
+        - img [ref=e332]
+        - text: Gamification
+      - heading "The Weekly Scream Leaderboard" [level=2] [ref=e338]
+      - paragraph [ref=e339]: Compete for the crown! The streamer with the most Chat Screams each week wins a FREE month of Professional tier.
+    - generic [ref=e340]:
+      - generic [ref=e341]:
+        - generic [ref=e342]:
+          - heading "This Week's Top Screamers" [level=3] [ref=e343]:
+            - img [ref=e344]
+            - text: This Week's Top Screamers
+          - text: Resets Sunday
+        - generic [ref=e350]:
+          - generic [ref=e351]:
+            - generic [ref=e352]: "1"
+            - generic [ref=e354]:
+              - text: StreamerKing
+              - img [ref=e355]
+            - generic [ref=e357]:
+              - generic [ref=e358]: "247"
+              - generic [ref=e359]: screams
+          - generic [ref=e360]:
+            - generic [ref=e361]: "2"
+            - generic [ref=e363]:
+              - text: GamerGirl99
+              - img [ref=e364]
+            - generic [ref=e370]:
+              - generic [ref=e371]: "189"
+              - generic [ref=e372]: screams
+          - generic [ref=e373]:
+            - generic [ref=e374]: "3"
+            - generic [ref=e376]:
+              - text: ProPlayer
+              - img [ref=e377]
+            - generic [ref=e383]:
+              - generic [ref=e384]: "156"
+              - generic [ref=e385]: screams
+          - generic [ref=e386]:
+            - generic [ref=e387]: "4"
+            - generic [ref=e389]: ContentCreator
+            - generic [ref=e390]:
+              - generic [ref=e391]: "98"
+              - generic [ref=e392]: screams
+          - generic [ref=e393]:
+            - generic [ref=e394]: "5"
+            - generic [ref=e396]: LiveStreamer
+            - generic [ref=e397]:
+              - generic [ref=e398]: "67"
+              - generic [ref=e399]: screams
+        - generic [ref=e401]:
+          - img [ref=e402]
+          - generic [ref=e406]:
+            - generic [ref=e407]: Weekly Prize
+            - generic [ref=e408]: 1 FREE month of Professional ($59 value)
+      - generic [ref=e409]:
+        - heading "How to Win" [level=3] [ref=e410]
+        - generic [ref=e411]:
+          - generic [ref=e412]:
+            - generic [ref=e413]: "1"
+            - generic [ref=e414]:
+              - heading "Receive Screams" [level=4] [ref=e415]
+              - paragraph [ref=e416]: Every donation $5+ triggers a Chat Scream and counts towards your total.
+          - generic [ref=e417]:
+            - generic [ref=e418]: "2"
+            - generic [ref=e419]:
+              - heading "Climb the Ranks" [level=4] [ref=e420]
+              - paragraph [ref=e421]: The leaderboard tracks total Scream QUANTITY, not dollar amount. More engagement = higher rank.
+          - generic [ref=e422]:
+            - generic [ref=e423]: "3"
+            - generic [ref=e424]:
+              - heading "Win Weekly" [level=4] [ref=e425]
+              - paragraph [ref=e426]: Top streamer each week automatically receives a credit for one free month of Professional tier.
+        - generic [ref=e428]:
+          - img [ref=e429]
+          - generic [ref=e432]:
+            - generic [ref=e433]: Pro Tip
+            - generic [ref=e434]: Encourage smaller, frequent donations over single large ones for leaderboard success!
+  - generic [ref=e436]:
+    - generic [ref=e437]:
+      - heading "Simple, Transparent Pricing" [level=2] [ref=e438]
+      - paragraph [ref=e439]: Start free, upgrade when you're ready. The Professional tier unlocks advanced Chat Screamer customization.
+    - generic [ref=e440]:
+      - generic [ref=e441]:
+        - heading "Free" [level=3] [ref=e442]
+        - paragraph [ref=e443]: Perfect for trying out ChatScream
+        - generic [ref=e444]:
+          - text: $0
+          - generic [ref=e445]: /month
+        - list [ref=e446]:
+          - listitem [ref=e447]:
+            - img [ref=e448]
+            - text: 1 streaming destination
+          - listitem [ref=e450]:
+            - img [ref=e451]
+            - text: Unlimited local device streaming
+          - listitem [ref=e453]:
+            - img [ref=e454]
+            - text: 0 cloud VM streaming hours
+          - listitem [ref=e456]:
+            - img [ref=e457]
+            - text: 720p streaming quality
+          - listitem [ref=e459]:
+            - img [ref=e460]
+            - text: Basic overlays
+          - listitem [ref=e462]:
+            - img [ref=e463]
+            - text: ChatScream watermark on stream
+        - button "Start Free" [ref=e465]
+      - generic [ref=e466]:
+        - generic [ref=e467]:
+          - img [ref=e468]
+          - text: INFLUENCER TIER
+        - heading "Starter" [level=3] [ref=e470]
+        - paragraph [ref=e471]: Multi-streaming basics + no watermark
+        - generic [ref=e472]:
+          - text: $19
+          - generic [ref=e473]: /month
+        - list [ref=e474]:
+          - listitem [ref=e475]:
+            - img [ref=e476]
+            - text: 3 simultaneous destinations
+          - listitem [ref=e478]:
+            - img [ref=e479]
+            - text: Unlimited local device streaming
+          - listitem [ref=e481]:
+            - img [ref=e482]
+            - text: 3 hours cloud VM streaming
+          - listitem [ref=e484]:
+            - img [ref=e485]
+            - text: 1080p streaming quality
+          - listitem [ref=e487]:
+            - img [ref=e488]
+            - text: No watermark
+          - listitem [ref=e490]:
+            - img [ref=e491]
+            - text: Basic Chat Screamer alerts
+        - button "Get Started" [ref=e493]
+      - generic [ref=e494]:
+        - heading "Creator" [level=3] [ref=e495]
+        - paragraph [ref=e496]: More destinations + higher cloud hours
+        - generic [ref=e497]:
+          - text: $29
+          - generic [ref=e498]: /month
+        - list [ref=e499]:
+          - listitem [ref=e500]:
+            - img [ref=e501]
+            - text: 5 simultaneous destinations
+          - listitem [ref=e503]:
+            - img [ref=e504]
+            - text: Unlimited local device streaming
+          - listitem [ref=e506]:
+            - img [ref=e507]
+            - text: 10 hours cloud VM streaming
+          - listitem [ref=e509]:
+            - img [ref=e510]
+            - text: 1080p/60fps streaming
+          - listitem [ref=e512]:
+            - img [ref=e513]
+            - text: No watermark
+          - listitem [ref=e515]:
+            - img [ref=e516]
+            - text: Full Chat Screamer tiers
+        - button "Get Started" [ref=e518]
+      - generic [ref=e519]:
+        - heading "Pro" [level=3] [ref=e520]
+        - paragraph [ref=e521]: Unlimited destinations + maximum cloud hours
+        - generic [ref=e522]:
+          - text: $59
+          - generic [ref=e523]: /month
+        - list [ref=e524]:
+          - listitem [ref=e525]:
+            - img [ref=e526]
+            - text: Unlimited simultaneous destinations
+          - listitem [ref=e528]:
+            - img [ref=e529]
+            - text: Unlimited local device streaming
+          - listitem [ref=e531]:
+            - img [ref=e532]
+            - text: 50 hours cloud VM streaming
+          - listitem [ref=e534]:
+            - img [ref=e535]
+            - text: 4K streaming quality
+          - listitem [ref=e537]:
+            - img [ref=e538]
+            - text: No watermark
+          - listitem [ref=e540]:
+            - img [ref=e541]
+            - text: Maximum Scream customization
+        - button "Get Started" [ref=e543]
+  - generic [ref=e545]:
+    - generic [ref=e546]:
+      - heading "Loved by Screamers" [level=2] [ref=e547]
+      - paragraph [ref=e548]: Join thousands of content creators making their streams unforgettable.
+    - generic [ref=e549]:
+      - generic [ref=e550]:
+        - generic [ref=e551]:
+          - img [ref=e552]
+          - img [ref=e554]
+          - img [ref=e556]
+          - img [ref=e558]
+          - img [ref=e560]
+        - paragraph [ref=e562]: "\"Chat Screamer is INSANE! My viewers go crazy trying to trigger the Maximum Scream. Donations went up 300%!\""
+        - generic [ref=e564]:
+          - generic [ref=e565]: Alex Gaming
+          - generic [ref=e566]: Twitch Partner
+      - generic [ref=e567]:
+        - generic [ref=e568]:
+          - img [ref=e569]
+          - img [ref=e571]
+          - img [ref=e573]
+          - img [ref=e575]
+          - img [ref=e577]
+        - paragraph [ref=e579]: "\"Zero bandwidth streaming changed everything. I was dropping frames before, now it's crystal clear 4K every time.\""
+        - generic [ref=e581]:
+          - generic [ref=e582]: Sarah Creates
+          - generic [ref=e583]: YouTube Creator
+      - generic [ref=e584]:
+        - generic [ref=e585]:
+          - img [ref=e586]
+          - img [ref=e588]
+          - img [ref=e590]
+          - img [ref=e592]
+          - img [ref=e594]
+        - paragraph [ref=e596]: "\"Won the leaderboard twice now! That free month of Pro paid for itself with the exposure I got.\""
+        - generic [ref=e598]:
+          - generic [ref=e599]: Mike Productions
+          - generic [ref=e600]: Event Streamer
+  - generic [ref=e602]:
+    - generic [ref=e603]:
+      - generic [ref=e604]:
+        - img [ref=e605]
+        - text: Google Cloud Ready
+      - heading "Deployment Ready out of Houston, TX" [level=2] [ref=e608]
+      - paragraph [ref=e609]: Cloud resources stay linked and validated so you can focus on production testing—no guessing whether the VM or database connections are live.
+      - generic [ref=e610]:
+        - generic [ref=e611]:
+          - img [ref=e612]
+          - text: Copyright 2025
+        - generic [ref=e614]:
+          - img [ref=e615]
+          - text: Based in Houston, TX
+    - generic [ref=e618]:
+      - generic [ref=e619]:
+        - generic [ref=e620]:
+          - generic [ref=e621]:
+            - img [ref=e623]
+            - generic [ref=e633]:
+              - heading "Google Cloud Link" [level=3] [ref=e634]
+              - paragraph [ref=e635]: Project wiring & IAM verified.
+          - generic [ref=e636]:
+            - img [ref=e637]
+            - text: Linked
+        - list [ref=e640]:
+          - listitem [ref=e641]: Service accounts scoped for streaming and storage access.
+          - listitem [ref=e642]: Audit logging stays on for every rollout checkpoint.
+      - generic [ref=e643]:
+        - generic [ref=e644]:
+          - generic [ref=e645]:
+            - img [ref=e647]
+            - generic [ref=e650]:
+              - heading "Compute Engine VM" [level=3] [ref=e651]
+              - paragraph [ref=e652]: Provisioned and warmed.
+          - generic [ref=e653]:
+            - img [ref=e654]
+            - text: Ready
+        - list [ref=e657]:
+          - listitem [ref=e658]: Streaming image baked with health checks passing.
+          - listitem [ref=e659]: Ingress locked to studio services for secure testing.
+      - generic [ref=e660]:
+        - generic [ref=e661]:
+          - generic [ref=e662]:
+            - img [ref=e664]
+            - generic [ref=e668]:
+              - heading "Database Links" [level=3] [ref=e669]
+              - paragraph [ref=e670]: Read/write paths mapped.
+          - generic [ref=e671]:
+            - img [ref=e672]
+            - text: Live
+        - list [ref=e675]:
+          - listitem [ref=e676]: Backend API and SQL endpoints reachable from the VPC.
+          - listitem [ref=e677]: Staging data paths pinned for end-to-end QA runs.
+  - generic [ref=e679]:
+    - heading "Ready to Make SomeNoise?" [level=2] [ref=e680]
+    - paragraph [ref=e681]: Join thousands of creators using ChatScream to build unforgettable streaming experiences. Start free - no credit card required.
+    - button "Start Screaming Now" [ref=e682]:
+      - img [ref=e683]
+      - text: Start Screaming Now
+      - img [ref=e686]
+  - contentinfo [ref=e688]:
+    - generic [ref=e689]:
+      - generic [ref=e690]:
+        - generic [ref=e691]:
+          - generic [ref=e692]:
+            - img [ref=e694]
+            - generic [ref=e697]: ChatScream
+          - paragraph [ref=e698]: Stream Without Limits. Scream for Attention. Cloud-powered streaming with zero bandwidth usage.
+        - generic [ref=e699]:
+          - heading "Product" [level=4] [ref=e700]
+          - list [ref=e701]:
+            - listitem [ref=e702]:
+              - link "Cloud Power" [ref=e703] [cursor=pointer]:
+                - /url: "#cloud-power"
+            - listitem [ref=e704]:
+              - link "Chat Screamer" [ref=e705] [cursor=pointer]:
+                - /url: "#chat-screamer"
+            - listitem [ref=e706]:
+              - link "Leaderboard" [ref=e707] [cursor=pointer]:
+                - /url: "#leaderboard"
+            - listitem [ref=e708]:
+              - link "Pricing" [ref=e709] [cursor=pointer]:
+                - /url: "#pricing"
+        - generic [ref=e710]:
+          - heading "Company" [level=4] [ref=e711]
+          - list [ref=e712]:
+            - listitem [ref=e713]:
+              - link "About" [ref=e714] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=e715]:
+              - link "Blog" [ref=e716] [cursor=pointer]:
+                - /url: /blog
+            - listitem [ref=e717]:
+              - link "Careers" [ref=e718] [cursor=pointer]:
+                - /url: /careers
+            - listitem [ref=e719]:
+              - link "Contact" [ref=e720] [cursor=pointer]:
+                - /url: /contact
+        - generic [ref=e721]:
+          - heading "Legal" [level=4] [ref=e722]
+          - list [ref=e723]:
+            - listitem [ref=e724]:
+              - link "Privacy Policy" [ref=e725] [cursor=pointer]:
+                - /url: /privacy-policy
+            - listitem [ref=e726]:
+              - link "Terms of Service" [ref=e727] [cursor=pointer]:
+                - /url: /terms
+            - listitem [ref=e728]:
+              - link "Cookie Policy" [ref=e729] [cursor=pointer]:
+                - /url: /cookie-policy
+      - generic [ref=e730]:
+        - paragraph [ref=e731]: © 2025 ChatScream. Based in Houston, TX. All rights reserved.
+        - generic [ref=e732]:
+          - link [ref=e733] [cursor=pointer]:
+            - /url: https://www.youtube.com
+            - img [ref=e734]
+          - link [ref=e737] [cursor=pointer]:
+            - /url: https://www.facebook.com
+            - img [ref=e738]
+          - link [ref=e740] [cursor=pointer]:
+            - /url: https://www.twitch.tv
+            - img [ref=e741]
+```
