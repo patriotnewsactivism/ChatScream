@@ -18,18 +18,18 @@ This stack deploys FFmpeg-ready streaming workers on AWS with autoscaling.
 
 ## Quick Start
 
-```bash
-export AWS_REGION=us-east-1
-export VPC_ID=vpc-xxxxxxxx
-export SUBNET_IDS=subnet-aaaaaaa,subnet-bbbbbbb
-export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
-export INSTANCE_TYPE=c7g.large
-export MIN_SIZE=0
-export DESIRED_CAPACITY=0
-export MAX_SIZE=20
+Create your account config once:
 
+```bash
+cp infrastructure/aws/.env.aws.example infrastructure/aws/.env.aws
+# edit values for your account
+```
+
+```bash
 ./infrastructure/aws/deploy-stream-fleet.sh
 ```
+
+`deploy-stream-fleet.sh` automatically loads `infrastructure/aws/.env.aws`.
 
 After deploy, the script prints:
 
