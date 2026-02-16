@@ -12,22 +12,22 @@ describe('aiClient', () => {
     vi.unstubAllGlobals();
   });
 
-  it('builds the default functions URL from project id', async () => {
+  it('builds the default AI URL from API base URL', async () => {
     vi.doMock('../env', () => ({
       clientEnv: {
-        VITE_FIREBASE_PROJECT_ID: 'demo-project',
+        VITE_API_BASE_URL: 'https://api.demo.test',
         VITE_FUNCTIONS_BASE_URL: undefined,
       },
     }));
 
     const { getFunctionsBaseUrl } = await loadModule();
-    expect(getFunctionsBaseUrl()).toBe('https://us-central1-demo-project.cloudfunctions.net');
+    expect(getFunctionsBaseUrl()).toBe('https://api.demo.test');
   });
 
-  it('uses override base URL when provided', async () => {
+  it('uses functions override base URL when provided', async () => {
     vi.doMock('../env', () => ({
       clientEnv: {
-        VITE_FIREBASE_PROJECT_ID: 'demo-project',
+        VITE_API_BASE_URL: 'https://api.demo.test',
         VITE_FUNCTIONS_BASE_URL: 'https://override.net',
       },
     }));
@@ -39,7 +39,7 @@ describe('aiClient', () => {
   it('posts with auth header', async () => {
     vi.doMock('../env', () => ({
       clientEnv: {
-        VITE_FIREBASE_PROJECT_ID: 'demo-project',
+        VITE_API_BASE_URL: 'https://api.demo.test',
         VITE_FUNCTIONS_BASE_URL: undefined,
       },
     }));
@@ -53,7 +53,7 @@ describe('aiClient', () => {
     await requestViralPackage('token-123', 'topic', ['youtube']);
 
     expect(fetch).toHaveBeenCalledWith(
-      'https://us-central1-demo-project.cloudfunctions.net/generateViralContent',
+      'https://api.demo.test/generateViralContent',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
@@ -64,7 +64,7 @@ describe('aiClient', () => {
   it('surfaces HTTP errors with status codes', async () => {
     vi.doMock('../env', () => ({
       clientEnv: {
-        VITE_FIREBASE_PROJECT_ID: 'demo-project',
+        VITE_API_BASE_URL: 'https://api.demo.test',
         VITE_FUNCTIONS_BASE_URL: undefined,
       },
     }));

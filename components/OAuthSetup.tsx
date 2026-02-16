@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getOAuthPublicConfig, setOAuthPublicConfig } from '../services/backend';
 import {
   Youtube,
   Facebook,
@@ -133,15 +132,24 @@ const OAuthSetup: React.FC = () => {
 
   const loadConfig = async () => {
     try {
-      if (!db) {
-        setError('Firebase is not configured for OAuth management.');
-        return;
-      }
-      const docRef = doc(db, 'config', 'oauth');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setConfig(docSnap.data() as OAuthConfig);
-      }
+      const oauth = await getOAuthPublicConfig();
+      setConfig({
+        youtube: {
+          clientId: oauth.youtubeClientId || '',
+          redirectUri: oauth.redirectUriBase || DEFAULT_REDIRECT_URI,
+          enabled: Boolean(oauth.youtubeClientId),
+        },
+        facebook: {
+          appId: oauth.facebookAppId || '',
+          redirectUri: oauth.redirectUriBase || DEFAULT_REDIRECT_URI,
+          enabled: Boolean(oauth.facebookAppId),
+        },
+        twitch: {
+          clientId: oauth.twitchClientId || '',
+          redirectUri: oauth.redirectUriBase || DEFAULT_REDIRECT_URI,
+          enabled: Boolean(oauth.twitchClientId),
+        },
+      });
     } catch (err) {
       console.error('Failed to load OAuth config:', err);
       setError('Failed to load OAuth configuration');
@@ -156,18 +164,21 @@ const OAuthSetup: React.FC = () => {
       return;
     }
 
-    if (!db) {
-      setError('Firebase is not configured for OAuth management.');
-      return;
-    }
-
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const docRef = doc(db, 'config', 'oauth');
-      await setDoc(docRef, config, { merge: true });
+      await setOAuthPublicConfig({
+        youtubeClientId: config.youtube?.clientId || '',
+        facebookAppId: config.facebook?.appId || '',
+        twitchClientId: config.twitch?.clientId || '',
+        redirectUriBase:
+          config.youtube?.redirectUri ||
+          config.facebook?.redirectUri ||
+          config.twitch?.redirectUri ||
+          DEFAULT_REDIRECT_URI,
+      });
       setSuccess('OAuth configuration saved successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -453,16 +464,16 @@ const OAuthSetup: React.FC = () => {
           <div>
             <h4 className="font-semibold text-amber-300">Server-Side Configuration Required</h4>
             <p className="text-sm text-amber-200/80 mt-1">
-              Client Secrets must be configured in Firebase Functions environment variables for
-              security. Run these commands in your terminal:
+              Client secrets must be configured in your backend secret manager. Example environment
+              variables:
             </p>
             <pre className="mt-3 p-3 bg-dark-900 rounded-lg text-xs text-gray-300 overflow-x-auto">
-              {`firebase functions:secrets:set YOUTUBE_CLIENT_ID
-firebase functions:secrets:set YOUTUBE_CLIENT_SECRET
-firebase functions:secrets:set FACEBOOK_APP_ID
-firebase functions:secrets:set FACEBOOK_APP_SECRET
-firebase functions:secrets:set TWITCH_CLIENT_ID
-firebase functions:secrets:set TWITCH_CLIENT_SECRET`}
+              {`YOUTUBE_CLIENT_ID=
+YOUTUBE_CLIENT_SECRET=
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+TWITCH_CLIENT_ID=
+TWITCH_CLIENT_SECRET=`}
             </pre>
           </div>
         </div>

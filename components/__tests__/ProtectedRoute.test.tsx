@@ -16,64 +16,88 @@ describe('ProtectedRoute', () => {
   });
 
   it('shows loader when session is still loading', () => {
-    mockUseAuth.mockReturnValue({ user: null, loading: true, configError: null, error: null, clearError: vi.fn() });
+    mockUseAuth.mockReturnValue({
+      user: null,
+      loading: true,
+      configError: null,
+      error: null,
+      clearError: vi.fn(),
+    });
 
     render(
       <MemoryRouter>
         <ProtectedRoute>
           <div>Secret</div>
         </ProtectedRoute>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('Checking your session...')).toBeInTheDocument();
   });
 
   it('renders config error state', () => {
-    mockUseAuth.mockReturnValue({ user: null, loading: false, configError: 'Missing Firebase config', error: null, clearError: vi.fn() });
+    mockUseAuth.mockReturnValue({
+      user: null,
+      loading: false,
+      configError: 'Missing backend config',
+      error: null,
+      clearError: vi.fn(),
+    });
 
     render(
       <MemoryRouter>
         <ProtectedRoute>
           <div>Secret</div>
         </ProtectedRoute>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(screen.getByText('Missing Firebase config')).toBeInTheDocument();
+    expect(screen.getByText('Missing backend config')).toBeInTheDocument();
   });
 
   it('redirects to login when no user is present', () => {
-    mockUseAuth.mockReturnValue({ user: null, loading: false, configError: null, error: null, clearError: vi.fn() });
+    mockUseAuth.mockReturnValue({
+      user: null,
+      loading: false,
+      configError: null,
+      error: null,
+      clearError: vi.fn(),
+    });
 
     render(
       <MemoryRouter initialEntries={[{ pathname: '/private' }]} initialIndex={0}>
         <Routes>
           <Route
             path="/private"
-            element={(
+            element={
               <ProtectedRoute>
                 <div>Secret</div>
               </ProtectedRoute>
-            )}
+            }
           />
           <Route path="/login" element={<div>Login Page</div>} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('Login Page')).toBeInTheDocument();
   });
 
   it('renders children when authenticated', () => {
-    mockUseAuth.mockReturnValue({ user: { uid: '123' }, loading: false, configError: null, error: null, clearError: vi.fn() });
+    mockUseAuth.mockReturnValue({
+      user: { uid: '123' },
+      loading: false,
+      configError: null,
+      error: null,
+      clearError: vi.fn(),
+    });
 
     render(
       <MemoryRouter>
         <ProtectedRoute>
           <div>Secret Content</div>
         </ProtectedRoute>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('Secret Content')).toBeInTheDocument();

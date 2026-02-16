@@ -283,7 +283,7 @@ export class StreamEnforcementService {
       this.auditLogs.shift();
     }
 
-    // In production, this would also write to Firestore for permanent audit trail
+    // In production, this would also write to the backend database for permanent audit trail
     console.log('📝 Enforcement logged:', {
       action: log.action,
       result: log.result,

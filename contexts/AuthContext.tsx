@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { IdTokenResult, User } from 'firebase/auth';
 import {
+  AuthTokenResult,
+  AuthUser,
   onIdTokenChange,
   signUpWithEmail,
   signInWithEmail,
@@ -17,17 +18,22 @@ import {
   UserProfile,
   applyLocalAccessOverrides,
   ensureAffiliateForSignedInUser,
-  firebaseConfigError,
-} from '../services/firebase';
+  backendConfigError,
+} from '../services/backend';
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   userProfile: UserProfile | null;
   sessionToken: string | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  signUp: (email: string, password: string, displayName: string, referralCode?: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+    referralCode?: string,
+  ) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInGoogle: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
   signInFacebook: (referralCode?: string) => Promise<{ didRedirect: boolean }>;
@@ -57,13 +63,13 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tokenRefreshTimeout = useRef<number | undefined>(undefined);
-  const configError = firebaseConfigError;
+  const configError = backendConfigError;
 
   const clearScheduledRefresh = () => {
     if (tokenRefreshTimeout.current) {
@@ -88,14 +94,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     let isMounted = true;
 
-    const scheduleTokenRefresh = (tokenResult: IdTokenResult, firebaseUser: User) => {
+    const scheduleTokenRefresh = (tokenResult: AuthTokenResult, backendUser: AuthUser) => {
       clearScheduledRefresh();
       const expirationMs = new Date(tokenResult.expirationTime).getTime();
       const refreshInMs = Math.max(expirationMs - Date.now() - 5 * 60 * 1000, 5 * 60 * 1000);
 
       tokenRefreshTimeout.current = window.setTimeout(async () => {
         try {
-          const nextToken = await firebaseUser.getIdToken(true);
+          const nextToken = await backendUser.getIdToken(true);
           if (!isMounted) return;
           setSessionToken(nextToken);
         } catch (err: any) {
@@ -117,13 +123,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     })();
 
-    const unsubscribe = onIdTokenChange(async (firebaseUser) => {
+    const unsubscribe = onIdTokenChange(async (backendUser) => {
       setLoading(true);
-      setUser(firebaseUser);
+      setUser(backendUser);
       setSessionToken(null);
       clearScheduledRefresh();
 
-      if (firebaseUser) {
+      if (backendUser) {
         try {
           try {
             await syncAccess();
@@ -131,14 +137,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.warn('Access sync skipped:', err);
           }
 
-          const tokenResult = await firebaseUser.getIdTokenResult(true);
+          const tokenResult = await backendUser.getIdTokenResult(true);
           if (!isMounted) return;
           setSessionToken(tokenResult.token);
 
-          const profile = await getUserProfile(firebaseUser.uid);
-          setUserProfile(applyLocalAccessOverrides(profile, firebaseUser.email));
+          const profile = await getUserProfile(backendUser.uid);
+          setUserProfile(applyLocalAccessOverrides(profile, backendUser.email));
           ensureAffiliateForSignedInUser().catch(() => {});
-          scheduleTokenRefresh(tokenResult, firebaseUser);
+          scheduleTokenRefresh(tokenResult, backendUser);
         } catch (err: any) {
           if (!isMounted) return;
           const message = getErrorMessage(err?.code);
@@ -164,7 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     email: string,
     password: string,
     displayName: string,
-    referralCode?: string
+    referralCode?: string,
   ): Promise<void> => {
     setError(null);
     setLoading(true);
@@ -354,7 +360,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Helper function to convert Firebase error codes to user-friendly messages
+// Helper function to convert auth error codes to user-friendly messages
 function getErrorMessage(errorCode?: string): string {
   switch (errorCode) {
     case 'auth/email-already-in-use':

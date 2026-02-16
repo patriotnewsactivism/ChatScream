@@ -1,8 +1,8 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { AuthProvider, useAuth } from '../AuthContext';
-import type { User } from 'firebase/auth';
-import { logOut } from '../../services/firebase';
+import type { AuthUser } from '../../services/backend';
+import { logOut } from '../../services/backend';
 
 const mockUser = {
   uid: 'user-123',
@@ -10,14 +10,9 @@ const mockUser = {
   getIdTokenResult: vi.fn(async () => ({
     token: 'initial-token',
     expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    authTime: '',
-    issuedAtTime: '',
-    signInProvider: '',
-    signInSecondFactor: null,
-    claims: {},
   })),
   getIdToken: vi.fn(async () => 'refreshed-token'),
-} as unknown as Partial<User>;
+} as unknown as Partial<AuthUser>;
 
 const mockProfile = {
   uid: 'user-123',
@@ -29,9 +24,9 @@ const mockProfile = {
   settings: { emailNotifications: true, marketingEmails: true },
 };
 
-let tokenChangeHandler: ((user: User | null) => void) | null = null;
+let tokenChangeHandler: ((user: AuthUser | null) => void) | null = null;
 
-vi.mock('../../services/firebase', () => ({
+vi.mock('../../services/backend', () => ({
   signUpWithEmail: vi.fn(),
   signInWithEmail: vi.fn(),
   signInWithGoogle: vi.fn(),
@@ -46,10 +41,10 @@ vi.mock('../../services/firebase', () => ({
   getUserProfile: vi.fn(async () => mockProfile),
   applyLocalAccessOverrides: vi.fn((profile) => profile),
   ensureAffiliateForSignedInUser: vi.fn(async () => {}),
-  firebaseConfigError: null,
-  onIdTokenChange: vi.fn((cb: (user: User | null) => void) => {
+  backendConfigError: null,
+  onIdTokenChange: vi.fn((cb: (user: AuthUser | null) => void) => {
     tokenChangeHandler = cb;
-    cb(mockUser as User);
+    cb(mockUser as AuthUser);
     return () => {
       tokenChangeHandler = null;
     };

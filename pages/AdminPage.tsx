@@ -13,7 +13,7 @@ import {
   type AccessListConfig,
   getOAuthPublicConfig,
   setOAuthPublicConfig,
-} from '../services/firebase';
+} from '../services/backend';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -23,8 +23,8 @@ const parseEmailLines = (value: string) =>
       value
         .split(/\r?\n/)
         .map((line) => normalizeEmail(line))
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    ),
   );
 
 const AdminPage: React.FC = () => {
@@ -46,7 +46,9 @@ const AdminPage: React.FC = () => {
 
   const [lookupEmail, setLookupEmail] = useState('');
   const [lookupStatus, setLookupStatus] = useState<string | null>(null);
-  const [lookupResults, setLookupResults] = useState<Array<{ uid: string; email: string; displayName: string; plan: string; affiliateCode: string }>>([]);
+  const [lookupResults, setLookupResults] = useState<
+    Array<{ uid: string; email: string; displayName: string; plan: string; affiliateCode: string }>
+  >([]);
 
   const [myAffiliateCode, setMyAffiliateCode] = useState<string>('');
   const referralLink = useMemo(() => {
@@ -168,7 +170,7 @@ const AdminPage: React.FC = () => {
           displayName: u.displayName,
           plan: u.subscription?.plan || 'free',
           affiliateCode: u.affiliate?.code || '',
-        }))
+        })),
       );
     } catch (err: any) {
       setLookupStatus(err?.message || 'Lookup failed.');
@@ -178,7 +180,12 @@ const AdminPage: React.FC = () => {
   const handleGrantBeta = async (uid: string) => {
     setLookupStatus('Applying beta access…');
     try {
-      await setUserAccessOverrides(uid, { role: 'beta_tester', betaTester: true, plan: 'enterprise', status: 'active' });
+      await setUserAccessOverrides(uid, {
+        role: 'beta_tester',
+        betaTester: true,
+        plan: 'enterprise',
+        status: 'active',
+      });
       setLookupStatus('Beta access applied.');
     } catch (err: any) {
       setLookupStatus(err?.message || 'Failed to apply beta access.');
@@ -188,7 +195,12 @@ const AdminPage: React.FC = () => {
   const handleGrantAdmin = async (uid: string) => {
     setLookupStatus('Applying admin access…');
     try {
-      await setUserAccessOverrides(uid, { role: 'admin', betaTester: true, plan: 'enterprise', status: 'active' });
+      await setUserAccessOverrides(uid, {
+        role: 'admin',
+        betaTester: true,
+        plan: 'enterprise',
+        status: 'active',
+      });
       setLookupStatus('Admin access applied.');
     } catch (err: any) {
       setLookupStatus(err?.message || 'Failed to apply admin access.');
@@ -202,7 +214,9 @@ const AdminPage: React.FC = () => {
       <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-dark-800 border border-gray-800 rounded-2xl p-6">
           <h1 className="text-xl font-bold mb-2">Admin access required</h1>
-          <p className="text-gray-400 text-sm mb-4">This page is only available to the master/admin account.</p>
+          <p className="text-gray-400 text-sm mb-4">
+            This page is only available to the master/admin account.
+          </p>
           <button
             onClick={() => navigate('/dashboard')}
             className="w-full px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 font-semibold"
@@ -262,12 +276,14 @@ const AdminPage: React.FC = () => {
                   <h2 className="font-semibold">OAuth IDs (Public)</h2>
                 </div>
                 <p className="text-sm text-gray-400">
-                  These are safe to store publicly and are required to start the OAuth popup (YouTube/Facebook/Twitch).
-                  After saving, retry “Connect” in Studio → Destinations.
+                  These are safe to store publicly and are required to start the OAuth popup
+                  (YouTube/Facebook/Twitch). After saving, retry “Connect” in Studio → Destinations.
                 </p>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">YouTube Client ID</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    YouTube Client ID
+                  </label>
                   <input
                     className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
                     value={oauthYouTubeClientId}
@@ -277,7 +293,9 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Facebook App ID</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Facebook App ID
+                  </label>
                   <input
                     className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
                     value={oauthFacebookAppId}
@@ -287,7 +305,9 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Twitch Client ID</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Twitch Client ID
+                  </label>
                   <input
                     className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
                     value={oauthTwitchClientId}
@@ -297,7 +317,9 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Redirect Base (optional)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Redirect Base (optional)
+                  </label>
                   <input
                     className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
                     value={oauthRedirectBase}
@@ -305,7 +327,11 @@ const AdminPage: React.FC = () => {
                     placeholder="https://wtp-apps.web.app/oauth/callback"
                   />
                   <p className="text-[11px] text-gray-500">
-                    Leave blank to use this site’s default: {typeof window === 'undefined' ? '' : `${window.location.origin}/oauth/callback`}.
+                    Leave blank to use this site’s default:{' '}
+                    {typeof window === 'undefined'
+                      ? ''
+                      : `${window.location.origin}/oauth/callback`}
+                    .
                   </p>
                 </div>
 
@@ -327,11 +353,13 @@ const AdminPage: React.FC = () => {
                   <h2 className="font-semibold">Access Lists</h2>
                 </div>
                 <p className="text-sm text-gray-400">
-                  Store master/admin and beta tester email allowlists in Firestore (`config/access`).
+                  Store master/admin and beta tester email allowlists in backend config (`access`).
                 </p>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Admins (one per line)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Admins (one per line)
+                  </label>
                   <textarea
                     className="w-full min-h-[120px] bg-dark-900 border border-gray-700 rounded-lg p-3 text-sm text-white"
                     value={adminsText}
@@ -341,7 +369,9 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Beta Testers (one per line)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Beta Testers (one per line)
+                  </label>
                   <textarea
                     className="w-full min-h-[160px] bg-dark-900 border border-gray-700 rounded-lg p-3 text-sm text-white"
                     value={betaText}
@@ -395,10 +425,15 @@ const AdminPage: React.FC = () => {
 
                 <div className="space-y-2">
                   {lookupResults.map((r) => (
-                    <div key={r.uid} className="p-3 rounded-lg border border-gray-700 bg-dark-900 space-y-2">
+                    <div
+                      key={r.uid}
+                      className="p-3 rounded-lg border border-gray-700 bg-dark-900 space-y-2"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold truncate">{r.displayName || 'User'}</div>
+                          <div className="text-sm font-semibold truncate">
+                            {r.displayName || 'User'}
+                          </div>
                           <div className="text-xs text-gray-400 truncate">{r.email}</div>
                         </div>
                         <div className="text-xs text-gray-400 shrink-0">{r.plan} plan</div>
@@ -420,7 +455,9 @@ const AdminPage: React.FC = () => {
                           onClick={() => handleCopy(r.uid)}
                           className="px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold hover:bg-gray-700"
                         >
-                          <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy UID</span>
+                          <span className="inline-flex items-center gap-1">
+                            <Copy size={14} /> Copy UID
+                          </span>
                         </button>
                         {r.affiliateCode && (
                           <>
@@ -428,16 +465,23 @@ const AdminPage: React.FC = () => {
                               onClick={() => handleCopy(r.affiliateCode)}
                               className="px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold hover:bg-gray-700"
                             >
-                              <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy Code</span>
+                              <span className="inline-flex items-center gap-1">
+                                <Copy size={14} /> Copy Code
+                              </span>
                             </button>
                             <button
                               onClick={() => {
-                                const origin = typeof window === 'undefined' ? '' : window.location.origin;
-                                handleCopy(`${origin}/signup?ref=${encodeURIComponent(r.affiliateCode)}`);
+                                const origin =
+                                  typeof window === 'undefined' ? '' : window.location.origin;
+                                handleCopy(
+                                  `${origin}/signup?ref=${encodeURIComponent(r.affiliateCode)}`,
+                                );
                               }}
                               className="px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold hover:bg-gray-700"
                             >
-                              <span className="inline-flex items-center gap-1"><Copy size={14} /> Copy Link</span>
+                              <span className="inline-flex items-center gap-1">
+                                <Copy size={14} /> Copy Link
+                              </span>
                             </button>
                           </>
                         )}
@@ -455,7 +499,9 @@ const AdminPage: React.FC = () => {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Affiliate Code</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">
+                    Affiliate Code
+                  </label>
                   <div className="mt-2 flex items-center gap-2">
                     <input
                       className="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"

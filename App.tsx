@@ -409,10 +409,12 @@ const App = () => {
 
     if (isPlayingVideo) {
       try {
-        // @ts-ignore - captureStream is available on HTMLMediaElement
-        const videoStream = videoElement.captureStream
-          ? videoElement.captureStream()
-          : videoElement.mozCaptureStream();
+        const mediaVideo = videoElement as HTMLVideoElement & {
+          captureStream?: () => MediaStream;
+          mozCaptureStream?: () => MediaStream;
+        };
+        const videoStream =
+          mediaVideo.captureStream?.() || mediaVideo.mozCaptureStream?.() || new MediaStream();
 
         if (videoStream.getAudioTracks().length > 0) {
           const videoSource = audioContextRef.current.createMediaStreamSource(videoStream);

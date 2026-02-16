@@ -2,17 +2,15 @@ import { clientEnv } from './env';
 
 type HttpMethod = 'POST';
 
-const FUNCTIONS_REGION = 'us-central1';
-
 const buildBaseUrl = (): string => {
   const override = clientEnv.VITE_FUNCTIONS_BASE_URL;
   if (override) return override;
 
-  const projectId = clientEnv.VITE_FIREBASE_PROJECT_ID;
-  if (!projectId) {
-    throw new Error('VITE_FIREBASE_PROJECT_ID is required for AI requests');
+  if (clientEnv.VITE_API_BASE_URL) {
+    return clientEnv.VITE_API_BASE_URL;
   }
-  return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`;
+
+  return '';
 };
 
 const jsonHeaders = (authToken: string) => ({
