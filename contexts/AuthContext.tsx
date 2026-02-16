@@ -364,6 +364,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 // Helper function to convert auth errors to user-friendly messages.
 function getErrorMessage(error?: unknown): string {
   if (error instanceof ApiRequestError) {
+    const message = String(error.message || '').trim();
+    const isNotFoundEdge = /NOT_FOUND/i.test(message) || error.status === 404;
+    if (isNotFoundEdge) {
+      return 'Auth API route not found. Set VITE_API_BASE_URL to your backend API domain (or deploy the Node API at the same origin).';
+    }
+    if (error.status >= 500) {
+      return 'Backend API is currently unavailable. Please try again in a moment.';
+    }
     return error.message || 'Request failed. Please try again.';
   }
   if (error instanceof Error) {
