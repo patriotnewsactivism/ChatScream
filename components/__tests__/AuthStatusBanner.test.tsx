@@ -23,11 +23,15 @@ describe('AuthStatusBanner', () => {
   });
 
   it('shows config error without dismiss control', () => {
-    mockUseAuth.mockReturnValue({ error: null, configError: 'Missing Firebase config', clearError: vi.fn() });
+    mockUseAuth.mockReturnValue({
+      error: null,
+      configError: 'Missing backend config',
+      clearError: vi.fn(),
+    });
 
     render(<AuthStatusBanner />);
 
-    expect(screen.getByText('Missing Firebase config')).toBeInTheDocument();
+    expect(screen.getByText('Missing backend config')).toBeInTheDocument();
     expect(screen.queryByText(/Dismiss/i)).not.toBeInTheDocument();
   });
 

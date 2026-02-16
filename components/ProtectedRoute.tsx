@@ -31,7 +31,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           <AuthStatusBanner />
           <div className="rounded-xl border border-gray-800 bg-dark-800 p-6">
             <h2 className="text-lg font-semibold mb-2">Configuration issue</h2>
-            <p className="text-gray-400 text-sm">Update your Firebase environment variables and reload the page.</p>
+            <p className="text-gray-400 text-sm">
+              Update your backend/API environment variables and reload the page.
+            </p>
           </div>
         </div>
       </div>

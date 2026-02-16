@@ -1,8 +1,8 @@
 // OAuth Service for Social Platform Integration
 // Handles YouTube, Facebook, and Twitch OAuth flows
 
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { auth, db, getOAuthPublicConfig } from './firebase';
+import { buildApiUrl } from './apiClient';
+import { getCurrentSessionToken, getOAuthPublicConfig } from './backend';
 
 // Platform types
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
@@ -47,9 +47,14 @@ export interface OAuthState {
 
 const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
 
-let oauthPublicConfigCache: { value: Awaited<ReturnType<typeof getOAuthPublicConfig>>; loadedAt: number } | null = null;
+let oauthPublicConfigCache: {
+  value: Awaited<ReturnType<typeof getOAuthPublicConfig>>;
+  loadedAt: number;
+} | null = null;
 
-const readOAuthPublicConfigCached = async (): Promise<Awaited<ReturnType<typeof getOAuthPublicConfig>>> => {
+const readOAuthPublicConfigCached = async (): Promise<
+  Awaited<ReturnType<typeof getOAuthPublicConfig>>
+> => {
   const now = Date.now();
   if (oauthPublicConfigCache && now - oauthPublicConfigCache.loadedAt < 60_000) {
     return oauthPublicConfigCache.value;
@@ -57,6 +62,11 @@ const readOAuthPublicConfigCached = async (): Promise<Awaited<ReturnType<typeof 
   const value = await getOAuthPublicConfig();
   oauthPublicConfigCache = { value, loadedAt: now };
   return value;
+};
+
+const getAuthorizationHeader = (): string | null => {
+  const token = getCurrentSessionToken();
+  return token ? `Bearer ${token}` : null;
 };
 
 // Get OAuth configuration for each platform
@@ -78,9 +88,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'https://www.googleapis.com/auth/youtube.force-ssl',
           'https://www.googleapis.com/auth/youtube.readonly',
           'profile',
-          'email'
+          'email',
         ],
-        redirectUri: `${baseRedirectUri}?platform=youtube`
+        redirectUri: `${baseRedirectUri}?platform=youtube`,
       };
 
     case 'facebook':
@@ -94,9 +104,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'pages_show_list',
           'pages_read_engagement',
           'pages_manage_posts',
-          'publish_video'
+          'publish_video',
         ],
-        redirectUri: `${baseRedirectUri}?platform=facebook`
+        redirectUri: `${baseRedirectUri}?platform=facebook`,
       };
 
     case 'twitch':
@@ -108,9 +118,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'user:read:email',
           'channel:read:stream_key',
           'channel:manage:broadcast',
-          'channel:read:subscriptions'
+          'channel:read:subscriptions',
         ],
-        redirectUri: `${baseRedirectUri}?platform=twitch`
+        redirectUri: `${baseRedirectUri}?platform=twitch`,
       };
 
     default:
@@ -122,7 +132,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
 const generateNonce = (): string => {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
 // Create OAuth state and store it for verification
@@ -131,7 +141,7 @@ export const createOAuthState = (platform: OAuthPlatform, userId: string): strin
     platform,
     userId,
     timestamp: Date.now(),
-    nonce: generateNonce()
+    nonce: generateNonce(),
   };
 
   // Store state in localStorage so the OAuth popup window can verify it
@@ -178,7 +188,10 @@ export const verifyOAuthState = (stateParam: string): OAuthState | null => {
 };
 
 // Generate OAuth authorization URL
-export const getAuthorizationUrl = async (platform: OAuthPlatform, userId: string): Promise<string> => {
+export const getAuthorizationUrl = async (
+  platform: OAuthPlatform,
+  userId: string,
+): Promise<string> => {
   const config = await getOAuthConfig(platform);
   const state = createOAuthState(platform, userId);
 
@@ -189,7 +202,7 @@ export const getAuthorizationUrl = async (platform: OAuthPlatform, userId: strin
     scope: config.scopes.join(' '),
     state,
     access_type: 'offline', // For refresh tokens (YouTube/Google)
-    prompt: 'consent' // Force consent screen to get refresh token
+    prompt: 'consent', // Force consent screen to get refresh token
   });
 
   // Platform-specific parameters
@@ -203,26 +216,27 @@ export const getAuthorizationUrl = async (platform: OAuthPlatform, userId: strin
 // Exchange authorization code for tokens (via Cloud Function)
 export const exchangeCodeForTokens = async (
   platform: OAuthPlatform,
-  code: string
+  code: string,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const idToken = await auth?.currentUser?.getIdToken();
-    if (!idToken) {
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) {
       return { success: false, error: 'You must be signed in to connect accounts.' };
     }
 
     const redirectUri = (await getOAuthConfig(platform)).redirectUri;
-    const response = await fetch('/api/oauth/exchange', {
+    const response = await fetch(buildApiUrl('/api/oauth/exchange'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
+        Authorization: authHeader,
       },
+      credentials: 'include',
       body: JSON.stringify({
         platform,
         code,
-        redirectUri
-      })
+        redirectUri,
+      }),
     });
 
     if (!response.ok) {
@@ -239,23 +253,24 @@ export const exchangeCodeForTokens = async (
 
 // Refresh access token (via Cloud Function)
 export const refreshAccessToken = async (
-  platform: OAuthPlatform
+  platform: OAuthPlatform,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const idToken = await auth?.currentUser?.getIdToken();
-    if (!idToken) {
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) {
       return { success: false, error: 'You must be signed in to refresh tokens.' };
     }
 
-    const response = await fetch('/api/oauth/refresh', {
+    const response = await fetch(buildApiUrl('/api/oauth/refresh'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
+        Authorization: authHeader,
       },
+      credentials: 'include',
       body: JSON.stringify({
-        platform
-      })
+        platform,
+      }),
     });
 
     if (!response.ok) {
@@ -273,24 +288,34 @@ export const refreshAccessToken = async (
 // Disconnect platform account
 export const disconnectPlatform = async (
   platform: OAuthPlatform,
-  userId: string
+  userId: string,
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!db) {
-    return { success: false, error: 'Database not configured' };
-  }
-
   try {
-    // Remove tokens from user profile
-    await updateDoc(doc(db, 'users', userId), {
-      [`connectedPlatforms.${platform}`]: null
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) {
+      return { success: false, error: 'You must be signed in to disconnect accounts.' };
+    }
+
+    await fetch(buildApiUrl('/api/oauth/disconnect'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ platform, userId }),
     });
 
     // Optionally revoke tokens on the platform side
     try {
-      await fetch('/api/oauth/revoke', {
+      await fetch(buildApiUrl('/api/oauth/revoke'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, userId })
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ platform, userId }),
       });
     } catch {
       // Non-critical if revocation fails
@@ -305,45 +330,60 @@ export const disconnectPlatform = async (
 };
 
 // Get connected platforms for a user
-export const getConnectedPlatforms = async (userId: string): Promise<{
+export const getConnectedPlatforms = async (
+  userId: string,
+): Promise<{
   youtube?: ConnectedAccount;
   facebook?: ConnectedAccount;
   twitch?: ConnectedAccount;
 }> => {
-  if (!db) return {};
-
   try {
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) return {};
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) return {};
+    const response = await fetch(
+      buildApiUrl(`/api/oauth/platforms?userId=${encodeURIComponent(userId)}`),
+      {
+        method: 'GET',
+        headers: {
+          Authorization: authHeader,
+        },
+        credentials: 'include',
+      },
+    );
+    if (!response.ok) {
+      return {};
+    }
 
-    const data = userDoc.data();
+    const payload = (await response.json()) as Record<string, any>;
+    const data = (payload.platforms || payload.connectedPlatforms || {}) as Record<string, any>;
+    const connected = (data.connectedPlatforms || data) as Record<string, any>;
     const platforms: {
       youtube?: ConnectedAccount;
       facebook?: ConnectedAccount;
       twitch?: ConnectedAccount;
     } = {};
 
-    if (data.connectedPlatforms?.youtube) {
+    if (connected.youtube) {
       platforms.youtube = {
         platform: 'youtube',
-        ...data.connectedPlatforms.youtube,
-        expiresAt: data.connectedPlatforms.youtube.expiresAt?.toDate()
+        ...connected.youtube,
+        expiresAt: new Date(connected.youtube.expiresAt || Date.now()),
       };
     }
 
-    if (data.connectedPlatforms?.facebook) {
+    if (connected.facebook) {
       platforms.facebook = {
         platform: 'facebook',
-        ...data.connectedPlatforms.facebook,
-        expiresAt: data.connectedPlatforms.facebook.expiresAt?.toDate()
+        ...connected.facebook,
+        expiresAt: new Date(connected.facebook.expiresAt || Date.now()),
       };
     }
 
-    if (data.connectedPlatforms?.twitch) {
+    if (connected.twitch) {
       platforms.twitch = {
         platform: 'twitch',
-        ...data.connectedPlatforms.twitch,
-        expiresAt: data.connectedPlatforms.twitch.expiresAt?.toDate()
+        ...connected.twitch,
+        expiresAt: new Date(connected.twitch.expiresAt || Date.now()),
       };
     }
 
@@ -363,18 +403,19 @@ export const isTokenExpired = (expiresAt: Date): boolean => {
 // Get stream key for a platform (fetches from platform API via Cloud Function)
 export const getStreamKey = async (
   platform: OAuthPlatform,
-  channelId?: string
+  channelId?: string,
 ): Promise<{ streamKey?: string; ingestUrl?: string; error?: string }> => {
   try {
-    const idToken = await auth?.currentUser?.getIdToken();
-    if (!idToken) {
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) {
       return { error: 'You must be signed in to retrieve stream info.' };
     }
 
-    const response = await fetch('/api/oauth/stream-key', {
+    const response = await fetch(buildApiUrl('/api/oauth/stream-key'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ platform, channelId })
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      credentials: 'include',
+      body: JSON.stringify({ platform, channelId }),
     });
 
     if (!response.ok) {
@@ -385,7 +426,7 @@ export const getStreamKey = async (
     const data = await response.json();
     return {
       streamKey: data.streamKey,
-      ingestUrl: data.ingestUrl
+      ingestUrl: data.ingestUrl,
     };
   } catch (error) {
     console.error('Get stream key error:', error);
@@ -395,18 +436,19 @@ export const getStreamKey = async (
 
 // Get user's channels/pages for platforms that support multiple destinations
 export const getChannels = async (
-  platform: OAuthPlatform
+  platform: OAuthPlatform,
 ): Promise<{ channels: AccountChannel[]; error?: string }> => {
   try {
-    const idToken = await auth?.currentUser?.getIdToken();
-    if (!idToken) {
+    const authHeader = getAuthorizationHeader();
+    if (!authHeader) {
       return { channels: [], error: 'You must be signed in to retrieve channels.' };
     }
 
-    const response = await fetch('/api/oauth/channels', {
+    const response = await fetch(buildApiUrl('/api/oauth/channels'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ platform })
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      credentials: 'include',
+      body: JSON.stringify({ platform }),
     });
 
     if (!response.ok) {
@@ -429,7 +471,9 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
 
     if (!config.clientId) {
       console.error(`${platform} OAuth not configured. Missing client ID.`);
-      alert(`${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client id.`);
+      alert(
+        `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client id.`,
+      );
       return;
     }
 
@@ -444,7 +488,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
     const popup = window.open(
       authUrl,
       `${platform}_oauth`,
-      `width=${width},height=${height},left=${left},top=${top},popup=yes`
+      `width=${width},height=${height},left=${left},top=${top},popup=yes`,
     );
 
     if (popup) {
@@ -455,7 +499,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
 
 // Handle OAuth callback (called from callback page)
 export const handleOAuthCallback = async (
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ): Promise<{ success: boolean; platform?: OAuthPlatform; error?: string }> => {
   const code = searchParams.get('code');
   const state = searchParams.get('state');
@@ -464,7 +508,7 @@ export const handleOAuthCallback = async (
   if (error) {
     return {
       success: false,
-      error: error === 'access_denied' ? 'Authorization was denied' : error
+      error: error === 'access_denied' ? 'Authorization was denied' : error,
     };
   }
 
@@ -477,10 +521,7 @@ export const handleOAuthCallback = async (
     return { success: false, error: 'Invalid or expired authorization state' };
   }
 
-  const result = await exchangeCodeForTokens(
-    stateData.platform,
-    code
-  );
+  const result = await exchangeCodeForTokens(stateData.platform, code);
 
   if (!result.success) {
     return { success: false, platform: stateData.platform, error: result.error };

@@ -60,12 +60,16 @@ const BackendStatusCard: React.FC = () => {
     };
   }, []);
 
-  const missingFunctions = useMemo(() => statuses.some((s) => !s.ok && s.status === 404), [statuses]);
+  const missingFunctions = useMemo(
+    () => statuses.some((s) => !s.ok && s.status === 404),
+    [statuses],
+  );
 
   const deployCommands = useMemo(() => {
     return [
-      'powershell -ExecutionPolicy Bypass -File .\\infrastructure\\setup-secrets.ps1 -ProjectId wtp-apps',
-      'firebase deploy --only functions --project wtp-apps',
+      '# Example container deployment',
+      'docker build -t chatscream-api .',
+      'fly deploy',
     ].join('\n');
   }, []);
 
@@ -74,11 +78,13 @@ const BackendStatusCard: React.FC = () => {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Backend Status</h2>
-          <p className="text-sm text-gray-400">Shows whether Cloud Functions endpoints are live.</p>
+          <p className="text-sm text-gray-400">
+            Shows whether required backend API endpoints are live.
+          </p>
         </div>
         {missingFunctions ? (
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs font-semibold">
-            <AlertTriangle size={14} /> Functions missing
+            <AlertTriangle size={14} /> Endpoints missing
           </div>
         ) : (
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs font-semibold">
@@ -93,7 +99,8 @@ const BackendStatusCard: React.FC = () => {
             <div className="text-sm font-semibold">{s.name}</div>
             <div className="text-xs text-gray-500">{s.path}</div>
             <div className={`mt-2 text-xs ${s.ok ? 'text-emerald-300' : 'text-amber-300'}`}>
-              {s.detail}{s.status ? ` (${s.status})` : ''}
+              {s.detail}
+              {s.status ? ` (${s.status})` : ''}
             </div>
           </div>
         ))}
@@ -106,9 +113,11 @@ const BackendStatusCard: React.FC = () => {
 
       {missingFunctions && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-2">
-          <div className="text-sm text-amber-100 font-semibold">Deploy Cloud Functions to enable Dashboard/Admin + YouTube OAuth exchange</div>
+          <div className="text-sm text-amber-100 font-semibold">
+            Deploy backend APIs to enable Dashboard/Admin + OAuth exchange
+          </div>
           <pre className="text-xs text-gray-200 bg-black/30 border border-gray-700 rounded-lg p-3 overflow-x-auto whitespace-pre">
-{deployCommands}
+            {deployCommands}
           </pre>
           <button
             onClick={() => copy(deployCommands)}
@@ -123,4 +132,3 @@ const BackendStatusCard: React.FC = () => {
 };
 
 export default BackendStatusCard;
-

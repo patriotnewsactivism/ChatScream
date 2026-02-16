@@ -4,12 +4,55 @@ import { useAuth } from '../contexts/AuthContext';
 import AuthStatusBanner from '../components/AuthStatusBanner';
 import { PRICING_PLANS, formatPrice } from '../services/stripe';
 import {
-  Megaphone, Play, Zap, Globe, MessageSquare, Shield, ShieldCheck, ChevronRight,
-  Check, CheckCircle2, Star, Users, Video, Sparkles, ArrowRight, Menu, X,
-  Youtube, Facebook, Twitch, Radio, Clock, Cloud, CloudCog, BarChart3,
-  DollarSign, Trophy, Crown, Volume2, Wifi, WifiOff, HardDrive, Server, Database,
-  Upload, TrendingUp, Gift, AlertTriangle, MapPin, Smartphone, Monitor, Laptop,
-  Camera, Hash, Copy, ExternalLink, Infinity, LogOut, Settings
+  Megaphone,
+  Play,
+  Zap,
+  Globe,
+  MessageSquare,
+  Shield,
+  ShieldCheck,
+  ChevronRight,
+  Check,
+  CheckCircle2,
+  Star,
+  Users,
+  Video,
+  Sparkles,
+  ArrowRight,
+  Menu,
+  X,
+  Youtube,
+  Facebook,
+  Twitch,
+  Radio,
+  Clock,
+  Cloud,
+  CloudCog,
+  BarChart3,
+  DollarSign,
+  Trophy,
+  Crown,
+  Volume2,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  Server,
+  Database,
+  Upload,
+  TrendingUp,
+  Gift,
+  AlertTriangle,
+  MapPin,
+  Smartphone,
+  Monitor,
+  Laptop,
+  Camera,
+  Hash,
+  Copy,
+  ExternalLink,
+  Infinity,
+  LogOut,
+  Settings,
 } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
@@ -33,7 +76,7 @@ const LandingPage: React.FC = () => {
   // Animate through scream tiers for demo
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveScreamTier(prev => (prev + 1) % 3);
+      setActiveScreamTier((prev) => (prev + 1) % 3);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -59,17 +102,34 @@ const LandingPage: React.FC = () => {
   const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org';
 
   const screamTiers = [
-    { amount: '$5', effect: 'Standard Scream', color: 'from-green-500 to-emerald-500', description: 'Visual alert + Text-to-Speech' },
-    { amount: '$10-20', effect: 'Loud Scream', color: 'from-yellow-500 to-orange-500', description: 'Larger overlay, louder SFX, animation' },
-    { amount: '$50+', effect: 'MAXIMUM SCREAM', color: 'from-red-500 to-pink-500', description: 'Screen takeover, chaotic visuals!' },
+    {
+      amount: '$5',
+      effect: 'Standard Scream',
+      color: 'from-green-500 to-emerald-500',
+      description: 'Visual alert + Text-to-Speech',
+    },
+    {
+      amount: '$10-20',
+      effect: 'Loud Scream',
+      color: 'from-yellow-500 to-orange-500',
+      description: 'Larger overlay, louder SFX, animation',
+    },
+    {
+      amount: '$50+',
+      effect: 'MAXIMUM SCREAM',
+      color: 'from-red-500 to-pink-500',
+      description: 'Screen takeover, chaotic visuals!',
+    },
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       {/* Navigation */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? 'bg-dark-900/95 backdrop-blur-lg shadow-xl' : 'bg-transparent'
-      }`}>
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          scrolled ? 'bg-dark-900/95 backdrop-blur-lg shadow-xl' : 'bg-transparent'
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
@@ -84,10 +144,18 @@ const LandingPage: React.FC = () => {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#cloud-power" className="text-gray-300 hover:text-white transition-colors">Cloud Power</a>
-              <a href="#chat-screamer" className="text-gray-300 hover:text-white transition-colors">Chat Screamer</a>
-              <a href="#leaderboard" className="text-gray-300 hover:text-white transition-colors">Leaderboard</a>
-              <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Pricing</a>
+              <a href="#cloud-power" className="text-gray-300 hover:text-white transition-colors">
+                Cloud Power
+              </a>
+              <a href="#chat-screamer" className="text-gray-300 hover:text-white transition-colors">
+                Chat Screamer
+              </a>
+              <a href="#leaderboard" className="text-gray-300 hover:text-white transition-colors">
+                Leaderboard
+              </a>
+              <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">
+                Pricing
+              </a>
             </div>
 
             {/* CTA Buttons */}
@@ -153,28 +221,61 @@ const LandingPage: React.FC = () => {
         {mobileMenuOpen && (
           <div className="md:hidden bg-dark-800/95 backdrop-blur-lg border-t border-gray-800">
             <div className="px-4 py-6 space-y-4">
-              <a href="#cloud-power" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Cloud Power</a>
-              <a href="#chat-screamer" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Chat Screamer</a>
-              <a href="#leaderboard" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Leaderboard</a>
-              <a href="#pricing" className="block text-gray-300 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+              <a
+                href="#cloud-power"
+                className="block text-gray-300 hover:text-white py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Cloud Power
+              </a>
+              <a
+                href="#chat-screamer"
+                className="block text-gray-300 hover:text-white py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Chat Screamer
+              </a>
+              <a
+                href="#leaderboard"
+                className="block text-gray-300 hover:text-white py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Leaderboard
+              </a>
+              <a
+                href="#pricing"
+                className="block text-gray-300 hover:text-white py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </a>
               <div className="pt-4 border-t border-gray-700 space-y-3">
                 {user ? (
                   <>
                     <button
-                      onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
+                      onClick={() => {
+                        navigate('/dashboard');
+                        setMobileMenuOpen(false);
+                      }}
                       className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
                     >
                       Open Dashboard
                     </button>
                     <button
-                      onClick={() => { navigate('/studio'); setMobileMenuOpen(false); }}
+                      onClick={() => {
+                        navigate('/studio');
+                        setMobileMenuOpen(false);
+                      }}
                       className="w-full px-6 py-3 border border-gray-600 rounded-full font-semibold"
                     >
                       Open Studio
                     </button>
                     {canAccessAdmin && (
                       <button
-                        onClick={() => { navigate('/admin'); setMobileMenuOpen(false); }}
+                        onClick={() => {
+                          navigate('/admin');
+                          setMobileMenuOpen(false);
+                        }}
                         className="w-full px-6 py-3 border border-gray-600 rounded-full font-semibold flex items-center justify-center gap-2"
                       >
                         <Settings size={18} /> Admin Portal
@@ -190,13 +291,19 @@ const LandingPage: React.FC = () => {
                 ) : (
                   <>
                     <button
-                      onClick={() => { navigate('/login'); setMobileMenuOpen(false); }}
+                      onClick={() => {
+                        navigate('/login');
+                        setMobileMenuOpen(false);
+                      }}
                       className="w-full px-6 py-3 border border-gray-600 rounded-full font-medium"
                     >
                       Sign In
                     </button>
                     <button
-                      onClick={() => { handleGetStarted(); setMobileMenuOpen(false); }}
+                      onClick={() => {
+                        handleGetStarted();
+                        setMobileMenuOpen(false);
+                      }}
                       className="w-full px-6 py-3 bg-brand-600 rounded-full font-semibold"
                     >
                       Start Screaming
@@ -240,9 +347,12 @@ const LandingPage: React.FC = () => {
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-8">
-              Go live with <strong className="text-white">unlimited local device streaming</strong> from your phone, tablet, or desktop.
-              Upgrade anytime for <strong className="text-brand-400">cloud-powered streaming</strong> that uses ZERO of your bandwidth.
-              Let viewers send donation-triggered <strong className="text-white">"Screams"</strong> that take over the screen for maximum engagement!
+              Go live with <strong className="text-white">unlimited local device streaming</strong>{' '}
+              from your phone, tablet, or desktop. Upgrade anytime for{' '}
+              <strong className="text-brand-400">cloud-powered streaming</strong> that uses ZERO of
+              your bandwidth. Let viewers send donation-triggered{' '}
+              <strong className="text-white">"Screams"</strong> that take over the screen for
+              maximum engagement!
             </p>
 
             {/* CTA Buttons */}
@@ -253,10 +363,15 @@ const LandingPage: React.FC = () => {
               >
                 <Megaphone size={20} />
                 Start Screaming Free
-                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                <ChevronRight
+                  size={20}
+                  className="group-hover:translate-x-1 transition-transform"
+                />
               </button>
               <button
-                onClick={() => document.getElementById('chat-screamer')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() =>
+                  document.getElementById('chat-screamer')?.scrollIntoView({ behavior: 'smooth' })
+                }
                 className="w-full sm:w-auto px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-full font-semibold text-gray-300 hover:text-white transition-all flex items-center justify-center gap-2"
               >
                 <Video size={20} />
@@ -287,7 +402,10 @@ const LandingPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <div className="flex -space-x-2">
                   {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-pink-500 border-2 border-dark-900" />
+                    <div
+                      key={i}
+                      className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-pink-500 border-2 border-dark-900"
+                    />
                   ))}
                 </div>
                 <span>3,500+ Screamers</span>
@@ -324,7 +442,10 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Stream From Any Device Section - NEW */}
-      <section id="any-device" className="py-20 md:py-32 bg-gradient-to-b from-dark-900 to-dark-800/50 relative overflow-hidden">
+      <section
+        id="any-device"
+        className="py-20 md:py-32 bg-gradient-to-b from-dark-900 to-dark-800/50 relative overflow-hidden"
+      >
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-600/10 rounded-full blur-3xl" />
@@ -340,7 +461,8 @@ const LandingPage: React.FC = () => {
               Stream From <span className="text-brand-400">Any Device</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Use your phone, tablet, laptop, or desktop as a camera source. Go live instantly with unlimited local device streaming - no extra software needed!
+              Use your phone, tablet, laptop, or desktop as a camera source. Go live instantly with
+              unlimited local device streaming - no extra software needed!
             </p>
           </div>
 
@@ -350,33 +472,38 @@ const LandingPage: React.FC = () => {
               {
                 icon: Smartphone,
                 title: 'Phone Camera',
-                description: 'Turn your smartphone into a professional camera. Perfect for on-the-go streaming.',
-                color: 'from-green-500 to-emerald-500'
+                description:
+                  'Turn your smartphone into a professional camera. Perfect for on-the-go streaming.',
+                color: 'from-green-500 to-emerald-500',
               },
               {
                 icon: Laptop,
                 title: 'Laptop Webcam',
-                description: 'Use your built-in webcam or external USB cameras without any configuration.',
-                color: 'from-blue-500 to-cyan-500'
+                description:
+                  'Use your built-in webcam or external USB cameras without any configuration.',
+                color: 'from-blue-500 to-cyan-500',
               },
               {
                 icon: Monitor,
                 title: 'Desktop Setup',
-                description: 'Full studio setup support with multiple camera sources and screen sharing.',
-                color: 'from-purple-500 to-pink-500'
+                description:
+                  'Full studio setup support with multiple camera sources and screen sharing.',
+                color: 'from-purple-500 to-pink-500',
               },
               {
                 icon: Camera,
                 title: 'Pro Cameras',
                 description: 'Connect DSLR, mirrorless, and action cameras via capture cards.',
-                color: 'from-orange-500 to-red-500'
-              }
+                color: 'from-orange-500 to-red-500',
+              },
             ].map((device, index) => (
               <div
                 key={index}
                 className="relative group p-6 rounded-2xl bg-dark-800/50 border border-gray-800 hover:border-gray-700 transition-all hover:transform hover:-translate-y-1"
               >
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${device.color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+                <div
+                  className={`w-14 h-14 rounded-xl bg-gradient-to-br ${device.color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}
+                >
                   <device.icon size={28} className="text-white" />
                 </div>
                 <h3 className="font-bold text-white mb-2">{device.title}</h3>
@@ -392,10 +519,22 @@ const LandingPage: React.FC = () => {
                 <h3 className="text-2xl font-bold mb-6">Why Local Device Streaming?</h3>
                 <div className="space-y-4">
                   {[
-                    { title: 'Zero Latency Preview', description: 'See exactly what your viewers see in real-time' },
-                    { title: 'Browser-Based Studio', description: 'No downloads, no plugins - just open and stream' },
-                    { title: 'Multi-Device Support', description: 'Switch cameras or add multiple sources instantly' },
-                    { title: 'Mobile Optimized', description: 'Full-featured streaming studio on your phone' }
+                    {
+                      title: 'Zero Latency Preview',
+                      description: 'See exactly what your viewers see in real-time',
+                    },
+                    {
+                      title: 'Browser-Based Studio',
+                      description: 'No downloads, no plugins - just open and stream',
+                    },
+                    {
+                      title: 'Multi-Device Support',
+                      description: 'Switch cameras or add multiple sources instantly',
+                    },
+                    {
+                      title: 'Mobile Optimized',
+                      description: 'Full-featured streaming studio on your phone',
+                    },
                   ].map((item, index) => (
                     <div key={index} className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -465,7 +604,8 @@ const LandingPage: React.FC = () => {
               Your Stream, <span className="text-cyan-400">Our Servers</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Upload your content to our cloud. We handle the heavy lifting with constant, high-bitrate streaming - regardless of YOUR internet connection.
+              Upload your content to our cloud. We handle the heavy lifting with constant,
+              high-bitrate streaming - regardless of YOUR internet connection.
             </p>
           </div>
 
@@ -533,30 +673,39 @@ const LandingPage: React.FC = () => {
                 {
                   icon: HardDrive,
                   title: 'Cloud Storage Integration',
-                  description: 'Connect Google Drive, OneDrive, or Dropbox. Stream directly from your cloud files.',
-                  color: 'from-blue-500 to-cyan-500'
+                  description:
+                    'Connect Google Drive, OneDrive, or Dropbox. Stream directly from your cloud files.',
+                  color: 'from-blue-500 to-cyan-500',
                 },
                 {
                   icon: WifiOff,
                   title: 'Zero-Bandwidth Promise',
-                  description: 'Upload once, stream forever. Your home internet is never the bottleneck.',
-                  color: 'from-green-500 to-emerald-500'
+                  description:
+                    'Upload once, stream forever. Your home internet is never the bottleneck.',
+                  color: 'from-green-500 to-emerald-500',
                 },
                 {
                   icon: Zap,
                   title: 'Constant High-Bitrate',
-                  description: 'Our servers output constant bitrate (CBR) streams regardless of your connection quality.',
-                  color: 'from-yellow-500 to-orange-500'
+                  description:
+                    'Our servers output constant bitrate (CBR) streams regardless of your connection quality.',
+                  color: 'from-yellow-500 to-orange-500',
                 },
                 {
                   icon: Globe,
                   title: 'Global Edge Network',
-                  description: 'Stream from the server closest to your audience for minimal latency.',
-                  color: 'from-purple-500 to-pink-500'
-                }
+                  description:
+                    'Stream from the server closest to your audience for minimal latency.',
+                  color: 'from-purple-500 to-pink-500',
+                },
               ].map((feature, index) => (
-                <div key={index} className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800 hover:border-gray-700 transition-all">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center flex-shrink-0`}>
+                <div
+                  key={index}
+                  className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800 hover:border-gray-700 transition-all"
+                >
+                  <div
+                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center flex-shrink-0`}
+                  >
                     <feature.icon size={24} className="text-white" />
                   </div>
                   <div>
@@ -581,10 +730,14 @@ const LandingPage: React.FC = () => {
               <span>The USP - Unique Selling Point</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-bold mb-4">
-              The <span className="bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">Chat Screamer</span>
+              The{' '}
+              <span className="bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">
+                Chat Screamer
+              </span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Donation-triggered alerts that DEMAND attention. The more they donate, the more OBNOXIOUS it gets!
+              Donation-triggered alerts that DEMAND attention. The more they donate, the more
+              OBNOXIOUS it gets!
             </p>
           </div>
 
@@ -601,21 +754,43 @@ const LandingPage: React.FC = () => {
                 </div>
 
                 {/* Scream Alert Demo */}
-                <div className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${
-                  activeScreamTier === 2 ? 'bg-gradient-to-br from-red-600/80 to-pink-600/80 backdrop-blur-sm' : ''
-                }`}>
-                  <div className={`transform transition-all duration-500 ${
-                    activeScreamTier === 0 ? 'scale-100' : activeScreamTier === 1 ? 'scale-110' : 'scale-125 animate-shake'
-                  }`}>
-                    <div className={`px-8 py-6 rounded-2xl shadow-2xl bg-gradient-to-r ${screamTiers[activeScreamTier].color} animate-scream`}>
+                <div
+                  className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${
+                    activeScreamTier === 2
+                      ? 'bg-gradient-to-br from-red-600/80 to-pink-600/80 backdrop-blur-sm'
+                      : ''
+                  }`}
+                >
+                  <div
+                    className={`transform transition-all duration-500 ${
+                      activeScreamTier === 0
+                        ? 'scale-100'
+                        : activeScreamTier === 1
+                          ? 'scale-110'
+                          : 'scale-125 animate-shake'
+                    }`}
+                  >
+                    <div
+                      className={`px-8 py-6 rounded-2xl shadow-2xl bg-gradient-to-r ${screamTiers[activeScreamTier].color} animate-scream`}
+                    >
                       <div className="flex items-center gap-3 mb-2">
-                        <DollarSign size={activeScreamTier === 2 ? 32 : 24} className="text-white" />
+                        <DollarSign
+                          size={activeScreamTier === 2 ? 32 : 24}
+                          className="text-white"
+                        />
                         <span className="text-white/80 text-sm font-medium">SCREAM ALERT!</span>
                       </div>
-                      <div className={`font-bold text-white ${
-                        activeScreamTier === 0 ? 'text-xl' : activeScreamTier === 1 ? 'text-2xl' : 'text-4xl'
-                      }`}>
-                        {screamTiers[activeScreamTier].amount} - {screamTiers[activeScreamTier].effect}
+                      <div
+                        className={`font-bold text-white ${
+                          activeScreamTier === 0
+                            ? 'text-xl'
+                            : activeScreamTier === 1
+                              ? 'text-2xl'
+                              : 'text-4xl'
+                        }`}
+                      >
+                        {screamTiers[activeScreamTier].amount} -{' '}
+                        {screamTiers[activeScreamTier].effect}
                       </div>
                       <div className="text-white/70 text-sm mt-2">
                         "{activeScreamTier === 2 ? 'LETS GOOOOO!!!' : 'Great stream!'}"
@@ -666,32 +841,42 @@ const LandingPage: React.FC = () => {
                   {
                     tier: '$5 - $10',
                     title: 'Standard Scream',
-                    description: 'A tasteful visual alert with Text-to-Speech reading your message aloud.',
+                    description:
+                      'A tasteful visual alert with Text-to-Speech reading your message aloud.',
                     icon: Volume2,
-                    color: 'from-green-500 to-emerald-500'
+                    color: 'from-green-500 to-emerald-500',
                   },
                   {
                     tier: '$10 - $20',
                     title: 'Loud Scream',
-                    description: 'Larger overlay, louder sound effects, distinct animation that grabs attention.',
+                    description:
+                      'Larger overlay, louder sound effects, distinct animation that grabs attention.',
                     icon: MessageSquare,
-                    color: 'from-yellow-500 to-orange-500'
+                    color: 'from-yellow-500 to-orange-500',
                   },
                   {
                     tier: '$50+',
                     title: 'MAXIMUM SCREAM',
-                    description: 'Full screen takeover effect with chaotic audio/visuals. TOS compliant but intentionally obnoxious!',
+                    description:
+                      'Full screen takeover effect with chaotic audio/visuals. TOS compliant but intentionally obnoxious!',
                     icon: AlertTriangle,
-                    color: 'from-red-500 to-pink-500'
-                  }
+                    color: 'from-red-500 to-pink-500',
+                  },
                 ].map((item, index) => (
-                  <div key={index} className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center flex-shrink-0`}>
+                  <div
+                    key={index}
+                    className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800"
+                  >
+                    <div
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center flex-shrink-0`}
+                    >
                       <item.icon size={24} className="text-white" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r ${item.color} text-white`}>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r ${item.color} text-white`}
+                        >
                           {item.tier}
                         </span>
                         <h4 className="font-bold text-white">{item.title}</h4>
@@ -727,7 +912,8 @@ const LandingPage: React.FC = () => {
               The Weekly <span className="text-yellow-400">Scream Leaderboard</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Compete for the crown! The streamer with the most Chat Screams each week wins a FREE month of Professional tier.
+              Compete for the crown! The streamer with the most Chat Screams each week wins a FREE
+              month of Professional tier.
             </p>
           </div>
 
@@ -744,9 +930,27 @@ const LandingPage: React.FC = () => {
 
               <div className="space-y-3">
                 {[
-                  { rank: 1, name: 'StreamerKing', screams: 247, badge: Crown, color: 'from-yellow-500 to-amber-500' },
-                  { rank: 2, name: 'GamerGirl99', screams: 189, badge: Trophy, color: 'from-gray-400 to-gray-500' },
-                  { rank: 3, name: 'ProPlayer', screams: 156, badge: Trophy, color: 'from-amber-700 to-amber-800' },
+                  {
+                    rank: 1,
+                    name: 'StreamerKing',
+                    screams: 247,
+                    badge: Crown,
+                    color: 'from-yellow-500 to-amber-500',
+                  },
+                  {
+                    rank: 2,
+                    name: 'GamerGirl99',
+                    screams: 189,
+                    badge: Trophy,
+                    color: 'from-gray-400 to-gray-500',
+                  },
+                  {
+                    rank: 3,
+                    name: 'ProPlayer',
+                    screams: 156,
+                    badge: Trophy,
+                    color: 'from-amber-700 to-amber-800',
+                  },
                   { rank: 4, name: 'ContentCreator', screams: 98, badge: null, color: null },
                   { rank: 5, name: 'LiveStreamer', screams: 67, badge: null, color: null },
                 ].map((player) => (
@@ -758,9 +962,13 @@ const LandingPage: React.FC = () => {
                         : 'bg-dark-900/50 hover:bg-dark-900'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                      player.color ? `bg-gradient-to-br ${player.color} text-white` : 'bg-gray-700 text-gray-400'
-                    }`}>
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                        player.color
+                          ? `bg-gradient-to-br ${player.color} text-white`
+                          : 'bg-gray-700 text-gray-400'
+                      }`}
+                    >
                       {player.rank}
                     </div>
                     <div className="flex-1">
@@ -782,7 +990,9 @@ const LandingPage: React.FC = () => {
                   <Gift className="text-green-400" size={24} />
                   <div>
                     <div className="font-bold text-green-400">Weekly Prize</div>
-                    <div className="text-sm text-gray-400">1 FREE month of Professional ($59 value)</div>
+                    <div className="text-sm text-gray-400">
+                      1 FREE month of Professional ($59 value)
+                    </div>
                   </div>
                 </div>
               </div>
@@ -797,18 +1007,21 @@ const LandingPage: React.FC = () => {
                   {
                     step: '1',
                     title: 'Receive Screams',
-                    description: 'Every donation $5+ triggers a Chat Scream and counts towards your total.'
+                    description:
+                      'Every donation $5+ triggers a Chat Scream and counts towards your total.',
                   },
                   {
                     step: '2',
                     title: 'Climb the Ranks',
-                    description: 'The leaderboard tracks total Scream QUANTITY, not dollar amount. More engagement = higher rank.'
+                    description:
+                      'The leaderboard tracks total Scream QUANTITY, not dollar amount. More engagement = higher rank.',
                   },
                   {
                     step: '3',
                     title: 'Win Weekly',
-                    description: 'Top streamer each week automatically receives a credit for one free month of Professional tier.'
-                  }
+                    description:
+                      'Top streamer each week automatically receives a credit for one free month of Professional tier.',
+                  },
                 ].map((item, index) => (
                   <div key={index} className="flex gap-4">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center font-bold text-white flex-shrink-0">
@@ -827,7 +1040,10 @@ const LandingPage: React.FC = () => {
                   <TrendingUp className="text-purple-400" size={24} />
                   <div>
                     <div className="font-bold text-purple-400">Pro Tip</div>
-                    <div className="text-sm text-gray-400">Encourage smaller, frequent donations over single large ones for leaderboard success!</div>
+                    <div className="text-sm text-gray-400">
+                      Encourage smaller, frequent donations over single large ones for leaderboard
+                      success!
+                    </div>
                   </div>
                 </div>
               </div>
@@ -845,7 +1061,8 @@ const LandingPage: React.FC = () => {
               <span className="text-brand-400"> Pricing</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Start free, upgrade when you're ready. The Professional tier unlocks advanced Chat Screamer customization.
+              Start free, upgrade when you're ready. The Professional tier unlocks advanced Chat
+              Screamer customization.
             </p>
             {referralCode && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 rounded-full text-green-400 text-sm font-medium">
@@ -922,26 +1139,26 @@ const LandingPage: React.FC = () => {
               {
                 name: 'Alex Gaming',
                 role: 'Twitch Partner',
-                quote: 'Chat Screamer is INSANE! My viewers go crazy trying to trigger the Maximum Scream. Donations went up 300%!',
-                rating: 5
+                quote:
+                  'Chat Screamer is INSANE! My viewers go crazy trying to trigger the Maximum Scream. Donations went up 300%!',
+                rating: 5,
               },
               {
                 name: 'Sarah Creates',
                 role: 'YouTube Creator',
-                quote: 'Zero bandwidth streaming changed everything. I was dropping frames before, now it\'s crystal clear 4K every time.',
-                rating: 5
+                quote:
+                  "Zero bandwidth streaming changed everything. I was dropping frames before, now it's crystal clear 4K every time.",
+                rating: 5,
               },
               {
                 name: 'Mike Productions',
                 role: 'Event Streamer',
-                quote: 'Won the leaderboard twice now! That free month of Pro paid for itself with the exposure I got.',
-                rating: 5
-              }
+                quote:
+                  'Won the leaderboard twice now! That free month of Pro paid for itself with the exposure I got.',
+                rating: 5,
+              },
             ].map((testimonial, index) => (
-              <div
-                key={index}
-                className="p-6 rounded-2xl bg-dark-900/50 border border-gray-800"
-              >
+              <div key={index} className="p-6 rounded-2xl bg-dark-900/50 border border-gray-800">
                 <div className="flex items-center gap-1 mb-4">
                   {[...Array(testimonial.rating)].map((_, i) => (
                     <Star key={i} size={16} fill="#f59e0b" className="text-amber-500" />
@@ -973,7 +1190,8 @@ const LandingPage: React.FC = () => {
               Deployment Ready out of Houston, TX
             </h2>
             <p className="text-gray-400 text-lg max-w-3xl mx-auto">
-              Cloud resources stay linked and validated so you can focus on production testing—no guessing whether the VM or database connections are live.
+              Cloud resources stay linked and validated so you can focus on production testing—no
+              guessing whether the VM or database connections are live.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-gray-300">
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/70 border border-gray-800">
@@ -1049,7 +1267,7 @@ const LandingPage: React.FC = () => {
                 </span>
               </div>
               <ul className="space-y-2 text-sm text-gray-300 pl-1 list-disc list-inside">
-                <li>Firestore and SQL endpoints reachable from the VPC.</li>
+                <li>Backend API and SQL endpoints reachable from the VPC.</li>
                 <li>Staging data paths pinned for end-to-end QA runs.</li>
               </ul>
             </div>
@@ -1064,11 +1282,13 @@ const LandingPage: React.FC = () => {
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">
             Ready to Make Some
-            <span className="block bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">Noise?</span>
+            <span className="block bg-gradient-to-r from-brand-400 to-pink-500 bg-clip-text text-transparent">
+              Noise?
+            </span>
           </h2>
           <p className="text-lg text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of creators using ChatScream to build unforgettable streaming experiences.
-            Start free - no credit card required.
+            Join thousands of creators using ChatScream to build unforgettable streaming
+            experiences. Start free - no credit card required.
           </p>
           <button
             onClick={handleGetStarted}
@@ -1090,39 +1310,86 @@ const LandingPage: React.FC = () => {
                 <div className="bg-gradient-to-br from-brand-500 to-brand-600 p-1.5 rounded-lg">
                   <Megaphone size={18} className="text-white" />
                 </div>
-                <span className="text-lg font-bold">Chat<span className="text-brand-400">Scream</span></span>
+                <span className="text-lg font-bold">
+                  Chat<span className="text-brand-400">Scream</span>
+                </span>
               </div>
               <p className="text-gray-400 text-sm">
-                Stream Without Limits. Scream for Attention. Cloud-powered streaming with zero bandwidth usage.
+                Stream Without Limits. Scream for Attention. Cloud-powered streaming with zero
+                bandwidth usage.
               </p>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
-                <li><a href="#cloud-power" className="hover:text-white transition-colors">Cloud Power</a></li>
-                <li><a href="#chat-screamer" className="hover:text-white transition-colors">Chat Screamer</a></li>
-                <li><a href="#leaderboard" className="hover:text-white transition-colors">Leaderboard</a></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+                <li>
+                  <a href="#cloud-power" className="hover:text-white transition-colors">
+                    Cloud Power
+                  </a>
+                </li>
+                <li>
+                  <a href="#chat-screamer" className="hover:text-white transition-colors">
+                    Chat Screamer
+                  </a>
+                </li>
+                <li>
+                  <a href="#leaderboard" className="hover:text-white transition-colors">
+                    Leaderboard
+                  </a>
+                </li>
+                <li>
+                  <a href="#pricing" className="hover:text-white transition-colors">
+                    Pricing
+                  </a>
+                </li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
-                <li><Link to="/about" className="hover:text-white transition-colors">About</Link></li>
-                <li><Link to="/blog" className="hover:text-white transition-colors">Blog</Link></li>
-                <li><Link to="/careers" className="hover:text-white transition-colors">Careers</Link></li>
-                <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+                <li>
+                  <Link to="/about" className="hover:text-white transition-colors">
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/blog" className="hover:text-white transition-colors">
+                    Blog
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/careers" className="hover:text-white transition-colors">
+                    Careers
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/contact" className="hover:text-white transition-colors">
+                    Contact
+                  </Link>
+                </li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
-                <li><Link to="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-                <li><Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
-                <li><Link to="/cookie-policy" className="hover:text-white transition-colors">Cookie Policy</Link></li>
+                <li>
+                  <Link to="/privacy-policy" className="hover:text-white transition-colors">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/terms" className="hover:text-white transition-colors">
+                    Terms of Service
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/cookie-policy" className="hover:text-white transition-colors">
+                    Cookie Policy
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>

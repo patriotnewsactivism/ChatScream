@@ -19,5 +19,15 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "functions/**",
+    "payments/**",
+    "dist/**",
+    "node_modules/**",
+    "tests/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
 }

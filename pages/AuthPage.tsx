@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getAffiliateByCode } from '../services/firebase';
+import { getAffiliateByCode } from '../services/backend';
 import {
-  Megaphone, Mail, Lock, User, Eye, EyeOff, ArrowRight,
-  AlertCircle, Check, Gift, Loader2, Apple, Facebook, Github, Twitter
+  Megaphone,
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  Check,
+  Gift,
+  Loader2,
+  Apple,
+  Facebook,
+  Github,
+  Twitter,
 } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup' | 'reset';
@@ -25,7 +38,7 @@ const AuthPage: React.FC = () => {
     sendResetEmail,
     loading,
     error,
-    clearError
+    clearError,
   } = useAuth();
 
   // Determine mode from URL path
@@ -107,16 +120,22 @@ const AuthPage: React.FC = () => {
     }
   };
 
-  const handleSocialSignIn = async (provider: 'google' | 'facebook' | 'github' | 'twitter' | 'apple') => {
+  const handleSocialSignIn = async (
+    provider: 'google' | 'facebook' | 'github' | 'twitter' | 'apple',
+  ) => {
     setIsSubmitting(true);
     try {
       const ref = referralValid ? referralCode : undefined;
       const result =
-        provider === 'google' ? await signInGoogle(ref)
-        : provider === 'facebook' ? await signInFacebook(ref)
-        : provider === 'github' ? await signInGithub(ref)
-        : provider === 'twitter' ? await signInTwitter(ref)
-        : await signInApple(ref);
+        provider === 'google'
+          ? await signInGoogle(ref)
+          : provider === 'facebook'
+            ? await signInFacebook(ref)
+            : provider === 'github'
+              ? await signInGithub(ref)
+              : provider === 'twitter'
+                ? await signInTwitter(ref)
+                : await signInApple(ref);
 
       if (!result.didRedirect) {
         navigate(redirectTo, { replace: true });
@@ -130,7 +149,8 @@ const AuthPage: React.FC = () => {
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
-    const path = newMode === 'signup' ? '/signup' : newMode === 'reset' ? '/reset-password' : '/login';
+    const path =
+      newMode === 'signup' ? '/signup' : newMode === 'reset' ? '/reset-password' : '/login';
     navigate(path + (referralCode ? `?ref=${referralCode}` : ''));
   };
 
@@ -170,7 +190,7 @@ const AuthPage: React.FC = () => {
             <p className="text-gray-400 text-sm">
               {mode === 'login' && 'Sign in to access your streaming studio'}
               {mode === 'signup' && 'Start your free trial today'}
-              {mode === 'reset' && 'We\'ll send you a reset link'}
+              {mode === 'reset' && "We'll send you a reset link"}
             </p>
           </div>
 
@@ -195,11 +215,12 @@ const AuthPage: React.FC = () => {
             {/* Name Field (Signup Only) */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <User
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                    size={18}
+                  />
                   <input
                     type="text"
                     value={displayName}
@@ -214,11 +235,12 @@ const AuthPage: React.FC = () => {
 
             {/* Email Field */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <Mail
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  size={18}
+                />
                 <input
                   type="email"
                   value={email}
@@ -233,11 +255,12 @@ const AuthPage: React.FC = () => {
             {/* Password Field (Login & Signup) */}
             {mode !== 'reset' && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Password
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <Lock
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                    size={18}
+                  />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
@@ -265,7 +288,10 @@ const AuthPage: React.FC = () => {
                   Referral Code <span className="text-gray-500">(optional)</span>
                 </label>
                 <div className="relative">
-                  <Gift className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <Gift
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                    size={18}
+                  />
                   <input
                     type="text"
                     value={referralCode}
@@ -276,8 +302,8 @@ const AuthPage: React.FC = () => {
                       referralValid === true
                         ? 'border-green-500 focus:border-green-500 focus:ring-green-500'
                         : referralValid === false
-                        ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                        : 'border-gray-700 focus:border-brand-500 focus:ring-brand-500'
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                          : 'border-gray-700 focus:border-brand-500 focus:ring-brand-500'
                     }`}
                   />
                   {referralValid !== null && (
@@ -291,7 +317,9 @@ const AuthPage: React.FC = () => {
                   )}
                 </div>
                 {referralInfo && (
-                  <p className={`mt-1 text-xs ${referralValid ? 'text-green-400' : 'text-red-400'}`}>
+                  <p
+                    className={`mt-1 text-xs ${referralValid ? 'text-green-400' : 'text-red-400'}`}
+                  >
                     {referralInfo}
                   </p>
                 )}
@@ -459,9 +487,13 @@ const AuthPage: React.FC = () => {
         {mode === 'signup' && (
           <p className="mt-6 text-center text-xs text-gray-500">
             By creating an account, you agree to our{' '}
-            <Link to="/terms" className="text-brand-400 hover:underline">Terms of Service</Link>
-            {' '}and{' '}
-            <Link to="/privacy-policy" className="text-brand-400 hover:underline">Privacy Policy</Link>
+            <Link to="/terms" className="text-brand-400 hover:underline">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy-policy" className="text-brand-400 hover:underline">
+              Privacy Policy
+            </Link>
           </p>
         )}
       </div>
