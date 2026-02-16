@@ -47,9 +47,9 @@ const BackendStatusCard: React.FC = () => {
     (async () => {
       setChecking(true);
       const results = await Promise.all([
+        testEndpoint('Health', '/api/health'),
         testEndpoint('Leaderboard', '/api/leaderboard'),
-        testEndpoint('Access Sync', '/api/access/sync'),
-        testEndpoint('OAuth Exchange', '/api/oauth/exchange'),
+        testEndpoint('Auth Session', '/api/auth/session'),
       ]);
       if (!mounted) return;
       setStatuses(results);
@@ -114,7 +114,7 @@ const BackendStatusCard: React.FC = () => {
       {missingFunctions && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-2">
           <div className="text-sm text-amber-100 font-semibold">
-            Deploy backend APIs to enable Dashboard/Admin + OAuth exchange
+            Deploy backend APIs to enable authenticated studio features
           </div>
           <pre className="text-xs text-gray-200 bg-black/30 border border-gray-700 rounded-lg p-3 overflow-x-auto whitespace-pre">
             {deployCommands}

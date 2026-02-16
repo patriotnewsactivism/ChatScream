@@ -66,7 +66,7 @@ describe('AuthContext', () => {
     expect(result.current.userProfile?.uid).toBe('user-123');
   });
 
-  it('refreshSession forces a new token fetch', async () => {
+  it('refreshSession requests the current session token without forced rotation', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
     mockUser.getIdToken = vi.fn(async () => 'manual-refresh-token');
 
@@ -76,7 +76,7 @@ describe('AuthContext', () => {
       await result.current.refreshSession();
     });
 
-    expect(mockUser.getIdToken).toHaveBeenCalledWith(true);
+    expect(mockUser.getIdToken).toHaveBeenCalledWith(false);
     expect(result.current.sessionToken).toBe('manual-refresh-token');
   });
 

@@ -114,7 +114,7 @@ const buildAuthUser = (session: StoredSession): AuthUser => ({
   photoURL: session.user.photoURL,
   getIdToken: async (forceRefresh = false) => {
     if (forceRefresh) {
-      await refreshSessionToken();
+      await hydrateSessionFromServer();
     }
     if (!currentSession) {
       await hydrateSessionFromServer();
@@ -123,7 +123,7 @@ const buildAuthUser = (session: StoredSession): AuthUser => ({
   },
   getIdTokenResult: async (forceRefresh = false) => {
     if (forceRefresh) {
-      await refreshSessionToken();
+      await hydrateSessionFromServer();
     }
     if (!currentSession) {
       await hydrateSessionFromServer();
@@ -267,8 +267,6 @@ const hydrateSessionFromServer = async (): Promise<StoredSession | null> => {
 };
 
 const refreshSessionToken = async (): Promise<StoredSession | null> => {
-  const refreshed = await requestAuthSession('/api/auth/refresh', 'POST');
-  if (refreshed) return refreshed;
   return hydrateSessionFromServer();
 };
 

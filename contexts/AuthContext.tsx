@@ -102,7 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       tokenRefreshTimeout.current = window.setTimeout(async () => {
         try {
-          const nextToken = await backendUser.getIdToken(true);
+          const nextToken = await backendUser.getIdToken(false);
           if (!isMounted) return;
           setSessionToken(nextToken);
         } catch (err: any) {
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.warn('Access sync skipped:', err);
           }
 
-          const tokenResult = await backendUser.getIdTokenResult(true);
+          const tokenResult = await backendUser.getIdTokenResult(false);
           if (!isMounted) return;
           setSessionToken(tokenResult.token);
 
@@ -322,7 +322,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!user) return null;
 
     try {
-      const token = await user.getIdToken(true);
+      const token = await user.getIdToken(false);
       setSessionToken(token);
       return token;
     } catch (err: any) {
@@ -368,6 +368,9 @@ function getErrorMessage(error?: unknown): string {
     const isNotFoundEdge = /NOT_FOUND/i.test(message) || error.status === 404;
     if (isNotFoundEdge) {
       return 'Auth API route not found. Set VITE_API_BASE_URL to your backend API domain (or deploy the Node API at the same origin).';
+    }
+    if (error.status === 401 && /missing authorization token/i.test(message)) {
+      return 'Session not established yet. Please try signing in again.';
     }
     if (error.status >= 500) {
       return 'Backend API is currently unavailable. Please try again in a moment.';
