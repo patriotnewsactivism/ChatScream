@@ -12,7 +12,6 @@ export default [
     ignores: [
       'dist',
       'node_modules',
-      'functions/lib',
       'coverage',
       'playwright-report',
       'test-results',

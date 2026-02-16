@@ -21,7 +21,6 @@
     "noEmit": true
   },
   "exclude": [
-    "functions/**",
     "payments/**",
     "dist/**",
     "node_modules/**",
