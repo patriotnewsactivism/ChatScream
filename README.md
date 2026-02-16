@@ -136,6 +136,12 @@ For durable multi-instance auth, configure:
 
 Users/profiles are stored in Postgres and session tokens in Redis.
 
+If you already have local users in `server/data/runtime.json`, migrate them once:
+
+```bash
+POSTGRES_URL=postgres://... npm run migrate:users
+```
+
 ### 4. Vercel Single-Project Deploy (Frontend + API)
 
 This repo now supports Vercel SPA routes plus backend API routes in one project:
