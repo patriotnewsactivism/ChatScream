@@ -41,9 +41,9 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: 'npm run dev:web -- --host 127.0.0.1 --port 4173 --strictPort',
+        command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
         url: baseURL,
         reuseExistingServer: !isCI,
-        timeout: 120 * 1000,
+        timeout: 240 * 1000,
       },
 });

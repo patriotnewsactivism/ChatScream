@@ -15,11 +15,16 @@ test.describe('Landing Page', () => {
     await expect(page).toHaveURL(/\/signup/);
   });
 
-  test('should navigate to login when clicking Sign In', async ({ page }) => {
-    await page
-      .getByRole('button', { name: /sign in/i })
-      .first()
-      .click();
+  test('should navigate to login when clicking Sign In', async ({ page, isMobile }) => {
+    if (isMobile) {
+      await page.getByRole('button', { name: /open menu/i }).click();
+      await page.getByRole('button', { name: /^sign in$/i }).click();
+    } else {
+      await page
+        .getByRole('button', { name: /sign in/i })
+        .first()
+        .click();
+    }
     await expect(page).toHaveURL(/\/login/);
   });
 

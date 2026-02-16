@@ -210,6 +210,7 @@ const LandingPage: React.FC = () => {
             {/* Mobile Menu Button */}
             <button
               className="md:hidden p-2 text-gray-300"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
