@@ -15,6 +15,8 @@ AWS is the primary deployment path for ChatScream cloud streaming and autoscaled
 2. Create `infrastructure/aws/.env.aws` from `infrastructure/aws/.env.aws.example`.
 3. Deploy worker autoscaling fleet:
    `./infrastructure/aws/deploy-stream-fleet.sh`
+   or on Windows PowerShell:
+   `powershell -ExecutionPolicy Bypass -File .\infrastructure\aws\deploy-stream-fleet.ps1`
 4. Follow endpoint output for RTMP ingest + HLS playback.
 
 Full guide:
