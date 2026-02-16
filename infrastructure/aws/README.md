@@ -31,6 +31,12 @@ cp infrastructure/aws/.env.aws.example infrastructure/aws/.env.aws
 
 `deploy-stream-fleet.sh` automatically loads `infrastructure/aws/.env.aws`.
 
+PowerShell (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\infrastructure\aws\deploy-stream-fleet.ps1
+```
+
 After deploy, the script prints:
 
 - Auto Scaling Group name
