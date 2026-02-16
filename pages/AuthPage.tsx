@@ -77,14 +77,19 @@ const AuthPage: React.FC = () => {
   useEffect(() => {
     const validateReferral = async () => {
       if (referralCode.length >= 3) {
-        const affiliate = await getAffiliateByCode(referralCode);
-        if (affiliate && affiliate.isActive) {
-          setReferralValid(true);
-          const bonusDays = 7 + affiliate.bonusTrialDays;
-          setReferralInfo(`${affiliate.ownerName} - ${bonusDays} day free trial!`);
-        } else {
-          setReferralValid(false);
-          setReferralInfo('Invalid referral code');
+        try {
+          const affiliate = await getAffiliateByCode(referralCode);
+          if (affiliate && affiliate.isActive) {
+            setReferralValid(true);
+            const bonusDays = 7 + affiliate.bonusTrialDays;
+            setReferralInfo(`${affiliate.ownerName} - ${bonusDays} day free trial!`);
+          } else {
+            setReferralValid(false);
+            setReferralInfo('Invalid referral code');
+          }
+        } catch {
+          setReferralValid(null);
+          setReferralInfo('Referral check unavailable right now.');
         }
       } else {
         setReferralValid(null);
