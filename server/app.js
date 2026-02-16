@@ -12,10 +12,12 @@ import {
   getAffiliate,
   getCloudUsage,
   getConfig,
+  getIdentityStorageMode,
   getPublicProfile,
   getSession,
   getUserByEmail,
   getUserByUid,
+  initIdentityStorage,
   listChatMessages,
   listUsers,
   loadState,
@@ -30,6 +32,10 @@ import {
 } from './store.js';
 
 const app = express();
+
+void initIdentityStorage().catch((error) => {
+  console.error('Failed to initialize managed identity storage:', error);
+});
 
 const PLAN_HOURS = {
   free: 0,
@@ -139,21 +145,24 @@ const nowIso = () => new Date().toISOString();
 
 const hashPassword = (value = '') => createHash('sha256').update(value).digest('hex');
 
-const issueSession = (uid) => {
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
+
+const issueSession = async (uid) => {
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  saveSession({ token, uid, expiresAt });
+  await saveSession({ token, uid, expiresAt });
   return { token, expiresAt };
 };
 
-const buildSessionPayload = (uid, existingToken, existingExpiry) => {
-  const record = getUserByUid(uid);
+const buildSessionPayload = async (uid, existingToken, existingExpiry) => {
+  const record = await getUserByUid(uid);
   if (!record) return null;
   const profile = getPublicProfile(record);
-  const token = existingToken || issueSession(uid).token;
+  const token = existingToken || (await issueSession(uid)).token;
   const expiresAt = existingExpiry || new Date(Date.now() + 60 * 60 * 1000).toISOString();
   if (!existingToken) {
-    saveSession({ token, uid, expiresAt });
+    await saveSession({ token, uid, expiresAt });
   }
   return {
     session: {
@@ -175,18 +184,18 @@ const readBearerToken = (req) => {
   return raw.slice('Bearer '.length).trim();
 };
 
-const requireAuth = (req, res, next) => {
+const requireAuth = asyncHandler(async (req, res, next) => {
   const token = readBearerToken(req);
   if (!token) {
     res.status(401).json({ message: 'Missing authorization token.' });
     return;
   }
-  const session = getSession(token);
+  const session = await getSession(token);
   if (!session) {
     res.status(401).json({ message: 'Session expired. Please sign in again.' });
     return;
   }
-  const userRecord = getUserByUid(session.uid);
+  const userRecord = await getUserByUid(session.uid);
   if (!userRecord) {
     res.status(401).json({ message: 'User not found for this session.' });
     return;
@@ -198,7 +207,7 @@ const requireAuth = (req, res, next) => {
     profile: getPublicProfile(userRecord),
   };
   next();
-};
+});
 
 const isAdmin = (profile) =>
   profile?.role === 'admin' || normalizeEmail(profile?.email || '') === 'mreardon@wtpnews.org';
@@ -266,103 +275,130 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'chatscream-api', timestamp: nowIso() });
+  res.json({
+    ok: true,
+    service: 'chatscream-api',
+    timestamp: nowIso(),
+    identityStorage: getIdentityStorageMode(),
+  });
 });
 
-app.post('/api/auth/signup', (req, res) => {
-  const email = normalizeEmail(req.body?.email || '');
-  const password = String(req.body?.password || '');
-  const displayName = String(req.body?.displayName || '').trim();
-  const referralCode = normalizeCode(req.body?.referralCode || '');
+app.post(
+  '/api/auth/signup',
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body?.email || '');
+    const password = String(req.body?.password || '');
+    const displayName = String(req.body?.displayName || '').trim();
+    const referralCode = normalizeCode(req.body?.referralCode || '');
 
-  if (!email || !password || password.length < 6) {
-    res.status(400).json({ message: 'Valid email and password are required.' });
-    return;
-  }
-  if (getUserByEmail(email)) {
-    res.status(409).json({ message: 'This email is already registered.' });
-    return;
-  }
+    if (!email || !password || password.length < 6) {
+      res.status(400).json({ message: 'Valid email and password are required.' });
+      return;
+    }
+    if (await getUserByEmail(email)) {
+      res.status(409).json({ message: 'This email is already registered.' });
+      return;
+    }
 
-  const referredAffiliate = referralCode ? getAffiliate(referralCode) : null;
-  const uid = randomUUID();
-  const profile = ensureAffiliateForProfile(
-    createUserProfile({
+    const referredAffiliate = referralCode ? getAffiliate(referralCode) : null;
+    const uid = randomUUID();
+    const profile = ensureAffiliateForProfile(
+      createUserProfile({
+        uid,
+        email,
+        displayName: displayName || email.split('@')[0],
+        referredByCode: referredAffiliate?.code || '',
+        referredByUserId: referredAffiliate?.ownerId || '',
+      }),
+    );
+
+    if (referredAffiliate?.isActive) {
+      setAffiliate({
+        ...referredAffiliate,
+        totalReferrals: Number(referredAffiliate.totalReferrals || 0) + 1,
+      });
+      addReferral({
+        id: randomUUID(),
+        affiliateCode: referredAffiliate.code,
+        referrerId: referredAffiliate.ownerId,
+        referredUserId: uid,
+        createdAt: nowIso(),
+      });
+    }
+
+    await putUser({
       uid,
       email,
-      displayName: displayName || email.split('@')[0],
-      referredByCode: referredAffiliate?.code || '',
-      referredByUserId: referredAffiliate?.ownerId || '',
-    }),
-  );
-
-  if (referredAffiliate?.isActive) {
-    setAffiliate({
-      ...referredAffiliate,
-      totalReferrals: Number(referredAffiliate.totalReferrals || 0) + 1,
+      passwordHash: hashPassword(password),
+      profile,
     });
-    addReferral({
-      id: randomUUID(),
-      affiliateCode: referredAffiliate.code,
-      referrerId: referredAffiliate.ownerId,
-      referredUserId: uid,
-      createdAt: nowIso(),
-    });
-  }
 
-  putUser({
-    uid,
-    email,
-    passwordHash: hashPassword(password),
-    profile,
-  });
+    const payload = await buildSessionPayload(uid);
+    res.status(201).json(payload);
+  }),
+);
 
-  const payload = buildSessionPayload(uid);
-  res.status(201).json(payload);
-});
+app.post(
+  '/api/auth/login',
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body?.email || '');
+    const password = String(req.body?.password || '');
+    const record = await getUserByEmail(email);
 
-app.post('/api/auth/login', (req, res) => {
-  const email = normalizeEmail(req.body?.email || '');
-  const password = String(req.body?.password || '');
-  const record = getUserByEmail(email);
+    if (!record || record.passwordHash !== hashPassword(password)) {
+      res.status(401).json({ message: 'Invalid email or password.' });
+      return;
+    }
 
-  if (!record || record.passwordHash !== hashPassword(password)) {
-    res.status(401).json({ message: 'Invalid email or password.' });
-    return;
-  }
+    const payload = await buildSessionPayload(record.uid);
+    res.json(payload);
+  }),
+);
 
-  const payload = buildSessionPayload(record.uid);
-  res.json(payload);
-});
+app.get(
+  '/api/auth/session',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const payload = await buildSessionPayload(
+      req.auth.record.uid,
+      req.auth.token,
+      req.auth.session.expiresAt,
+    );
+    res.json(payload);
+  }),
+);
 
-app.get('/api/auth/session', requireAuth, (req, res) => {
-  const payload = buildSessionPayload(
-    req.auth.record.uid,
-    req.auth.token,
-    req.auth.session.expiresAt,
-  );
-  res.json(payload);
-});
+app.get(
+  '/api/auth/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const payload = await buildSessionPayload(
+      req.auth.record.uid,
+      req.auth.token,
+      req.auth.session.expiresAt,
+    );
+    res.json(payload);
+  }),
+);
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
-  const payload = buildSessionPayload(
-    req.auth.record.uid,
-    req.auth.token,
-    req.auth.session.expiresAt,
-  );
-  res.json(payload);
-});
+app.post(
+  '/api/auth/refresh',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await removeSession(req.auth.token);
+    const payload = await buildSessionPayload(req.auth.record.uid);
+    res.json(payload);
+  }),
+);
 
-app.post('/api/auth/refresh', requireAuth, (req, res) => {
-  removeSession(req.auth.token);
-  const payload = buildSessionPayload(req.auth.record.uid);
-  res.json(payload);
-});
-
-app.post('/api/auth/logout', requireAuth, (req, res) => {
-  removeSession(req.auth.token);
-  res.json({ success: true });
-});
+app.post(
+  '/api/auth/logout',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await removeSession(req.auth.token);
+    res.json({ success: true });
+  }),
+);
 
 app.post('/api/auth/reset-password', (_req, res) => {
   res.json({ success: true });
@@ -381,96 +417,119 @@ app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
   res.json({ redirectUrl });
 });
 
-app.get('/api/auth/oauth/:provider', (req, res) => {
-  const provider = String(req.params.provider || '')
-    .trim()
-    .toLowerCase();
-  const referral = normalizeCode(req.query.ref || '');
-  const email = normalizeEmail(`demo-${provider}@chatscream.local`);
+app.get(
+  '/api/auth/oauth/:provider',
+  asyncHandler(async (req, res) => {
+    const provider = String(req.params.provider || '')
+      .trim()
+      .toLowerCase();
+    const referral = normalizeCode(req.query.ref || '');
+    const email = normalizeEmail(`demo-${provider}@chatscream.local`);
 
-  let record = getUserByEmail(email);
-  if (!record) {
-    const uid = randomUUID();
-    const referredAffiliate = referral ? getAffiliate(referral) : null;
-    let profile = createUserProfile({
-      uid,
-      email,
-      displayName: `${provider[0]?.toUpperCase() || 'O'}${provider.slice(1)} User`,
-      referredByCode: referredAffiliate?.code || '',
-      referredByUserId: referredAffiliate?.ownerId || '',
-    });
-    profile = ensureAffiliateForProfile(profile);
+    let record = await getUserByEmail(email);
+    if (!record) {
+      const uid = randomUUID();
+      const referredAffiliate = referral ? getAffiliate(referral) : null;
+      let profile = createUserProfile({
+        uid,
+        email,
+        displayName: `${provider[0]?.toUpperCase() || 'O'}${provider.slice(1)} User`,
+        referredByCode: referredAffiliate?.code || '',
+        referredByUserId: referredAffiliate?.ownerId || '',
+      });
+      profile = ensureAffiliateForProfile(profile);
 
-    putUser({
-      uid,
-      email,
-      passwordHash: '',
-      profile,
-    });
-    record = getUserByUid(uid);
-  }
+      await putUser({
+        uid,
+        email,
+        passwordHash: '',
+        profile,
+      });
+      record = await getUserByUid(uid);
+    }
 
-  const issued = issueSession(record.uid);
-  const redirect = new URL('/oauth/callback', `http://${req.headers.host || 'localhost'}`);
-  redirect.searchParams.set('platform', provider);
-  redirect.searchParams.set('token', issued.token);
-  redirect.searchParams.set('uid', record.uid);
-  redirect.searchParams.set('email', record.email);
-  redirect.searchParams.set('displayName', record.profile.displayName || 'User');
-  redirect.searchParams.set('expiresAt', issued.expiresAt);
-  res.redirect(302, `${redirect.pathname}${redirect.search}`);
-});
+    const issued = await issueSession(record.uid);
+    const redirect = new URL('/oauth/callback', `http://${req.headers.host || 'localhost'}`);
+    redirect.searchParams.set('platform', provider);
+    redirect.searchParams.set('token', issued.token);
+    redirect.searchParams.set('uid', record.uid);
+    redirect.searchParams.set('email', record.email);
+    redirect.searchParams.set('displayName', record.profile.displayName || 'User');
+    redirect.searchParams.set('expiresAt', issued.expiresAt);
+    res.redirect(302, `${redirect.pathname}${redirect.search}`);
+  }),
+);
 
-app.post('/api/access/sync', requireAuth, (req, res) => {
-  const record = getUserByUid(req.auth.record.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const profile = applyAccessOverrides(record.profile);
-  putUser({ ...record, profile });
-  res.json({ success: true, profile });
-});
+app.post(
+  '/api/access/sync',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.record.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = applyAccessOverrides(record.profile);
+    await putUser({ ...record, profile });
+    res.json({ success: true, profile });
+  }),
+);
 
-app.get('/api/users/:uid', requireAuth, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  res.json({ profile: getPublicProfile(record) });
-});
+app.get(
+  '/api/users/:uid',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    res.json({ profile: getPublicProfile(record) });
+  }),
+);
 
-app.patch('/api/users/:uid', requireAuth, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const profile = deepMerge(record.profile, req.body || {});
-  putUser({ ...record, profile });
-  res.json({ profile: getPublicProfile({ ...record, profile }) });
-});
+app.patch(
+  '/api/users/:uid',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = deepMerge(record.profile, req.body || {});
+    await putUser({ ...record, profile });
+    res.json({ profile: getPublicProfile({ ...record, profile }) });
+  }),
+);
 
-app.get('/api/user/:uid', requireAuth, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  res.json({ profile: getPublicProfile(record) });
-});
+app.get(
+  '/api/user/:uid',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    res.json({ profile: getPublicProfile(record) });
+  }),
+);
 
-app.put('/api/user/:uid', requireAuth, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const profile = deepMerge(record.profile, req.body || {});
-  putUser({ ...record, profile });
-  res.json({ profile: getPublicProfile({ ...record, profile }) });
-});
+app.put(
+  '/api/user/:uid',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = deepMerge(record.profile, req.body || {});
+    await putUser({ ...record, profile });
+    res.json({ profile: getPublicProfile({ ...record, profile }) });
+  }),
+);
 
 app.get('/api/affiliates/:code', requireAuth, (req, res) => {
   const affiliate = getAffiliate(req.params.code);
@@ -490,29 +549,37 @@ app.get('/api/affiliate/:code', requireAuth, (req, res) => {
   res.json({ affiliate });
 });
 
-app.post('/api/affiliates', requireAuth, (req, res) => {
-  const userId = String(req.body?.userId || req.auth.profile.uid);
-  const record = getUserByUid(userId);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  let profile = ensureAffiliateForProfile(record.profile);
-  putUser({ ...record, profile });
-  res.status(201).json({ code: profile.affiliate.code });
-});
+app.post(
+  '/api/affiliates',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = String(req.body?.userId || req.auth.profile.uid);
+    const record = await getUserByUid(userId);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = ensureAffiliateForProfile(record.profile);
+    await putUser({ ...record, profile });
+    res.status(201).json({ code: profile.affiliate.code });
+  }),
+);
 
-app.post('/api/affiliate/create', requireAuth, (req, res) => {
-  const userId = String(req.body?.userId || req.auth.profile.uid);
-  const record = getUserByUid(userId);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  let profile = ensureAffiliateForProfile(record.profile);
-  putUser({ ...record, profile });
-  res.status(201).json({ code: profile.affiliate.code });
-});
+app.post(
+  '/api/affiliate/create',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = String(req.body?.userId || req.auth.profile.uid);
+    const record = await getUserByUid(userId);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = ensureAffiliateForProfile(record.profile);
+    await putUser({ ...record, profile });
+    res.status(201).json({ code: profile.affiliate.code });
+  }),
+);
 
 app.post('/api/affiliates/:code/referrals', requireAuth, (req, res) => {
   const code = normalizeCode(req.params.code);
@@ -556,27 +623,35 @@ app.post('/api/referrals', requireAuth, (req, res) => {
   res.status(201).json({ success: true });
 });
 
-app.post('/api/affiliates/ensure', requireAuth, (req, res) => {
-  const record = getUserByUid(req.auth.profile.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const profile = ensureAffiliateForProfile(record.profile);
-  putUser({ ...record, profile });
-  res.json({ code: profile.affiliate.code, affiliateCode: profile.affiliate.code });
-});
+app.post(
+  '/api/affiliates/ensure',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = ensureAffiliateForProfile(record.profile);
+    await putUser({ ...record, profile });
+    res.json({ code: profile.affiliate.code, affiliateCode: profile.affiliate.code });
+  }),
+);
 
-app.post('/api/users/me/affiliate', requireAuth, (req, res) => {
-  const record = getUserByUid(req.auth.profile.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const profile = ensureAffiliateForProfile(record.profile);
-  putUser({ ...record, profile });
-  res.json({ code: profile.affiliate.code, affiliateCode: profile.affiliate.code });
-});
+app.post(
+  '/api/users/me/affiliate',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const profile = ensureAffiliateForProfile(record.profile);
+    await putUser({ ...record, profile });
+    res.json({ code: profile.affiliate.code, affiliateCode: profile.affiliate.code });
+  }),
+);
 
 app.get('/api/config/oauth', requireAuth, (_req, res) => {
   const oauth = getConfig('oauth');
@@ -642,75 +717,95 @@ app.post('/api/access/list', requireAuth, requireAdmin, (req, res) => {
   res.json({ success: true, access: getConfig('access') });
 });
 
-app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
-  const email = normalizeEmail(req.query.email || '');
-  if (!email) {
-    res.json({ users: [] });
-    return;
-  }
-  const users = listUsers()
-    .filter((record) => normalizeEmail(record.email) === email)
-    .map((record) => getPublicProfile(record));
-  res.json({ users });
-});
+app.get(
+  '/api/admin/users',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.query.email || '');
+    if (!email) {
+      res.json({ users: [] });
+      return;
+    }
+    const users = (await listUsers())
+      .filter((record) => normalizeEmail(record.email) === email)
+      .map((record) => getPublicProfile(record));
+    res.json({ users });
+  }),
+);
 
-app.get('/api/users/search', requireAuth, requireAdmin, (req, res) => {
-  const email = normalizeEmail(req.query.email || '');
-  if (!email) {
-    res.json({ users: [] });
-    return;
-  }
-  const users = listUsers()
-    .filter((record) => normalizeEmail(record.email) === email)
-    .map((record) => getPublicProfile(record));
-  res.json({ users });
-});
+app.get(
+  '/api/users/search',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.query.email || '');
+    if (!email) {
+      res.json({ users: [] });
+      return;
+    }
+    const users = (await listUsers())
+      .filter((record) => normalizeEmail(record.email) === email)
+      .map((record) => getPublicProfile(record));
+    res.json({ users });
+  }),
+);
 
-app.patch('/api/admin/users/:uid/access', requireAuth, requireAdmin, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const patch = req.body || {};
-  const profile = {
-    ...record.profile,
-    role: patch.role || record.profile.role,
-    betaTester:
-      typeof patch.betaTester === 'boolean' ? patch.betaTester : record.profile.betaTester,
-    subscription: {
-      ...record.profile.subscription,
-      plan: patch.plan || record.profile.subscription.plan,
-      status: patch.status || record.profile.subscription.status,
-      betaOverride: true,
-    },
-  };
-  putUser({ ...record, profile });
-  res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
-});
+app.patch(
+  '/api/admin/users/:uid/access',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const patch = req.body || {};
+    const profile = {
+      ...record.profile,
+      role: patch.role || record.profile.role,
+      betaTester:
+        typeof patch.betaTester === 'boolean' ? patch.betaTester : record.profile.betaTester,
+      subscription: {
+        ...record.profile.subscription,
+        plan: patch.plan || record.profile.subscription.plan,
+        status: patch.status || record.profile.subscription.status,
+        betaOverride: true,
+      },
+    };
+    await putUser({ ...record, profile });
+    res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
+  }),
+);
 
-app.post('/api/access/users/:uid', requireAuth, requireAdmin, (req, res) => {
-  const record = getUserByUid(req.params.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
-  const patch = req.body || {};
-  const profile = {
-    ...record.profile,
-    role: patch.role || record.profile.role,
-    betaTester:
-      typeof patch.betaTester === 'boolean' ? patch.betaTester : record.profile.betaTester,
-    subscription: {
-      ...record.profile.subscription,
-      plan: patch.plan || record.profile.subscription.plan,
-      status: patch.status || record.profile.subscription.status,
-      betaOverride: true,
-    },
-  };
-  putUser({ ...record, profile });
-  res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
-});
+app.post(
+  '/api/access/users/:uid',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.params.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+    const patch = req.body || {};
+    const profile = {
+      ...record.profile,
+      role: patch.role || record.profile.role,
+      betaTester:
+        typeof patch.betaTester === 'boolean' ? patch.betaTester : record.profile.betaTester,
+      subscription: {
+        ...record.profile.subscription,
+        plan: patch.plan || record.profile.subscription.plan,
+        status: patch.status || record.profile.subscription.status,
+        betaOverride: true,
+      },
+    };
+    await putUser({ ...record, profile });
+    res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
+  }),
+);
 
 app.get('/api/chat/messages', requireAuth, (req, res) => {
   const streamId = String(req.query.streamId || '');
@@ -998,80 +1093,92 @@ app.get('/api/cloud-streaming/sessions/active', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/oauth/exchange', requireAuth, (req, res) => {
-  const platform = String(req.body?.platform || '')
-    .trim()
-    .toLowerCase();
-  if (!platform) {
-    res.status(400).json({ message: 'platform is required.' });
-    return;
-  }
+app.post(
+  '/api/oauth/exchange',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const platform = String(req.body?.platform || '')
+      .trim()
+      .toLowerCase();
+    if (!platform) {
+      res.status(400).json({ message: 'platform is required.' });
+      return;
+    }
 
-  const record = getUserByUid(req.auth.profile.uid);
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
+    const record = await getUserByUid(req.auth.profile.uid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
 
-  const platformInfo = {
-    youtube: {
-      accessToken: `yt_access_${randomUUID().slice(0, 8)}`,
-      refreshToken: `yt_refresh_${randomUUID().slice(0, 8)}`,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      channelId: `yt_${record.uid.slice(0, 8)}`,
-      channelName: `${record.profile.displayName} YouTube`,
-    },
-    facebook: {
-      accessToken: `fb_access_${randomUUID().slice(0, 8)}`,
-      refreshToken: `fb_refresh_${randomUUID().slice(0, 8)}`,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      pageId: `fb_${record.uid.slice(0, 8)}`,
-      pageName: `${record.profile.displayName} Facebook`,
-    },
-    twitch: {
-      accessToken: `tw_access_${randomUUID().slice(0, 8)}`,
-      refreshToken: `tw_refresh_${randomUUID().slice(0, 8)}`,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      channelId: `tw_${record.uid.slice(0, 8)}`,
-      channelName: `${record.profile.displayName} Twitch`,
-    },
-  };
+    const platformInfo = {
+      youtube: {
+        accessToken: `yt_access_${randomUUID().slice(0, 8)}`,
+        refreshToken: `yt_refresh_${randomUUID().slice(0, 8)}`,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        channelId: `yt_${record.uid.slice(0, 8)}`,
+        channelName: `${record.profile.displayName} YouTube`,
+      },
+      facebook: {
+        accessToken: `fb_access_${randomUUID().slice(0, 8)}`,
+        refreshToken: `fb_refresh_${randomUUID().slice(0, 8)}`,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        pageId: `fb_${record.uid.slice(0, 8)}`,
+        pageName: `${record.profile.displayName} Facebook`,
+      },
+      twitch: {
+        accessToken: `tw_access_${randomUUID().slice(0, 8)}`,
+        refreshToken: `tw_refresh_${randomUUID().slice(0, 8)}`,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        channelId: `tw_${record.uid.slice(0, 8)}`,
+        channelName: `${record.profile.displayName} Twitch`,
+      },
+    };
 
-  if (!platformInfo[platform]) {
-    res.status(400).json({ message: `Unsupported platform: ${platform}` });
-    return;
-  }
+    if (!platformInfo[platform]) {
+      res.status(400).json({ message: `Unsupported platform: ${platform}` });
+      return;
+    }
 
-  setConnectedPlatform(record.uid, platform, platformInfo[platform]);
-  res.json({ success: true });
-});
+    await setConnectedPlatform(record.uid, platform, platformInfo[platform]);
+    res.json({ success: true });
+  }),
+);
 
 app.post('/api/oauth/refresh', requireAuth, (_req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/oauth/disconnect', requireAuth, (req, res) => {
-  const platform = String(req.body?.platform || '')
-    .trim()
-    .toLowerCase();
-  const userId = String(req.body?.userId || req.auth.profile.uid);
-  setConnectedPlatform(userId, platform, null);
-  res.json({ success: true });
-});
+app.post(
+  '/api/oauth/disconnect',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const platform = String(req.body?.platform || '')
+      .trim()
+      .toLowerCase();
+    const userId = String(req.body?.userId || req.auth.profile.uid);
+    await setConnectedPlatform(userId, platform, null);
+    res.json({ success: true });
+  }),
+);
 
 app.post('/api/oauth/revoke', requireAuth, (_req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/oauth/platforms', requireAuth, (req, res) => {
-  const userId = String(req.query.userId || req.auth.profile.uid);
-  const record = getUserByUid(userId);
-  if (!record) {
-    res.json({ platforms: {} });
-    return;
-  }
-  res.json({ platforms: record.profile.connectedPlatforms || {} });
-});
+app.get(
+  '/api/oauth/platforms',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = String(req.query.userId || req.auth.profile.uid);
+    const record = await getUserByUid(userId);
+    if (!record) {
+      res.json({ platforms: {} });
+      return;
+    }
+    res.json({ platforms: record.profile.connectedPlatforms || {} });
+  }),
+);
 
 app.post('/api/oauth/stream-key', requireAuth, (req, res) => {
   const platform = String(req.body?.platform || '')
@@ -1116,66 +1223,71 @@ app.get('/api/leaderboard', (_req, res) => {
   res.json({ entries: state.leaderboard || [] });
 });
 
-app.get('/api/analytics/user', requireAuth, (req, res) => {
-  const requestedDays = Number(req.query.days || 30);
-  const days = Number.isFinite(requestedDays) ? Math.max(1, Math.min(365, requestedDays)) : 30;
-  const userId = String(req.query.userId || req.auth.profile.uid);
-  const record = getUserByUid(userId);
+app.get(
+  '/api/analytics/user',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const requestedDays = Number(req.query.days || 30);
+    const days = Number.isFinite(requestedDays) ? Math.max(1, Math.min(365, requestedDays)) : 30;
+    const userId = String(req.query.userId || req.auth.profile.uid);
+    const record = await getUserByUid(userId);
 
-  if (!record) {
-    res.status(404).json({ message: 'User not found.' });
-    return;
-  }
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
 
-  const usage = getCloudUsage(userId);
-  const totalDuration = Math.round(Number(usage.cloudHoursUsed || 0) * 3600);
-  const hasRecentStream = Boolean(usage.lastStreamDate);
-  const hasActiveSession = Boolean(usage.activeCloudSession);
-  const totalStreams = Number(hasRecentStream) + Number(hasActiveSession);
-  const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
+    const usage = getCloudUsage(userId);
+    const totalDuration = Math.round(Number(usage.cloudHoursUsed || 0) * 3600);
+    const hasRecentStream = Boolean(usage.lastStreamDate);
+    const hasActiveSession = Boolean(usage.activeCloudSession);
+    const totalStreams = Number(hasRecentStream) + Number(hasActiveSession);
+    const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
 
-  const recentSessions = [];
-  if (usage.activeCloudSession) {
-    recentSessions.push({
-      id: usage.activeCloudSession.sessionId,
-      startedAt: usage.activeCloudSession.startTime || nowIso(),
-      duration: Math.max(
-        60,
-        Math.round(
-          (Date.now() - new Date(usage.activeCloudSession.startTime || nowIso()).getTime()) / 1000,
+    const recentSessions = [];
+    if (usage.activeCloudSession) {
+      recentSessions.push({
+        id: usage.activeCloudSession.sessionId,
+        startedAt: usage.activeCloudSession.startTime || nowIso(),
+        duration: Math.max(
+          60,
+          Math.round(
+            (Date.now() - new Date(usage.activeCloudSession.startTime || nowIso()).getTime()) /
+              1000,
+          ),
         ),
-      ),
-      peakViewers: 0,
-      platforms: [],
-      layout: 'default',
-      status: 'active',
-    });
-  } else if (usage.lastStreamDate) {
-    recentSessions.push({
-      id: `session_${userId}_${new Date(usage.lastStreamDate).getTime()}`,
-      startedAt: usage.lastStreamDate,
-      endedAt: usage.lastStreamDate,
-      duration: totalDuration,
-      peakViewers: 0,
-      platforms: [],
-      layout: 'default',
-      status: 'ended',
-    });
-  }
+        peakViewers: 0,
+        platforms: [],
+        layout: 'default',
+        status: 'active',
+      });
+    } else if (usage.lastStreamDate) {
+      recentSessions.push({
+        id: `session_${userId}_${new Date(usage.lastStreamDate).getTime()}`,
+        startedAt: usage.lastStreamDate,
+        endedAt: usage.lastStreamDate,
+        duration: totalDuration,
+        peakViewers: 0,
+        platforms: [],
+        layout: 'default',
+        status: 'ended',
+      });
+    }
 
-  res.json({
-    period: `${days}d`,
-    stats: {
-      totalStreams,
-      totalDuration,
-      avgDuration,
-      peakViewers: 0,
-      totalScreams: 0,
-      totalRevenue: 0,
-    },
-    recentSessions,
-  });
-});
+    res.json({
+      period: `${days}d`,
+      stats: {
+        totalStreams,
+        totalDuration,
+        avgDuration,
+        peakViewers: 0,
+        totalScreams: 0,
+        totalRevenue: 0,
+      },
+      recentSessions,
+    });
+  }),
+);
 
 app.post('/api/create-checkout-session', requireAuth, (req, res) => {
   const successUrl = String(req.body?.successUrl || '');
@@ -1190,6 +1302,15 @@ app.post('/api/create-portal-session', requireAuth, (req, res) => {
   res.json({
     url: returnUrl || '/dashboard?portal=opened',
   });
+});
+
+app.use((error, _req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  console.error('API error:', error);
+  res.status(500).json({ message: 'Internal server error.' });
 });
 
 app.use('/api', (_req, res) => {

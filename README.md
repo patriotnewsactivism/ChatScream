@@ -95,6 +95,7 @@ Monetize your stream with aggression.
     ```
 
     - _Required:_ `VITE_API_BASE_URL` (or leave blank for same-origin API)
+    - _Recommended for production auth:_ `POSTGRES_URL` + `REDIS_URL`
     - _Optional (for full features):_ Stripe keys, Claude API key.
 
 4.  **Run Local Development**
@@ -127,6 +128,13 @@ export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
 ### 3. Deploy App/API Container
 
 Deploy `server/index.js` and `dist/` with your preferred AWS runtime (ECS/Fargate, EC2, or another container platform).
+
+For durable multi-instance auth, configure:
+
+- `POSTGRES_URL` (+ `POSTGRES_SSL=true` in production)
+- `REDIS_URL` (+ `REDIS_TLS=true` in production)
+
+Users/profiles are stored in Postgres and session tokens in Redis.
 
 ### 4. Vercel Single-Project Deploy (Frontend + API)
 

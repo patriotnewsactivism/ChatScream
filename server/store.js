@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import Redis from 'ioredis';
 
 const envDataDir = String(process.env.CHATSCREAM_DATA_DIR || '').trim();
 const defaultDataDir = process.env.VERCEL
@@ -16,8 +18,96 @@ const DEFAULT_BETA_TESTERS = ['leroytruth247@gmail.com'];
 const nowIso = () => new Date().toISOString();
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
 const normalizeCode = (value = '') => value.trim().toUpperCase();
+const parseBoolean = (value) =>
+  ['1', 'true', 'yes', 'on'].includes(
+    String(value || '')
+      .trim()
+      .toLowerCase(),
+  );
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const postgresUrl = String(process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
+const redisUrl = String(process.env.REDIS_URL || '').trim();
+const managedIdentityEnabled = Boolean(postgresUrl && redisUrl);
+
+let identityClients = null;
+let identityInitPromise = null;
+
+const sessionKey = (token) => `chatscream:session:${token}`;
+
+const normalizeUserRecord = (row) => {
+  if (!row) return null;
+  return {
+    uid: String(row.uid),
+    email: normalizeEmail(row.email || ''),
+    passwordHash: String(row.password_hash || ''),
+    profile: typeof row.profile === 'string' ? JSON.parse(row.profile) : row.profile || {},
+  };
+};
+
+const getIdentityClients = async () => {
+  if (!managedIdentityEnabled) return null;
+  if (identityClients) return identityClients;
+  if (identityInitPromise) return identityInitPromise;
+
+  identityInitPromise = (async () => {
+    const usePostgresTls = parseBoolean(process.env.POSTGRES_SSL);
+    const pool = new Pool({
+      connectionString: postgresUrl,
+      ...(usePostgresTls ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatscream_users (
+        uid TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL DEFAULT '',
+        profile JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_chatscream_users_email ON chatscream_users (email);
+    `);
+
+    const useRedisTls = parseBoolean(process.env.REDIS_TLS);
+    const redis = new Redis(redisUrl, {
+      maxRetriesPerRequest: 2,
+      ...(useRedisTls ? { tls: { rejectUnauthorized: false } } : {}),
+    });
+    await redis.ping();
+
+    identityClients = { pool, redis };
+    return identityClients;
+  })().catch((error) => {
+    identityInitPromise = null;
+    throw error;
+  });
+
+  return identityInitPromise;
+};
+
+export const isManagedIdentityStorageEnabled = () => managedIdentityEnabled;
+
+export const getIdentityStorageMode = () => (managedIdentityEnabled ? 'postgres+redis' : 'local');
+
+export const initIdentityStorage = async () => {
+  if (!managedIdentityEnabled) return 'local';
+  await getIdentityClients();
+  return 'postgres+redis';
+};
+
+export const closeIdentityStorage = async () => {
+  if (!identityClients) return;
+  const { pool, redis } = identityClients;
+  identityClients = null;
+  identityInitPromise = null;
+  try {
+    await pool.end();
+  } finally {
+    redis.disconnect();
+  }
+};
 
 const baseState = () => ({
   users: {},
@@ -248,24 +338,85 @@ export const applyAccessOverrides = (profile) => {
   return next;
 };
 
-export const putUser = (record) =>
-  writeState((state) => {
-    state.users[record.uid] = record;
-    state.usersByEmail[normalizeEmail(record.email)] = record.uid;
-  });
+export const putUser = async (record) => {
+  const normalizedRecord = {
+    ...record,
+    email: normalizeEmail(record.email),
+    passwordHash: String(record.passwordHash || ''),
+  };
 
-export const getUserByUid = (uid) => {
+  if (managedIdentityEnabled) {
+    const { pool } = await getIdentityClients();
+    await pool.query(
+      `
+        INSERT INTO chatscream_users (uid, email, password_hash, profile, updated_at)
+        VALUES ($1, $2, $3, $4::jsonb, NOW())
+        ON CONFLICT (uid)
+        DO UPDATE SET
+          email = EXCLUDED.email,
+          password_hash = EXCLUDED.password_hash,
+          profile = EXCLUDED.profile,
+          updated_at = NOW()
+      `,
+      [
+        normalizedRecord.uid,
+        normalizedRecord.email,
+        normalizedRecord.passwordHash,
+        JSON.stringify(normalizedRecord.profile || {}),
+      ],
+    );
+    return;
+  }
+
+  writeState((state) => {
+    state.users[normalizedRecord.uid] = normalizedRecord;
+    state.usersByEmail[normalizedRecord.email] = normalizedRecord.uid;
+  });
+};
+
+export const getUserByUid = async (uid) => {
+  if (!uid) return null;
+
+  if (managedIdentityEnabled) {
+    const { pool } = await getIdentityClients();
+    const result = await pool.query(
+      `SELECT uid, email, password_hash, profile FROM chatscream_users WHERE uid = $1 LIMIT 1`,
+      [uid],
+    );
+    return normalizeUserRecord(result.rows[0] || null);
+  }
+
   const state = loadState();
   return state.users[uid] || null;
 };
 
-export const getUserByEmail = (email) => {
+export const getUserByEmail = async (email) => {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+
+  if (managedIdentityEnabled) {
+    const { pool } = await getIdentityClients();
+    const result = await pool.query(
+      `SELECT uid, email, password_hash, profile FROM chatscream_users WHERE email = $1 LIMIT 1`,
+      [normalized],
+    );
+    return normalizeUserRecord(result.rows[0] || null);
+  }
+
   const state = loadState();
-  const uid = state.usersByEmail[normalizeEmail(email)];
+  const uid = state.usersByEmail[normalized];
   return uid ? state.users[uid] || null : null;
 };
 
-export const listUsers = () => {
+export const listUsers = async () => {
+  if (managedIdentityEnabled) {
+    const { pool } = await getIdentityClients();
+    const result = await pool.query(
+      `SELECT uid, email, password_hash, profile FROM chatscream_users ORDER BY created_at ASC`,
+    );
+    return result.rows.map((row) => normalizeUserRecord(row)).filter(Boolean);
+  }
+
   const state = loadState();
   return Object.values(state.users);
 };
@@ -275,7 +426,21 @@ export const getPublicProfile = (record) => {
   return applyAccessOverrides(clone(record.profile));
 };
 
-export const saveSession = ({ token, uid, expiresAt }) =>
+export const saveSession = async ({ token, uid, expiresAt }) => {
+  if (managedIdentityEnabled) {
+    const { redis } = await getIdentityClients();
+    const ttlMs = Math.max(0, new Date(expiresAt).getTime() - Date.now());
+    if (ttlMs <= 0) return;
+    const payload = JSON.stringify({
+      token,
+      uid,
+      expiresAt,
+      createdAt: nowIso(),
+    });
+    await redis.set(sessionKey(token), payload, 'PX', ttlMs);
+    return;
+  }
+
   writeState((state) => {
     state.sessions[token] = {
       token,
@@ -284,8 +449,23 @@ export const saveSession = ({ token, uid, expiresAt }) =>
       createdAt: nowIso(),
     };
   });
+};
 
-export const getSession = (token) => {
+export const getSession = async (token) => {
+  if (!token) return null;
+
+  if (managedIdentityEnabled) {
+    const { redis } = await getIdentityClients();
+    const raw = await redis.get(sessionKey(token));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
+      await redis.del(sessionKey(token));
+      return null;
+    }
+    return parsed;
+  }
+
   const state = loadState();
   const session = state.sessions[token];
   if (!session) return null;
@@ -297,10 +477,19 @@ export const getSession = (token) => {
   return session;
 };
 
-export const removeSession = (token) =>
+export const removeSession = async (token) => {
+  if (!token) return;
+
+  if (managedIdentityEnabled) {
+    const { redis } = await getIdentityClients();
+    await redis.del(sessionKey(token));
+    return;
+  }
+
   writeState((state) => {
     delete state.sessions[token];
   });
+};
 
 export const setAffiliate = (affiliate) =>
   writeState((state) => {
@@ -373,7 +562,23 @@ export const getCloudUsage = (uid) => {
   );
 };
 
-export const setConnectedPlatform = (uid, platform, value) =>
+export const setConnectedPlatform = async (uid, platform, value) => {
+  if (managedIdentityEnabled) {
+    const record = await getUserByUid(uid);
+    if (!record) return;
+    const profile = clone(record.profile || {});
+    if (!profile.connectedPlatforms) {
+      profile.connectedPlatforms = {};
+    }
+    if (value === null) {
+      delete profile.connectedPlatforms[platform];
+    } else {
+      profile.connectedPlatforms[platform] = value;
+    }
+    await putUser({ ...record, profile });
+    return;
+  }
+
   writeState((state) => {
     const user = state.users[uid];
     if (!user) return;
@@ -386,6 +591,7 @@ export const setConnectedPlatform = (uid, platform, value) =>
       user.profile.connectedPlatforms[platform] = value;
     }
   });
+};
 
 export const seedLeaderboard = () =>
   writeState((state) => {
