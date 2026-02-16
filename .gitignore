@@ -9,3 +9,5 @@ infrastructure/aws/.env.aws
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.vercel
+.env*.local
