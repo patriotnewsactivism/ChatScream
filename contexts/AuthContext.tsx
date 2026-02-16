@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { ApiRequestError } from '../services/apiClient';
 import {
   AuthTokenResult,
   AuthUser,
@@ -118,7 +119,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         await completeRedirectSignIn();
       } catch (err: any) {
-        const message = getErrorMessage(err?.code);
+        const message = getErrorMessage(err);
         setError(message);
       }
     })();
@@ -147,7 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           scheduleTokenRefresh(tokenResult, backendUser);
         } catch (err: any) {
           if (!isMounted) return;
-          const message = getErrorMessage(err?.code);
+          const message = getErrorMessage(err);
           setError(message);
         }
       } else {
@@ -178,7 +179,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await signUpWithEmail(email, password, displayName, referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -193,7 +194,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await signInWithEmail(email, password);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -208,7 +209,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       return await signInWithGoogle(referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -223,7 +224,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       return await signInWithFacebook(referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -238,7 +239,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       return await signInWithGithub(referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -253,7 +254,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       return await signInWithTwitter(referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -268,7 +269,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       return await signInWithApple(referralCode);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     } finally {
@@ -297,7 +298,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await resetPassword(email);
     } catch (err: any) {
-      const message = getErrorMessage(err.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     }
@@ -310,7 +311,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const profile = await getUserProfile(user.uid);
         setUserProfile(applyLocalAccessOverrides(profile, user.email));
       } catch (err: any) {
-        const message = getErrorMessage(err?.code);
+        const message = getErrorMessage(err);
         setError(message);
       }
     }
@@ -325,7 +326,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setSessionToken(token);
       return token;
     } catch (err: any) {
-      const message = getErrorMessage(err?.code);
+      const message = getErrorMessage(err);
       setError(message);
       throw new Error(message);
     }
@@ -360,8 +361,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Helper function to convert auth error codes to user-friendly messages
-function getErrorMessage(errorCode?: string): string {
+// Helper function to convert auth errors to user-friendly messages.
+function getErrorMessage(error?: unknown): string {
+  if (error instanceof ApiRequestError) {
+    return error.message || 'Request failed. Please try again.';
+  }
+  if (error instanceof Error) {
+    const normalized = error.message.trim();
+    if (/failed to fetch|network\s*error|network request/i.test(normalized)) {
+      return 'Cannot reach the backend API. Start the API server and try again.';
+    }
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const errorCode =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code || '')
+      : '';
+
   switch (errorCode) {
     case 'auth/email-already-in-use':
       return 'This email is already registered. Please sign in instead.';
