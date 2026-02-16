@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-const DATA_DIR = path.join(process.cwd(), 'server', 'data');
+const envDataDir = String(process.env.CHATSCREAM_DATA_DIR || '').trim();
+const defaultDataDir = process.env.VERCEL
+  ? path.join('/tmp', 'chatscream')
+  : path.join(process.cwd(), 'server', 'data');
+
+const DATA_DIR = envDataDir || defaultDataDir;
 const DATA_FILE = path.join(DATA_DIR, 'runtime.json');
 
 const MASTER_EMAILS = ['mreardon@wtpnews.org'];
@@ -59,15 +64,33 @@ const baseState = () => ({
 
 let stateCache = null;
 let saveTimer = null;
+let persistenceEnabled = true;
+
+const markPersistenceUnavailable = (error) => {
+  if (!persistenceEnabled) return;
+  persistenceEnabled = false;
+  const message =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error';
+  console.warn(`State persistence disabled (${message}). Using in-memory storage only.`);
+};
 
 const ensureDataDir = () => {
+  if (!persistenceEnabled) return false;
   if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (error) {
+      markPersistenceUnavailable(error);
+      return false;
+    }
   }
+  return true;
 };
 
 const readStateFromDisk = () => {
-  ensureDataDir();
+  if (!ensureDataDir()) {
+    return baseState();
+  }
   if (!fs.existsSync(DATA_FILE)) {
     return baseState();
   }
@@ -85,15 +108,20 @@ const readStateFromDisk = () => {
         ...(parsed.cloud || {}),
       },
     };
-  } catch {
+  } catch (error) {
+    markPersistenceUnavailable(error);
     return baseState();
   }
 };
 
 const saveStateToDisk = () => {
-  if (!stateCache) return;
-  ensureDataDir();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(stateCache, null, 2), 'utf8');
+  if (!stateCache || !persistenceEnabled) return;
+  if (!ensureDataDir()) return;
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(stateCache, null, 2), 'utf8');
+  } catch (error) {
+    markPersistenceUnavailable(error);
+  }
 };
 
 const scheduleSave = () => {
