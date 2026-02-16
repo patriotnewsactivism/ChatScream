@@ -40,6 +40,101 @@ const PLAN_HOURS = {
   enterprise: 50,
 };
 
+const AWS_COST_MODEL = Object.freeze({
+  region: 'us-east-1',
+  minDestinations: 1,
+  maxDestinations: 5,
+  instanceRatesPerHour: {
+    't3.medium': 0.0416,
+    'c7g.large': 0.0725,
+    'c6i.xlarge': 0.17,
+    'g4dn.xlarge': 0.526,
+  },
+  publicIpv4PerHour: 0.005,
+  dataOutPerGb: 0.09,
+  storagePerGbMonth: 0.08,
+  bitrateKbpsByQuality: {
+    '720p': 4000,
+    '1080p': 6000,
+  },
+});
+
+const clampNumber = (value, min, max, fallback = min) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
+};
+
+const round = (value, digits = 4) => {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+};
+
+const normalizeQuality = (value) => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (normalized === '1080p') return '1080p';
+  return '720p';
+};
+
+const normalizeInstanceProfile = (value) => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (AWS_COST_MODEL.instanceRatesPerHour[normalized]) return normalized;
+  return 'c7g.large';
+};
+
+const estimateAwsCloudCost = ({
+  destinationCount,
+  quality,
+  bitrateKbps,
+  instanceProfile,
+  storageGb = 0,
+}) => {
+  const safeDestinationCount = clampNumber(
+    destinationCount,
+    AWS_COST_MODEL.minDestinations,
+    AWS_COST_MODEL.maxDestinations,
+    AWS_COST_MODEL.minDestinations,
+  );
+  const safeQuality = normalizeQuality(quality);
+  const safeInstanceProfile = normalizeInstanceProfile(instanceProfile);
+  const defaultBitrate = AWS_COST_MODEL.bitrateKbpsByQuality[safeQuality];
+  const safeBitrateKbps = clampNumber(bitrateKbps, 500, 20000, defaultBitrate);
+  const safeStorageGb = clampNumber(storageGb, 0, 10000, 0);
+
+  const instancePerHour = AWS_COST_MODEL.instanceRatesPerHour[safeInstanceProfile];
+  const ipv4PerHour = AWS_COST_MODEL.publicIpv4PerHour;
+  const totalBitrateMbps = (safeBitrateKbps / 1000) * safeDestinationCount;
+  const dataOutGbPerHour = totalBitrateMbps * 0.45;
+  const dataOutPerHour = dataOutGbPerHour * AWS_COST_MODEL.dataOutPerGb;
+  const storagePerHour = (safeStorageGb * AWS_COST_MODEL.storagePerGbMonth) / (30 * 24);
+  const basePerHour = instancePerHour + ipv4PerHour;
+  const totalPerHour = basePerHour + dataOutPerHour + storagePerHour;
+
+  return {
+    region: AWS_COST_MODEL.region,
+    destinationCount: safeDestinationCount,
+    quality: safeQuality,
+    bitrateKbps: safeBitrateKbps,
+    instanceProfile: safeInstanceProfile,
+    storageGb: safeStorageGb,
+    instancePerHour: round(instancePerHour),
+    ipv4PerHour: round(ipv4PerHour),
+    dataOutPerHour: round(dataOutPerHour),
+    storagePerHour: round(storagePerHour),
+    basePerHour: round(basePerHour),
+    totalPerHour: round(totalPerHour),
+    totalPerMonth: round(totalPerHour * 730, 2),
+    dataOutGbPerHour: round(dataOutGbPerHour),
+    totalBitrateMbps: round(totalBitrateMbps),
+    notes:
+      'Estimate excludes transcoder overhead, control-plane services, and destination platform fees.',
+  };
+};
+
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
 const normalizeCode = (value = '') => value.trim().toUpperCase();
 const nowIso = () => new Date().toISOString();
@@ -673,6 +768,25 @@ app.get('/api/cloud-streaming/status', requireAuth, (req, res) => {
       : canStream
         ? `${hoursRemaining.toFixed(1)} cloud hours remaining`
         : `You've used all ${total} cloud streaming hours this month.`;
+  const activeSession = usage.activeCloudSession || null;
+  const activeEstimate = activeSession
+    ? estimateAwsCloudCost({
+        destinationCount: activeSession.destinationCount || 1,
+        quality: activeSession.quality || '1080p',
+        bitrateKbps:
+          activeSession.bitrateKbps ||
+          AWS_COST_MODEL.bitrateKbpsByQuality[normalizeQuality(activeSession.quality)],
+        instanceProfile: activeSession.instanceProfile || 'c7g.large',
+        storageGb: activeSession.storageGb || 0,
+      })
+    : null;
+  const defaultEstimate = estimateAwsCloudCost({
+    destinationCount: 1,
+    quality: '1080p',
+    bitrateKbps: AWS_COST_MODEL.bitrateKbpsByQuality['1080p'],
+    instanceProfile: 'c7g.large',
+    storageGb: 0,
+  });
 
   res.json({
     canStream,
@@ -682,13 +796,90 @@ app.get('/api/cloud-streaming/status', requireAuth, (req, res) => {
     percentUsed,
     message,
     resetDate: usage.cloudHoursResetAt || nowIso(),
+    activeSession,
+    activeEstimate,
+    defaultEstimate,
+    costModel: AWS_COST_MODEL,
+  });
+});
+
+app.get('/api/cloud-streaming/cost-model', requireAuth, (_req, res) => {
+  res.json({
+    costModel: AWS_COST_MODEL,
+    instanceProfiles: [
+      {
+        id: 't3.medium',
+        label: 't3.medium (budget control-plane)',
+        ratePerHour: AWS_COST_MODEL.instanceRatesPerHour['t3.medium'],
+      },
+      {
+        id: 'c7g.large',
+        label: 'c7g.large (recommended)',
+        ratePerHour: AWS_COST_MODEL.instanceRatesPerHour['c7g.large'],
+      },
+      {
+        id: 'c6i.xlarge',
+        label: 'c6i.xlarge (higher CPU headroom)',
+        ratePerHour: AWS_COST_MODEL.instanceRatesPerHour['c6i.xlarge'],
+      },
+      {
+        id: 'g4dn.xlarge',
+        label: 'g4dn.xlarge (GPU accelerated)',
+        ratePerHour: AWS_COST_MODEL.instanceRatesPerHour['g4dn.xlarge'],
+      },
+    ],
+  });
+});
+
+app.post('/api/cloud-streaming/estimate', requireAuth, (req, res) => {
+  const quality = normalizeQuality(req.body?.quality || req.body?.resolution || '720p');
+  const destinationCount = clampNumber(
+    req.body?.destinationCount,
+    AWS_COST_MODEL.minDestinations,
+    AWS_COST_MODEL.maxDestinations,
+    1,
+  );
+  const bitrateKbps = clampNumber(
+    req.body?.bitrateKbps,
+    500,
+    20000,
+    AWS_COST_MODEL.bitrateKbpsByQuality[quality],
+  );
+  const instanceProfile = normalizeInstanceProfile(req.body?.instanceProfile || 'c7g.large');
+  const storageGb = clampNumber(req.body?.storageGb, 0, 10000, 0);
+
+  const estimate = estimateAwsCloudCost({
+    destinationCount,
+    quality,
+    bitrateKbps,
+    instanceProfile,
+    storageGb,
+  });
+
+  res.json({
+    success: true,
+    estimate,
   });
 });
 
 app.post('/api/cloud-streaming/sessions/start', requireAuth, (req, res) => {
   const userId = String(req.body?.userId || req.auth.profile.uid);
   const plan = String(req.body?.userPlan || req.auth.profile.subscription?.plan || 'free');
-  const destinationCount = Number(req.body?.destinationCount || 1);
+  const quality = normalizeQuality(req.body?.quality || req.body?.resolution || '720p');
+  const destinationCount = clampNumber(
+    req.body?.destinationCount,
+    AWS_COST_MODEL.minDestinations,
+    AWS_COST_MODEL.maxDestinations,
+    1,
+  );
+  const bitrateKbps = clampNumber(
+    req.body?.bitrateKbps,
+    500,
+    20000,
+    AWS_COST_MODEL.bitrateKbpsByQuality[quality],
+  );
+  const instanceProfile = normalizeInstanceProfile(req.body?.instanceProfile || 'c7g.large');
+  const storageGb = clampNumber(req.body?.storageGb, 0, 10000, 0);
   const usage = getCloudUsage(userId);
   const total = cloudLimitForPlan(plan);
   const hoursUsed = Number(usage.cloudHoursUsed || 0);
@@ -705,16 +896,33 @@ app.post('/api/cloud-streaming/sessions/start', requireAuth, (req, res) => {
   }
 
   const sessionId = `cloud_${userId}_${Date.now()}`;
+  const estimate = estimateAwsCloudCost({
+    destinationCount,
+    quality,
+    bitrateKbps,
+    instanceProfile,
+    storageGb,
+  });
   setCloudUsage(userId, {
     ...usage,
     activeCloudSession: {
       sessionId,
       startTime: nowIso(),
       destinationCount,
+      quality,
+      bitrateKbps,
+      instanceProfile,
+      storageGb,
+      estimatedCostPerHour: estimate.totalPerHour,
     },
     lastStreamDate: nowIso(),
   });
-  res.json({ success: true, sessionId, message: 'Cloud streaming session started' });
+  res.json({
+    success: true,
+    sessionId,
+    estimate,
+    message: 'Cloud streaming session started',
+  });
 });
 
 app.post('/api/cloud-streaming/sessions/end', requireAuth, (req, res) => {
@@ -732,6 +940,15 @@ app.post('/api/cloud-streaming/sessions/end', requireAuth, (req, res) => {
   const end = Date.now();
   const minutesUsed = Math.max(1, Math.ceil((end - start) / 60000));
   const hoursUsed = Math.round((Number(usage.cloudHoursUsed || 0) + minutesUsed / 60) * 100) / 100;
+  const estimate = estimateAwsCloudCost({
+    destinationCount: active.destinationCount || 1,
+    quality: active.quality || '1080p',
+    bitrateKbps:
+      active.bitrateKbps || AWS_COST_MODEL.bitrateKbpsByQuality[normalizeQuality(active.quality)],
+    instanceProfile: active.instanceProfile || 'c7g.large',
+    storageGb: active.storageGb || 0,
+  });
+  const sessionCostUsd = round((minutesUsed / 60) * estimate.totalPerHour, 4);
 
   setCloudUsage(userId, {
     ...usage,
@@ -742,6 +959,7 @@ app.post('/api/cloud-streaming/sessions/end', requireAuth, (req, res) => {
   res.json({
     success: true,
     minutesUsed,
+    estimatedCostUsd: sessionCostUsd,
     message: `Session ended. Used ${minutesUsed} minutes.`,
   });
 });
@@ -763,9 +981,22 @@ app.post('/api/cloud-streaming/reset', requireAuth, requireAdmin, (req, res) => 
 app.get('/api/cloud-streaming/sessions/active', requireAuth, (req, res) => {
   const userId = String(req.query.userId || req.auth.profile.uid);
   const usage = getCloudUsage(userId);
+  const activeSession = usage.activeCloudSession || null;
+  const estimate = activeSession
+    ? estimateAwsCloudCost({
+        destinationCount: activeSession.destinationCount || 1,
+        quality: activeSession.quality || '1080p',
+        bitrateKbps:
+          activeSession.bitrateKbps ||
+          AWS_COST_MODEL.bitrateKbpsByQuality[normalizeQuality(activeSession.quality)],
+        instanceProfile: activeSession.instanceProfile || 'c7g.large',
+        storageGb: activeSession.storageGb || 0,
+      })
+    : null;
   res.json({
-    active: Boolean(usage.activeCloudSession),
-    session: usage.activeCloudSession || null,
+    active: Boolean(activeSession),
+    session: activeSession,
+    estimate,
   });
 });
 

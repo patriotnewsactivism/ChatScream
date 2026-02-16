@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Destination,
@@ -23,6 +23,17 @@ import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
 import { getPlanById, planHasWatermark, type PlanTier } from './services/stripe';
 import { MobilePanel, useMobileLayout } from './hooks/useMobileLayout';
+import {
+  getCloudStreamingStatus,
+  startCloudSession,
+  endCloudSession,
+  estimateCloudStreamingCost,
+  getCloudTierInfo,
+  type CloudStreamingStatus,
+  type CloudCostEstimate,
+  type CloudStreamQuality,
+  type CloudInstanceProfile,
+} from './services/cloudStreamingService';
 import {
   Mic,
   MicOff,
@@ -52,6 +63,9 @@ import {
   CreditCard,
   MessageSquare,
   SwitchCamera,
+  Cloud,
+  Cpu,
+  DollarSign,
 } from 'lucide-react';
 
 interface BroadcastMessage {
@@ -59,6 +73,13 @@ interface BroadcastMessage {
   content: string;
   timestamp: Date;
 }
+
+const CLOUD_INSTANCE_OPTIONS: Array<{ id: CloudInstanceProfile; label: string }> = [
+  { id: 't3.medium', label: 't3.medium (Budget)' },
+  { id: 'c7g.large', label: 'c7g.large (Recommended)' },
+  { id: 'c6i.xlarge', label: 'c6i.xlarge (CPU Headroom)' },
+  { id: 'g4dn.xlarge', label: 'g4dn.xlarge (GPU Encode)' },
+];
 
 const App = () => {
   const navigate = useNavigate();
@@ -80,7 +101,8 @@ const App = () => {
   const canAccessAdmin =
     (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org' ||
     userProfile?.role === 'admin';
-  const planLabel = getPlanById(userProfile?.subscription?.plan || 'free')?.name || 'Free';
+  const userPlan = (userProfile?.subscription?.plan || 'free') as PlanTier;
+  const planLabel = getPlanById(userPlan)?.name || 'Free';
 
   // --- State ---
   const [destinations, setDestinations] = useState<Destination[]>([
@@ -143,6 +165,16 @@ const App = () => {
 
   // UI State
   const [leftSidebarTab, setLeftSidebarTab] = useState<'media' | 'graphics'>('media');
+  const [streamingMode, setStreamingMode] = useState<'local' | 'cloud'>('local');
+  const [streamActionPending, setStreamActionPending] = useState(false);
+  const [cloudQuality, setCloudQuality] = useState<CloudStreamQuality>('1080p');
+  const [cloudInstanceProfile, setCloudInstanceProfile] =
+    useState<CloudInstanceProfile>('c7g.large');
+  const [cloudStorageGb, setCloudStorageGb] = useState(0);
+  const [cloudSessionId, setCloudSessionId] = useState<string | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<CloudStreamingStatus | null>(null);
+  const [cloudEstimate, setCloudEstimate] = useState<CloudCostEstimate | null>(null);
+  const [cloudEstimateLoading, setCloudEstimateLoading] = useState(false);
 
   const canvasRef = useRef<CanvasRef>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(new Audio());
@@ -164,6 +196,17 @@ const App = () => {
   const videoSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const videoGainRef = useRef<GainNode | null>(null);
   const videoAnalyserRef = useRef<AnalyserNode | null>(null); // For future visualizers
+
+  const enabledDestinations = useMemo(
+    () => destinations.filter((destination) => destination.isEnabled),
+    [destinations],
+  );
+  const cloudDestinationCount = useMemo(
+    () => Math.max(1, Math.min(5, enabledDestinations.length || 1)),
+    [enabledDestinations.length],
+  );
+  const cloudBitrateKbps = cloudQuality === '1080p' ? 6000 : 4000;
+  const cloudTierInfo = useMemo(() => getCloudTierInfo(userPlan), [userPlan]);
 
   // --- Effects ---
 
@@ -191,7 +234,7 @@ const App = () => {
     };
 
     const config = {
-      userPlan: userProfile?.subscription?.plan || 'free',
+      userPlan,
       userId: user?.uid || '',
       cloudHoursUsed: 0,
       streamingMode: 'local' as const,
@@ -202,7 +245,7 @@ const App = () => {
     return () => {
       rtmpSenderRef.current?.disconnect();
     };
-  }, [user, userProfile]);
+  }, [user, userPlan]);
 
   // Audio Player Logic (Background Music)
   useEffect(() => {
@@ -258,6 +301,81 @@ const App = () => {
     }
     return () => clearInterval(interval);
   }, [appState.isStreaming, appState.isRecording]);
+
+  const refreshCloudStatus = useCallback(async () => {
+    if (!user?.uid) {
+      setCloudStatus(null);
+      setCloudSessionId(null);
+      return null;
+    }
+
+    const status = await getCloudStreamingStatus(user.uid, userPlan);
+    setCloudStatus(status);
+    setCloudSessionId(status.activeSession?.sessionId || null);
+    return status;
+  }, [user?.uid, userPlan]);
+
+  useEffect(() => {
+    refreshCloudStatus().catch((err) => {
+      console.warn('Failed to refresh cloud status:', err);
+    });
+  }, [refreshCloudStatus]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setCloudEstimate(null);
+      return;
+    }
+
+    let canceled = false;
+    setCloudEstimateLoading(true);
+
+    estimateCloudStreamingCost({
+      destinationCount: cloudDestinationCount,
+      quality: cloudQuality,
+      bitrateKbps: cloudBitrateKbps,
+      instanceProfile: cloudInstanceProfile,
+      storageGb: cloudStorageGb,
+    })
+      .then((result) => {
+        if (canceled) return;
+        if (result.success && result.estimate) {
+          setCloudEstimate(result.estimate);
+          return;
+        }
+        setCloudEstimate(null);
+      })
+      .catch((err) => {
+        if (canceled) return;
+        console.warn('Cloud estimate request failed:', err);
+        setCloudEstimate(null);
+      })
+      .finally(() => {
+        if (!canceled) {
+          setCloudEstimateLoading(false);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [
+    user?.uid,
+    cloudDestinationCount,
+    cloudQuality,
+    cloudBitrateKbps,
+    cloudInstanceProfile,
+    cloudStorageGb,
+  ]);
+
+  useEffect(() => {
+    rtmpSenderRef.current?.updateConfig({
+      userPlan,
+      userId: user?.uid || '',
+      cloudHoursUsed: cloudStatus?.hoursUsed || 0,
+      streamingMode,
+    });
+  }, [userPlan, user?.uid, cloudStatus?.hoursUsed, streamingMode]);
 
   // Initial Camera Load with Error Handling
   const initCam = async (desiredFacingMode: 'user' | 'environment' = cameraFacingMode) => {
@@ -477,48 +595,155 @@ const App = () => {
     handleInteraction();
   };
 
-  const toggleStream = () => {
+  const toggleStream = async () => {
     handleInteraction();
-    if (!rtmpSenderRef.current) return;
+    if (!rtmpSenderRef.current || streamActionPending) return;
     ensureAudioContext();
 
     if (appState.isStreaming) {
-      rtmpSenderRef.current.disconnect();
-      setAppState({
-        ...appState,
-        isStreaming: false,
-        streamDuration: appState.isRecording ? appState.streamDuration : 0,
-      });
-    } else {
-      if (window.innerWidth < 1024) {
-        if (!isLandscape) {
-          setMobileTip('Tip: rotate to landscape for more room while streaming.');
-        } else if (!cameraStream) {
-          setMobileTip('Tip: allow camera + mic permissions for the best stream.');
+      setStreamActionPending(true);
+      const endingSessionId = cloudSessionId;
+      const wasCloudMode = streamingMode === 'cloud' || Boolean(endingSessionId);
+      try {
+        await rtmpSenderRef.current.disconnect();
+        setAppState((prev) => ({
+          ...prev,
+          isStreaming: false,
+          streamDuration: prev.isRecording ? prev.streamDuration : 0,
+        }));
+
+        if (wasCloudMode && endingSessionId && user?.uid) {
+          const endResult = await endCloudSession(user.uid, endingSessionId);
+          if (!endResult.success) {
+            console.warn('Failed to close cloud session:', endResult.message);
+          }
+          setCloudSessionId(null);
+        }
+      } catch (err) {
+        console.error('Failed to stop stream:', err);
+        if (wasCloudMode && endingSessionId && user?.uid) {
+          try {
+            await endCloudSession(user.uid, endingSessionId);
+            setCloudSessionId(null);
+          } catch (sessionErr) {
+            console.warn('Failed to close cloud session after stop error:', sessionErr);
+          }
+        }
+      } finally {
+        try {
+          await refreshCloudStatus();
+        } catch (statusErr) {
+          console.warn('Failed to refresh cloud status after stop:', statusErr);
+        }
+        setStreamActionPending(false);
+      }
+      return;
+    }
+
+    if (window.innerWidth < 1024) {
+      if (!isLandscape) {
+        setMobileTip('Tip: rotate to landscape for more room while streaming.');
+      } else if (!cameraStream) {
+        setMobileTip('Tip: allow camera + mic permissions for the best stream.');
+      }
+    }
+
+    if (enabledDestinations.length === 0) {
+      alert('Please enable at least one destination!');
+      return;
+    }
+    const activeDestinations =
+      streamingMode === 'cloud'
+        ? enabledDestinations.slice(0, cloudDestinationCount)
+        : enabledDestinations;
+
+    const canvasStream = canvasRef.current?.getStream();
+    const combinedAudioStream = audioDestRef.current?.stream;
+
+    if (!canvasStream || !combinedAudioStream) {
+      alert('Cannot start stream: Canvas or Audio Mixer not ready.');
+      return;
+    }
+
+    setStreamActionPending(true);
+
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...combinedAudioStream.getAudioTracks(),
+    ]);
+
+    let startedCloudSessionId: string | null = null;
+    let cloudHoursUsed = cloudStatus?.hoursUsed || 0;
+
+    try {
+      if (streamingMode === 'cloud') {
+        if (!user?.uid) {
+          alert('Please sign in before starting cloud streaming.');
+          return;
+        }
+
+        const status = await getCloudStreamingStatus(user.uid, userPlan);
+        setCloudStatus(status);
+        cloudHoursUsed = status.hoursUsed;
+
+        if (!status.canStream) {
+          alert(status.message || 'Cloud streaming is currently unavailable.');
+          return;
+        }
+
+        if (enabledDestinations.length > cloudDestinationCount) {
+          alert(
+            'Cloud mode currently supports up to 5 destinations per session. Extra destinations were skipped.',
+          );
+        }
+
+        const startResult = await startCloudSession(user.uid, userPlan, activeDestinations.length, {
+          quality: cloudQuality,
+          bitrateKbps: cloudBitrateKbps,
+          instanceProfile: cloudInstanceProfile,
+          storageGb: cloudStorageGb,
+        });
+
+        if (!startResult.success || !startResult.sessionId) {
+          alert(startResult.message || 'Failed to start cloud streaming session.');
+          return;
+        }
+
+        startedCloudSessionId = startResult.sessionId;
+        setCloudSessionId(startResult.sessionId);
+        if (startResult.estimate) {
+          setCloudEstimate(startResult.estimate);
         }
       }
 
-      const enabled = destinations.filter((d) => d.isEnabled);
-      if (enabled.length === 0) {
-        alert('Please enable at least one destination!');
-        return;
+      rtmpSenderRef.current.updateConfig({
+        userPlan,
+        userId: user?.uid || '',
+        cloudHoursUsed,
+        streamingMode,
+      });
+
+      await rtmpSenderRef.current.connect(combinedStream, activeDestinations);
+      setAppState((prev) => ({ ...prev, isStreaming: true }));
+    } catch (err) {
+      console.error('Failed to start stream:', err);
+      alert('Failed to start stream. Please check your destinations and try again.');
+
+      if (streamingMode === 'cloud' && startedCloudSessionId && user?.uid) {
+        try {
+          await endCloudSession(user.uid, startedCloudSessionId);
+        } catch (sessionErr) {
+          console.warn('Cloud session cleanup failed:', sessionErr);
+        }
+        setCloudSessionId(null);
       }
-
-      const canvasStream = canvasRef.current?.getStream();
-      const combinedAudioStream = audioDestRef.current?.stream;
-
-      if (!canvasStream || !combinedAudioStream) {
-        alert('Cannot start stream: Canvas or Audio Mixer not ready.');
-        return;
+    } finally {
+      try {
+        await refreshCloudStatus();
+      } catch (statusErr) {
+        console.warn('Failed to refresh cloud status after start:', statusErr);
       }
-
-      const combinedStream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...combinedAudioStream.getAudioTracks(),
-      ]);
-
-      rtmpSenderRef.current.connect(combinedStream, enabled);
-      setAppState({ ...appState, isStreaming: true });
+      setStreamActionPending(false);
     }
   };
 
@@ -720,6 +945,164 @@ const App = () => {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatUsd = (value: number) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const activeCloudEstimate =
+    cloudEstimate || cloudStatus?.activeEstimate || cloudStatus?.defaultEstimate || null;
+  const controlsLocked = appState.isStreaming || streamActionPending;
+
+  const renderCloudStreamingCard = () => (
+    <div className="mx-4 mt-4 mb-3 rounded-xl border border-sky-500/30 bg-gradient-to-br from-sky-900/20 to-dark-900/80 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase text-sky-200 flex items-center gap-2">
+          <Cloud size={14} /> Cloud Stream Engine
+        </h3>
+        <span className="text-[11px] text-gray-300">{cloudTierInfo.hoursIncluded}h / month</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setStreamingMode('local')}
+          disabled={controlsLocked}
+          className={`rounded px-3 py-2 text-xs font-semibold border transition-colors ${
+            streamingMode === 'local'
+              ? 'bg-brand-600 border-brand-500 text-white'
+              : 'bg-dark-900/80 border-gray-700 text-gray-300 hover:border-gray-500'
+          } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+        >
+          Local Device
+        </button>
+        <button
+          type="button"
+          onClick={() => setStreamingMode('cloud')}
+          disabled={controlsLocked}
+          className={`rounded px-3 py-2 text-xs font-semibold border transition-colors ${
+            streamingMode === 'cloud'
+              ? 'bg-sky-600 border-sky-500 text-white'
+              : 'bg-dark-900/80 border-gray-700 text-gray-300 hover:border-gray-500'
+          } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+        >
+          Cloud VM
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setCloudQuality('720p')}
+          disabled={controlsLocked}
+          className={`rounded px-3 py-2 text-xs font-semibold border ${
+            cloudQuality === '720p'
+              ? 'bg-emerald-600 border-emerald-500 text-white'
+              : 'bg-dark-900/80 border-gray-700 text-gray-300'
+          } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+        >
+          720p / 4000
+        </button>
+        <button
+          type="button"
+          onClick={() => setCloudQuality('1080p')}
+          disabled={controlsLocked}
+          className={`rounded px-3 py-2 text-xs font-semibold border ${
+            cloudQuality === '1080p'
+              ? 'bg-emerald-600 border-emerald-500 text-white'
+              : 'bg-dark-900/80 border-gray-700 text-gray-300'
+          } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+        >
+          1080p / 6000
+        </button>
+      </div>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-wide text-gray-400 flex items-center gap-1 mb-1">
+          <Cpu size={12} /> VM Profile
+        </span>
+        <select
+          value={cloudInstanceProfile}
+          onChange={(event) => setCloudInstanceProfile(event.target.value as CloudInstanceProfile)}
+          disabled={controlsLocked}
+          className={`w-full bg-dark-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-sky-500 outline-none ${
+            controlsLocked ? 'opacity-60 cursor-not-allowed' : ''
+          }`}
+        >
+          {CLOUD_INSTANCE_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-wide text-gray-400 mb-1 block">
+          Archive Storage (GB)
+        </span>
+        <input
+          type="number"
+          min={0}
+          max={10000}
+          step={1}
+          value={cloudStorageGb}
+          onChange={(event) => setCloudStorageGb(Math.max(0, Number(event.target.value) || 0))}
+          disabled={controlsLocked}
+          className={`w-full bg-dark-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-sky-500 outline-none ${
+            controlsLocked ? 'opacity-60 cursor-not-allowed' : ''
+          }`}
+        />
+      </label>
+
+      <div className="rounded-lg border border-gray-700 bg-dark-900/80 p-3 space-y-2">
+        <div className="flex items-center justify-between text-xs text-gray-300">
+          <span className="flex items-center gap-1">
+            <DollarSign size={12} /> Hourly Estimate
+          </span>
+          <span>
+            {cloudDestinationCount} destination{cloudDestinationCount > 1 ? 's' : ''}
+            {enabledDestinations.length > 5 ? ' (clamped to 5)' : ''}
+          </span>
+        </div>
+        {cloudEstimateLoading && <div className="text-xs text-gray-400">Updating estimate...</div>}
+        {!cloudEstimateLoading && activeCloudEstimate && (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-300">Total / hour</span>
+              <span className="text-base font-bold text-emerald-300">
+                {formatUsd(activeCloudEstimate.totalPerHour)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <span>Projected / month</span>
+              <span>{formatUsd(activeCloudEstimate.totalPerMonth)}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div
+        className={`text-xs rounded px-2.5 py-2 border ${
+          cloudStatus?.canStream
+            ? 'text-emerald-200 border-emerald-500/30 bg-emerald-500/10'
+            : 'text-amber-200 border-amber-500/30 bg-amber-500/10'
+        }`}
+      >
+        {cloudStatus?.message || 'Checking cloud hours and VM availability...'}
+      </div>
+
+      {cloudSessionId && (
+        <div className="text-[11px] text-sky-200">
+          Active cloud session: <span className="font-mono">{cloudSessionId}</span>
+        </div>
+      )}
+    </div>
+  );
+
   // derived active URLs
   const activeImageUrl = activeImageId
     ? mediaAssets.find((a) => a.id === activeImageId)?.url || null
@@ -836,6 +1219,7 @@ const App = () => {
           )}
         </div>
       </div>
+      {renderCloudStreamingCard()}
       <div className="flex-1 overflow-y-auto pb-safe">
         <DestinationManager
           destinations={destinations}
@@ -867,6 +1251,7 @@ const App = () => {
             setMobilePanel('none');
             navigate('/dashboard');
           }}
+          onOpenAdmin={canAccessAdmin ? () => navigate('/admin') : undefined}
         />
       </div>
     </div>
@@ -919,12 +1304,13 @@ const App = () => {
 
           <button
             onClick={toggleStream}
+            disabled={streamActionPending}
             className={`px-4 md:px-6 py-2 rounded-full font-bold transition-all shadow-lg flex items-center gap-2 text-sm
                     ${
                       appState.isStreaming
                         ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50'
                         : 'bg-brand-600 hover:bg-brand-500 shadow-brand-900/50'
-                    }`}
+                    } ${streamActionPending ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             {appState.isStreaming ? (
               <Square size={16} fill="currentColor" />
@@ -932,9 +1318,17 @@ const App = () => {
               <Play size={16} fill="currentColor" />
             )}
             <span className="hidden md:inline">
-              {appState.isStreaming ? 'END STREAM' : 'GO LIVE'}
+              {streamActionPending
+                ? appState.isStreaming
+                  ? 'STOPPING...'
+                  : 'STARTING...'
+                : appState.isStreaming
+                  ? 'END STREAM'
+                  : 'GO LIVE'}
             </span>
-            <span className="md:hidden">{appState.isStreaming ? 'STOP' : 'LIVE'}</span>
+            <span className="md:hidden">
+              {streamActionPending ? '...' : appState.isStreaming ? 'STOP' : 'LIVE'}
+            </span>
           </button>
 
           {/* User Menu */}
@@ -1384,6 +1778,7 @@ const App = () => {
               )}
             </div>
           </div>
+          {renderCloudStreamingCard()}
           <div className="flex-1 overflow-y-auto">
             <DestinationManager
               destinations={destinations}
