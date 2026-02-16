@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import CreatorDashboard from '../CreatorDashboard';
 
 const mockNavigate = vi.fn();
+const mockFetch = vi.fn().mockResolvedValue({ status: 200 } as Response);
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -31,13 +32,22 @@ vi.mock('../../contexts/AuthContext', () => ({
 }));
 
 describe('CreatorDashboard', () => {
-  it('shows plan cloud hours and quick actions', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('shows plan cloud hours and quick actions', async () => {
     render(
       <MemoryRouter>
         <CreatorDashboard />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
+    await screen.findByText('Auth Session');
     expect(screen.getByText('Creator control center')).toBeInTheDocument();
     expect(screen.getByText(/Cloud VM hours/i)).toBeInTheDocument();
     expect(screen.getByText('10 hrs')).toBeInTheDocument();

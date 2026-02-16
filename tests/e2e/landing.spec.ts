@@ -7,16 +7,19 @@ test.describe('Landing Page', () => {
 
   test('should display hero section', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Stream Without Limits');
-    await expect(page.getByRole('button', { name: /get started/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /start screaming free/i })).toBeVisible();
   });
 
   test('should navigate to signup when clicking Get Started', async ({ page }) => {
-    await page.getByRole('button', { name: /get started/i }).click();
+    await page.getByRole('button', { name: /start screaming free/i }).click();
     await expect(page).toHaveURL(/\/signup/);
   });
 
   test('should navigate to login when clicking Sign In', async ({ page }) => {
-    await page.getByRole('button', { name: /sign in/i }).first().click();
+    await page
+      .getByRole('button', { name: /sign in/i })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/login/);
   });
 
@@ -30,13 +33,18 @@ test.describe('Landing Page', () => {
   });
 
   test('should display Chat Screamer section', async ({ page }) => {
-    await expect(page.locator('text=Chat Screamer')).toBeVisible();
-    await expect(page.locator('text=Standard Scream')).toBeVisible();
+    const chatScreamerSection = page.locator('#chat-screamer');
+    await expect(
+      chatScreamerSection.getByRole('heading', { name: /chat screamer/i }),
+    ).toBeVisible();
+    await expect(
+      chatScreamerSection.getByRole('heading', { name: /standard scream/i }),
+    ).toBeVisible();
   });
 
   test('should display pricing section', async ({ page }) => {
     await expect(page.locator('#pricing')).toBeVisible();
-    await expect(page.locator('text=Choose Your Plan')).toBeVisible();
+    await expect(page.locator('#pricing h2')).toContainText('Simple, Transparent');
   });
 
   test('should have responsive navigation on mobile', async ({ page, isMobile }) => {
