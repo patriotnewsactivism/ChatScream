@@ -219,11 +219,12 @@ try {
 }
 
 if ($ltNameCheck -eq $LaunchTemplateName) {
+  $versionStamp = [DateTime]::UtcNow.ToString('yyyyMMddHHmmss')
   & aws ec2 create-launch-template-version `
     --region $AwsRegion `
     --launch-template-name $LaunchTemplateName `
     --source-version '$Latest' `
-    --version-description ("updated-" + (Get-Date -AsUTC -Format 'yyyyMMddHHmmss')) `
+    --version-description ("updated-" + $versionStamp) `
     --launch-template-data $launchTemplateDataArg | Out-Null
 } else {
   & aws ec2 create-launch-template `
