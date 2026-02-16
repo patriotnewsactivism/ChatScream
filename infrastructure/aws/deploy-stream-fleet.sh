@@ -16,6 +16,14 @@ require_cmd base64
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USER_DATA_FILE="${USER_DATA_FILE:-$SCRIPT_DIR/scripts/ec2-user-data.sh}"
+CONFIG_FILE="${CONFIG_FILE:-$SCRIPT_DIR/.env.aws}"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  set +a
+fi
 
 if [[ ! -f "$USER_DATA_FILE" ]]; then
   echo "[ERR] user data file not found: $USER_DATA_FILE"
