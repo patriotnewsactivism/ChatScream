@@ -144,9 +144,9 @@ http {
             add_header Access-Control-Allow-Origin *;
         }
 
-        # API proxy (for backend services)
+        # API proxy (Node/Express backend)
         location /api {
-            proxy_pass http://localhost:3000;
+            proxy_pass http://localhost:8787;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';

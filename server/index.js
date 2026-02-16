@@ -887,6 +887,67 @@ app.get('/api/leaderboard', (_req, res) => {
   res.json({ entries: state.leaderboard || [] });
 });
 
+app.get('/api/analytics/user', requireAuth, (req, res) => {
+  const requestedDays = Number(req.query.days || 30);
+  const days = Number.isFinite(requestedDays) ? Math.max(1, Math.min(365, requestedDays)) : 30;
+  const userId = String(req.query.userId || req.auth.profile.uid);
+  const record = getUserByUid(userId);
+
+  if (!record) {
+    res.status(404).json({ message: 'User not found.' });
+    return;
+  }
+
+  const usage = getCloudUsage(userId);
+  const totalDuration = Math.round(Number(usage.cloudHoursUsed || 0) * 3600);
+  const hasRecentStream = Boolean(usage.lastStreamDate);
+  const hasActiveSession = Boolean(usage.activeCloudSession);
+  const totalStreams = Number(hasRecentStream) + Number(hasActiveSession);
+  const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
+
+  const recentSessions = [];
+  if (usage.activeCloudSession) {
+    recentSessions.push({
+      id: usage.activeCloudSession.sessionId,
+      startedAt: usage.activeCloudSession.startTime || nowIso(),
+      duration: Math.max(
+        60,
+        Math.round(
+          (Date.now() - new Date(usage.activeCloudSession.startTime || nowIso()).getTime()) / 1000,
+        ),
+      ),
+      peakViewers: 0,
+      platforms: [],
+      layout: 'default',
+      status: 'active',
+    });
+  } else if (usage.lastStreamDate) {
+    recentSessions.push({
+      id: `session_${userId}_${new Date(usage.lastStreamDate).getTime()}`,
+      startedAt: usage.lastStreamDate,
+      endedAt: usage.lastStreamDate,
+      duration: totalDuration,
+      peakViewers: 0,
+      platforms: [],
+      layout: 'default',
+      status: 'ended',
+    });
+  }
+
+  res.json({
+    period: `${days}d`,
+    stats: {
+      totalStreams,
+      totalDuration,
+      avgDuration,
+      peakViewers: 0,
+      totalScreams: 0,
+      totalRevenue: 0,
+    },
+    recentSessions,
+  });
+});
+
 app.post('/api/create-checkout-session', requireAuth, (req, res) => {
   const successUrl = String(req.body?.successUrl || '');
   const fallback = '/dashboard?checkout=success';

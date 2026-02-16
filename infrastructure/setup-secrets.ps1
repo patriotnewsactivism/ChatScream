@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 param(
-  [string]$ProjectId = 'wtp-apps'
+  [string]$ProjectId = 'chatscream-prod'
 )
 
 function Require-Command([string]$Name) {
@@ -15,42 +15,55 @@ function Read-Secret([string]$Prompt) {
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
   try {
     return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-  } finally {
+  }
+  finally {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
   }
 }
 
-function Set-FirebaseSecret([string]$Name, [string]$Prompt) {
+function Set-GsmSecret([string]$Name, [string]$Prompt) {
   $value = Read-Secret $Prompt
   if ([string]::IsNullOrWhiteSpace($value)) {
-    Write-Host "Skipping $Name (empty)."
+    Write-Host "Skipping $Name"
     return
   }
 
-  $value | firebase functions:secrets:set $Name --project $ProjectId --data-file - | Out-Null
+  $exists = $true
+  try {
+    gcloud secrets describe $Name --project $ProjectId | Out-Null
+  }
+  catch {
+    $exists = $false
+  }
+
+  if ($exists) {
+    $value | gcloud secrets versions add $Name --project $ProjectId --data-file - | Out-Null
+  }
+  else {
+    $value | gcloud secrets create $Name --project $ProjectId --replication-policy automatic --data-file - | Out-Null
+  }
+
   Write-Host "Set $Name"
 }
 
-Require-Command firebase
+Require-Command gcloud
 
-Write-Host "Target Firebase project: $ProjectId"
-Write-Host ""
-Write-Host "Enter secrets (input hidden). Leave blank to skip."
+gcloud config set project $ProjectId | Out-Null
+
+Write-Host "Target project: $ProjectId"
+Write-Host "Enter secret values (input hidden). Leave blank to skip."
 Write-Host ""
 
-Set-FirebaseSecret -Name 'STRIPE_SECRET_KEY' -Prompt 'Stripe Secret Key (sk_...)'
-Set-FirebaseSecret -Name 'STRIPE_WEBHOOK_SECRET' -Prompt 'Stripe Webhook Secret (whsec_...)'
-Write-Host ""
-Set-FirebaseSecret -Name 'YOUTUBE_CLIENT_ID' -Prompt 'YouTube OAuth Client ID'
-Set-FirebaseSecret -Name 'YOUTUBE_CLIENT_SECRET' -Prompt 'YouTube OAuth Client Secret'
-Write-Host ""
-Set-FirebaseSecret -Name 'FACEBOOK_APP_ID' -Prompt 'Facebook App ID'
-Set-FirebaseSecret -Name 'FACEBOOK_APP_SECRET' -Prompt 'Facebook App Secret'
-Write-Host ""
-Set-FirebaseSecret -Name 'TWITCH_CLIENT_ID' -Prompt 'Twitch Client ID'
-Set-FirebaseSecret -Name 'TWITCH_CLIENT_SECRET' -Prompt 'Twitch Client Secret'
+Set-GsmSecret -Name 'STRIPE_SECRET_KEY' -Prompt 'Stripe Secret Key (sk_...)'
+Set-GsmSecret -Name 'STRIPE_WEBHOOK_SECRET' -Prompt 'Stripe Webhook Secret (whsec_...)'
+Set-GsmSecret -Name 'YOUTUBE_CLIENT_ID' -Prompt 'YouTube OAuth Client ID'
+Set-GsmSecret -Name 'YOUTUBE_CLIENT_SECRET' -Prompt 'YouTube OAuth Client Secret'
+Set-GsmSecret -Name 'FACEBOOK_APP_ID' -Prompt 'Facebook App ID'
+Set-GsmSecret -Name 'FACEBOOK_APP_SECRET' -Prompt 'Facebook App Secret'
+Set-GsmSecret -Name 'TWITCH_CLIENT_ID' -Prompt 'Twitch Client ID'
+Set-GsmSecret -Name 'TWITCH_CLIENT_SECRET' -Prompt 'Twitch Client Secret'
+Set-GsmSecret -Name 'CLAUDE_API_KEY' -Prompt 'Claude API Key'
 
 Write-Host ""
-Write-Host "Done setting secrets."
-Write-Host "Next: firebase deploy --only functions --project $ProjectId"
-
+Write-Host 'Secrets configured in Google Secret Manager.'
+Write-Host 'Next: ./infrastructure/deploy.sh'

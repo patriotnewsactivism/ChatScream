@@ -5,16 +5,13 @@ const CACHE_NAME = 'chatscream-v1';
 const RUNTIME_CACHE = 'chatscream-runtime-v1';
 
 // Assets to cache on install
-const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-];
+const PRECACHE_ASSETS = ['/', '/index.html', '/manifest.json'];
 
 // Install event - cache core assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches
+      .open(CACHE_NAME)
       .then((cache) => {
         console.log('[SW] Precaching core assets');
         return cache.addAll(PRECACHE_ASSETS);
@@ -25,14 +22,15 @@ self.addEventListener('install', (event) => {
       })
       .catch((error) => {
         console.error('[SW] Precache failed:', error);
-      })
+      }),
   );
 });
 
 // Activate event - clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
@@ -40,13 +38,13 @@ self.addEventListener('activate', (event) => {
             .map((name) => {
               console.log('[SW] Deleting old cache:', name);
               return caches.delete(name);
-            })
+            }),
         );
       })
       .then(() => {
         console.log('[SW] Activation complete');
         return self.clients.claim();
-      })
+      }),
   );
 });
 
@@ -66,10 +64,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Skip API calls - always fetch from network
-  if (url.pathname.startsWith('/api') ||
-      url.hostname.includes('cloudfunctions.net') ||
-      url.hostname.includes('firebaseio.com') ||
-      url.hostname.includes('googleapis.com')) {
+  if (url.pathname.startsWith('/api') || url.hostname.includes('googleapis.com')) {
     return;
   }
 
@@ -89,7 +84,7 @@ self.addEventListener('fetch', (event) => {
           return caches.match(request).then((cached) => {
             return cached || caches.match('/');
           });
-        })
+        }),
     );
     return;
   }
@@ -109,23 +104,22 @@ self.addEventListener('fetch', (event) => {
                   });
                 }
               })
-              .catch(() => {})
+              .catch(() => {}),
           );
           return cached;
         }
 
         // Not in cache, fetch and cache
-        return fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const responseClone = response.clone();
-              caches.open(RUNTIME_CACHE).then((cache) => {
-                cache.put(request, responseClone);
-              });
-            }
-            return response;
-          });
-      })
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return response;
+        });
+      }),
     );
     return;
   }
@@ -144,7 +138,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         return caches.match(request);
-      })
+      }),
   );
 });
 
@@ -165,9 +159,7 @@ self.addEventListener('push', (event) => {
       actions: data.actions || [],
     };
 
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'ChatScream', options)
-    );
+    event.waitUntil(self.registration.showNotification(data.title || 'ChatScream', options));
   } catch (error) {
     console.error('[SW] Push notification error:', error);
   }
@@ -180,19 +172,18 @@ self.addEventListener('notificationclick', (event) => {
   const url = event.notification.data?.url || '/';
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clients) => {
-        // Focus existing window if available
-        for (const client of clients) {
-          if (client.url === url && 'focus' in client) {
-            return client.focus();
-          }
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Focus existing window if available
+      for (const client of clients) {
+        if (client.url === url && 'focus' in client) {
+          return client.focus();
         }
-        // Open new window
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(url);
-        }
-      })
+      }
+      // Open new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
+      }
+    }),
   );
 });
 
@@ -216,9 +207,7 @@ self.addEventListener('message', (event) => {
 
   if (event.data?.type === 'CLEAR_CACHE') {
     caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((name) => caches.delete(name))
-      );
+      return Promise.all(cacheNames.map((name) => caches.delete(name)));
     });
   }
 });

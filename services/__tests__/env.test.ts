@@ -7,13 +7,13 @@ describe('loadClientEnv', () => {
       VITE_GEMINI_API_KEY: 'gem-key',
       VITE_SENTRY_DSN: ' https://example.com/1 ',
       VITE_API_BASE_URL: ' https://api.example.com ',
-      VITE_FUNCTIONS_BASE_URL: 'https://example.cloudfunctions.net ',
+      VITE_FUNCTIONS_BASE_URL: 'https://api.example.com/ai ',
     });
 
     expect(env.VITE_GEMINI_API_KEY).toBe('gem-key');
     expect(env.VITE_SENTRY_DSN).toBe('https://example.com/1');
     expect(env.VITE_API_BASE_URL).toBe('https://api.example.com');
-    expect(env.VITE_FUNCTIONS_BASE_URL).toBe('https://example.cloudfunctions.net');
+    expect(env.VITE_FUNCTIONS_BASE_URL).toBe('https://api.example.com/ai');
   });
 
   it('allows missing optional keys without throwing', () => {

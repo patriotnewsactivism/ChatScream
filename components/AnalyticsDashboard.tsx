@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { buildApiUrl } from '../services/apiClient';
 import {
-  BarChart3, Clock, Users, DollarSign, TrendingUp,
-  Calendar, Radio, Trophy, RefreshCw, AlertCircle
+  BarChart3,
+  Clock,
+  Users,
+  DollarSign,
+  TrendingUp,
+  Calendar,
+  Radio,
+  Trophy,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 
 interface AnalyticsStats {
@@ -46,14 +55,11 @@ const AnalyticsDashboard: React.FC = () => {
 
     try {
       const token = await user.getIdToken();
-      const response = await fetch(
-        `https://us-central1-wtp-apps.cloudfunctions.net/getUserAnalytics?days=${selectedPeriod}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(buildApiUrl(`/api/analytics/user?days=${selectedPeriod}`), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch analytics');
@@ -210,9 +216,7 @@ const AnalyticsDashboard: React.FC = () => {
                 <div className="flex items-center gap-4">
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      session.status === 'active'
-                        ? 'bg-red-500 animate-pulse'
-                        : 'bg-gray-500'
+                      session.status === 'active' ? 'bg-red-500 animate-pulse' : 'bg-gray-500'
                     }`}
                   />
                   <div>
@@ -220,7 +224,7 @@ const AnalyticsDashboard: React.FC = () => {
                       {session.startedAt ? formatDate(session.startedAt) : 'Unknown'}
                     </p>
                     <p className="text-sm text-gray-400">
-                      {session.platforms?.join(', ') || 'No platforms'} •{' '}
+                      {session.platforms?.join(', ') || 'No platforms'} â€¢{' '}
                       {session.layout || 'Default layout'}
                     </p>
                   </div>
@@ -235,9 +239,7 @@ const AnalyticsDashboard: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-gray-400">Peak Viewers</p>
-                    <p className="text-white font-medium">
-                      {session.peakViewers || 0}
-                    </p>
+                    <p className="text-white font-medium">{session.peakViewers || 0}</p>
                   </div>
                 </div>
               </div>
