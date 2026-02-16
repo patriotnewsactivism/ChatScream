@@ -66,6 +66,18 @@ function Invoke-AwsJson {
   return $json | ConvertFrom-Json
 }
 
+function New-TempJsonFile {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Value,
+    [int]$Depth = 10
+  )
+  $tempPath = Join-Path $env:TEMP ("chatscream-" + [Guid]::NewGuid().ToString('N') + ".json")
+  $json = $Value | ConvertTo-Json -Depth $Depth
+  Set-Content -Path $tempPath -Value $json -Encoding ascii
+  return $tempPath
+}
+
 Ensure-AwsCli
 
 if (-not (Test-Path $UserDataFile)) {
@@ -192,7 +204,8 @@ if ($InstanceProfileName) {
   $launchTemplateData.IamInstanceProfile = @{ Name = $InstanceProfileName }
 }
 
-$launchTemplateDataJson = $launchTemplateData | ConvertTo-Json -Compress -Depth 10
+$launchTemplateDataFile = New-TempJsonFile -Value $launchTemplateData -Depth 10
+$launchTemplateDataArg = "file://$($launchTemplateDataFile.Replace('\', '/'))"
 
 $ltNameCheck = ''
 try {
@@ -211,13 +224,13 @@ if ($ltNameCheck -eq $LaunchTemplateName) {
     --launch-template-name $LaunchTemplateName `
     --source-version '$Latest' `
     --version-description ("updated-" + (Get-Date -AsUTC -Format 'yyyyMMddHHmmss')) `
-    --launch-template-data $launchTemplateDataJson | Out-Null
+    --launch-template-data $launchTemplateDataArg | Out-Null
 } else {
   & aws ec2 create-launch-template `
     --region $AwsRegion `
     --launch-template-name $LaunchTemplateName `
     --version-description 'initial' `
-    --launch-template-data $launchTemplateDataJson | Out-Null
+    --launch-template-data $launchTemplateDataArg | Out-Null
 }
 
 $latestLtVersion = (& aws ec2 describe-launch-templates `
@@ -274,14 +287,23 @@ $targetTracking = @{
   PredefinedMetricSpecification = @{
     PredefinedMetricType = 'ASGAverageCPUUtilization'
   }
-} | ConvertTo-Json -Compress
+}
+$targetTrackingFile = New-TempJsonFile -Value $targetTracking -Depth 5
+$targetTrackingArg = "file://$($targetTrackingFile.Replace('\', '/'))"
 
 & aws autoscaling put-scaling-policy `
   --region $AwsRegion `
   --auto-scaling-group-name $AsgName `
   --policy-name "$AsgName-cpu-target" `
   --policy-type TargetTrackingScaling `
-  --target-tracking-configuration $targetTracking | Out-Null
+  --target-tracking-configuration $targetTrackingArg | Out-Null
+
+if (Test-Path $launchTemplateDataFile) {
+  Remove-Item $launchTemplateDataFile -Force
+}
+if (Test-Path $targetTrackingFile) {
+  Remove-Item $targetTrackingFile -Force
+}
 
 Write-Host ''
 Write-Host 'ChatScream stream fleet deployed.'
