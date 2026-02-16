@@ -133,6 +133,6 @@ Deploy `server/index.js` and `dist/` with your preferred AWS runtime (ECS/Fargat
 This repo now supports Vercel SPA routes plus backend API routes in one project:
 
 - Frontend routes (`/login`, `/signup`, `/dashboard`) are rewritten to `index.html`.
-- Backend routes are served by `api/[...all].js`, which mounts the Express API in `server/app.js`.
+- Backend routes are rewritten to `api/all.js`, which mounts the Express API in `server/app.js`.
 
 For this mode, keep `VITE_API_BASE_URL` empty so the frontend calls same-origin `/api/*`.
