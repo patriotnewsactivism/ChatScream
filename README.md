@@ -11,7 +11,7 @@
 
   <img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Stack-Vite_React_Node%20API-blue?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Deployment-Cloud_Run-purple?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Deployment-AWS_EC2_ASG-orange?style=for-the-badge" />
 </div>
 
 ---
@@ -59,7 +59,7 @@ Monetize your stream with aggression.
 **Backend & Infrastructure**
 
 - **Core:** Backend API + Postgres + Redis
-- **Streaming:** FFMPEG on Google Cloud Compute Engine (VMs) / Cloud Run
+- **Streaming:** FFmpeg on AWS EC2 Auto Scaling workers (Nginx RTMP/HLS)
 - **Payments:** Stripe Connect (Custom Accounts)
 - **AI:** Anthropic Claude API (Stream copy generation)
 
@@ -107,11 +107,23 @@ Monetize your stream with aggression.
 
 ## 📦 Deployment
 
-### 1. Build + Deploy
-
-Deploy frontend and backend with your container platform workflow.
+### 1. Build Frontend + API
 
 ```bash
 npm run build
-# then deploy your API and static assets with your platform of choice
 ```
+
+### 2. Deploy Stream Workers (AWS Autoscaling)
+
+```bash
+export AWS_REGION=us-east-1
+export VPC_ID=vpc-xxxxxxx
+export SUBNET_IDS=subnet-aaaaaaa,subnet-bbbbbbb
+export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
+
+./infrastructure/aws/deploy-stream-fleet.sh
+```
+
+### 3. Deploy App/API Container
+
+Deploy `server/index.js` and `dist/` with your preferred AWS runtime (ECS/Fargate, EC2, or another container platform).

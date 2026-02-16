@@ -7,7 +7,7 @@
 - `contexts/AuthContext.tsx` manages session/auth state via backend APIs.
 - `services/` contains API clients and domain helpers (auth, OAuth, AI, streaming, billing).
 - `server/` contains the Node/Express backend (`index.js`) and local runtime store (`store.js`).
-- `infrastructure/` contains Google Cloud scripts for project setup, VM setup, secrets, and deployment.
+- `infrastructure/` contains AWS scripts for stream-worker autoscaling deployment.
 - Config/assets: `.env.example`, `.env.production.example`, `metadata.json`, and built `dist/` artifacts.
 
 ## Build, Test, and Development Commands
@@ -43,5 +43,5 @@
 
 - Never commit `.env`, credentials, or service account keys.
 - Mirror new environment variables in `.env.example`.
-- Store production secrets in Google Secret Manager and inject at deploy/runtime.
+- Store production secrets in AWS Secrets Manager (or equivalent) and inject at deploy/runtime.
 - Keep CORS restricted to trusted origins and localhost in backend config.
