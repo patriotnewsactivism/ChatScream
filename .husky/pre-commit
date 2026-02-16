@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const result =
-  process.platform === 'win32'
-    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm run lint-staged'], {
-        stdio: 'inherit',
-        windowsHide: true,
-      })
-    : spawnSync('npm', ['run', 'lint-staged'], {
-        stdio: 'inherit',
-      });
+const lintStagedCli = fileURLToPath(
+  new URL('../node_modules/lint-staged/bin/lint-staged.js', import.meta.url),
+);
+
+const result = spawnSync(process.execPath, [lintStagedCli], {
+  stdio: 'inherit',
+});
 
 if (result.error) {
   console.error('pre-commit failed:', result.error.message);

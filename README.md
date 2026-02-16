@@ -127,3 +127,12 @@ export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
 ### 3. Deploy App/API Container
 
 Deploy `server/index.js` and `dist/` with your preferred AWS runtime (ECS/Fargate, EC2, or another container platform).
+
+### 4. Vercel Single-Project Deploy (Frontend + API)
+
+This repo now supports Vercel SPA routes plus backend API routes in one project:
+
+- Frontend routes (`/login`, `/signup`, `/dashboard`) are rewritten to `index.html`.
+- Backend routes are served by `api/[...all].js`, which mounts the Express API in `server/app.js`.
+
+For this mode, keep `VITE_API_BASE_URL` empty so the frontend calls same-origin `/api/*`.

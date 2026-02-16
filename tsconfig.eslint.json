@@ -1,11 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": [
-    "dist/**",
-    "node_modules/**",
-    "functions/**",
-    "payments/**",
-    "src/dataconnect-generated/**"
-  ]
+  "exclude": ["dist/**", "node_modules/**", "payments/**", "src/dataconnect-generated/**"]
 }
