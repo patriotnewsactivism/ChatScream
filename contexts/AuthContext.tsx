@@ -20,6 +20,7 @@ import {
   applyLocalAccessOverrides,
   ensureAffiliateForSignedInUser,
   backendConfigError,
+  clearLocalSession,
 } from '../services/backend';
 
 interface AuthContextType {
@@ -79,6 +80,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const clearAuthState = () => {
+    clearScheduledRefresh();
+    clearLocalSession();
+    setUser(null);
+    setUserProfile(null);
+    setSessionToken(null);
+  };
+
   const guardConfig = () => {
     if (configError) {
       setError(configError);
@@ -108,9 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (err: any) {
           if (!isMounted) return;
           setError('Session expired. Please sign in again.');
-          setUser(null);
-          setUserProfile(null);
-          setSessionToken(null);
+          clearAuthState();
         }
       }, refreshInMs);
     };
@@ -120,6 +127,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await completeRedirectSignIn();
       } catch (err: any) {
         const message = getErrorMessage(err);
+        clearAuthState();
         setError(message);
       }
     })();
@@ -149,10 +157,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (err: any) {
           if (!isMounted) return;
           if (err instanceof ApiRequestError && err.status === 401) {
-            setUser(null);
-            setUserProfile(null);
-            setSessionToken(null);
-            clearScheduledRefresh();
+            clearAuthState();
           }
           const message = getErrorMessage(err);
           setError(message);
@@ -186,6 +191,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await signUpWithEmail(email, password, displayName, referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -201,6 +207,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await signInWithEmail(email, password);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -216,6 +223,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await signInWithGoogle(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -231,6 +239,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await signInWithFacebook(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -246,6 +255,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await signInWithGithub(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -261,6 +271,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await signInWithTwitter(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -276,6 +287,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await signInWithApple(referralCode);
     } catch (err: any) {
       const message = getErrorMessage(err);
+      clearAuthState();
       setError(message);
       throw new Error(message);
     } finally {
@@ -288,10 +300,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     guardConfig();
     try {
       await logOut();
-      setUserProfile(null);
-      setSessionToken(null);
-      clearScheduledRefresh();
-      setUser(null);
+      clearAuthState();
     } catch (err: any) {
       setError('Failed to log out. Please try again.');
       throw err;
