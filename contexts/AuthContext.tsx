@@ -148,6 +148,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           scheduleTokenRefresh(tokenResult, backendUser);
         } catch (err: any) {
           if (!isMounted) return;
+          if (err instanceof ApiRequestError && err.status === 401) {
+            setUser(null);
+            setUserProfile(null);
+            setSessionToken(null);
+            clearScheduledRefresh();
+          }
           const message = getErrorMessage(err);
           setError(message);
         }

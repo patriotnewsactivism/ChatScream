@@ -82,6 +82,8 @@ export interface CloudSessionStartOptions {
 }
 
 const token = () => getCurrentSessionToken();
+const hasToken = () => Boolean(token());
+const SESSION_EXPIRED_MESSAGE = 'Session expired. Please sign in again.';
 
 const asNumber = (value: unknown, fallback = 0) =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -196,6 +198,14 @@ export const getCloudStreamingStatus = async (
     message: fallbackCanUse.message,
   };
 
+  if (!hasToken()) {
+    return {
+      ...fallback,
+      canStream: false,
+      message: SESSION_EXPIRED_MESSAGE,
+    };
+  }
+
   try {
     const response = await apiRequest<unknown>(
       `/api/cloud-streaming/status?userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(userPlan)}`,
@@ -229,6 +239,13 @@ export const getCloudStreamingStatus = async (
       costModel: parseCloudCostModel(data.costModel),
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return {
+        ...fallback,
+        canStream: false,
+        message: SESSION_EXPIRED_MESSAGE,
+      };
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       return fallback;
     }
@@ -253,6 +270,10 @@ export const startCloudSession = async (
   estimate?: CloudCostEstimate;
   message: string;
 }> => {
+  if (!hasToken()) {
+    return { success: false, message: SESSION_EXPIRED_MESSAGE };
+  }
+
   try {
     const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/start', {
       method: 'POST',
@@ -267,6 +288,9 @@ export const startCloudSession = async (
       message: typeof data.message === 'string' ? data.message : 'Cloud streaming session started',
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return { success: false, message: SESSION_EXPIRED_MESSAGE };
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       const status = await getCloudStreamingStatus(userId, userPlan);
       return {
@@ -291,6 +315,15 @@ export const endCloudSession = async (
   estimatedCostUsd: number;
   message: string;
 }> => {
+  if (!hasToken()) {
+    return {
+      success: false,
+      minutesUsed: 0,
+      estimatedCostUsd: 0,
+      message: SESSION_EXPIRED_MESSAGE,
+    };
+  }
+
   try {
     const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/end', {
       method: 'POST',
@@ -305,6 +338,14 @@ export const endCloudSession = async (
       message: typeof data.message === 'string' ? data.message : 'Session ended',
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return {
+        success: false,
+        minutesUsed: 0,
+        estimatedCostUsd: 0,
+        message: SESSION_EXPIRED_MESSAGE,
+      };
+    }
     console.error('Error ending cloud session:', err);
     return {
       success: false,
@@ -317,6 +358,10 @@ export const endCloudSession = async (
 
 // Reset cloud hours (called at billing period reset).
 export const resetCloudHours = async (userId: string): Promise<boolean> => {
+  if (!hasToken()) {
+    return false;
+  }
+
   try {
     const response = await apiRequest<unknown>('/api/cloud-streaming/reset', {
       method: 'POST',
@@ -327,6 +372,9 @@ export const resetCloudHours = async (userId: string): Promise<boolean> => {
       response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
     return data.success !== false;
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return false;
+    }
     console.error('Error resetting cloud hours:', err);
     return false;
   }
@@ -366,6 +414,10 @@ export const formatCloudHours = (hours: number): string => {
 
 // Check if user is currently in a cloud session.
 export const hasActiveCloudSession = async (userId: string): Promise<boolean> => {
+  if (!hasToken()) {
+    return false;
+  }
+
   try {
     const response = await apiRequest<unknown>(
       `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
@@ -377,6 +429,9 @@ export const hasActiveCloudSession = async (userId: string): Promise<boolean> =>
     const data = asRecord(response);
     return Boolean(data.active || data.hasActiveSession);
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return false;
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       return false;
     }
@@ -393,6 +448,10 @@ export const getActiveCloudSession = async (
   session: ActiveCloudSession | null;
   estimate: CloudCostEstimate | null;
 }> => {
+  if (!hasToken()) {
+    return { active: false, session: null, estimate: null };
+  }
+
   try {
     const response = await apiRequest<unknown>(
       `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
@@ -409,6 +468,9 @@ export const getActiveCloudSession = async (
       estimate: parseCloudEstimate(data.estimate),
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return { active: false, session: null, estimate: null };
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       return { active: false, session: null, estimate: null };
     }
@@ -426,6 +488,10 @@ export const estimateCloudStreamingCost = async (params: {
   instanceProfile?: CloudInstanceProfile;
   storageGb?: number;
 }): Promise<{ success: boolean; estimate?: CloudCostEstimate; message: string }> => {
+  if (!hasToken()) {
+    return { success: false, message: SESSION_EXPIRED_MESSAGE };
+  }
+
   try {
     const response = await apiRequest<unknown>('/api/cloud-streaming/estimate', {
       method: 'POST',
@@ -440,6 +506,9 @@ export const estimateCloudStreamingCost = async (params: {
       message: typeof data.message === 'string' ? data.message : 'Estimate calculated',
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return { success: false, message: SESSION_EXPIRED_MESSAGE };
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       return {
         success: false,
@@ -458,6 +527,10 @@ export const getCloudCostModel = async (): Promise<{
   instanceProfiles?: Array<{ id: CloudInstanceProfile; label: string; ratePerHour: number }>;
   message: string;
 }> => {
+  if (!hasToken()) {
+    return { success: false, message: SESSION_EXPIRED_MESSAGE };
+  }
+
   try {
     const response = await apiRequest<unknown>('/api/cloud-streaming/cost-model', {
       method: 'GET',
@@ -482,6 +555,9 @@ export const getCloudCostModel = async (): Promise<{
       message: typeof data.message === 'string' ? data.message : 'Cost model loaded',
     };
   } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      return { success: false, message: SESSION_EXPIRED_MESSAGE };
+    }
     if (err instanceof ApiRequestError && (err.status === 404 || err.status === 405)) {
       return {
         success: false,

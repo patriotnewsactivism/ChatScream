@@ -39,6 +39,21 @@ interface StoredSession {
 
 type AuthListener = (user: AuthUser | null) => void;
 
+const SESSION_EXPIRY_SKEW_MS = 5 * 1000;
+
+const parseTimeMs = (value: string): number => {
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const isSessionExpired = (session: StoredSession | null): boolean => {
+  if (!session) return true;
+  if (!session.token) return true;
+  const expiresAtMs = parseTimeMs(session.expiresAt);
+  if (!expiresAtMs) return true;
+  return expiresAtMs <= Date.now() + SESSION_EXPIRY_SKEW_MS;
+};
+
 const toStringValue = (value: unknown): string => (typeof value === 'string' ? value : '');
 const toNullableStringValue = (value: unknown): string | null => {
   const normalized = toStringValue(value).trim();
@@ -67,7 +82,7 @@ const parseSessionStorage = (rawValue: string | null): StoredSession | null => {
     const uid = toStringValue(user?.uid).trim();
     if (!uid) return null;
 
-    return {
+    const nextSession: StoredSession = {
       token: toNullableStringValue(parsed.token),
       expiresAt: toStringValue(parsed.expiresAt).trim() || defaultExpirationTime(),
       user: {
@@ -77,6 +92,8 @@ const parseSessionStorage = (rawValue: string | null): StoredSession | null => {
         photoURL: toNullableStringValue(user?.photoURL),
       },
     };
+
+    return isSessionExpired(nextSession) ? null : nextSession;
   } catch {
     return null;
   }
@@ -85,7 +102,12 @@ const parseSessionStorage = (rawValue: string | null): StoredSession | null => {
 const readStoredSession = (): StoredSession | null => {
   if (typeof window === 'undefined') return null;
   try {
-    return parseSessionStorage(localStorage.getItem(SESSION_STORAGE_KEY));
+    const rawSession = localStorage.getItem(SESSION_STORAGE_KEY);
+    const parsedSession = parseSessionStorage(rawSession);
+    if (rawSession && !parsedSession) {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    return parsedSession;
   } catch {
     return null;
   }
@@ -107,6 +129,14 @@ const writeStoredSession = (session: StoredSession | null) => {
 let currentSession: StoredSession | null = readStoredSession();
 const authListeners = new Set<AuthListener>();
 
+const ensureActiveSession = (): StoredSession | null => {
+  if (!currentSession) return null;
+  if (!isSessionExpired(currentSession)) return currentSession;
+  currentSession = null;
+  writeStoredSession(null);
+  return null;
+};
+
 const buildAuthUser = (session: StoredSession): AuthUser => ({
   uid: session.user.uid,
   email: session.user.email,
@@ -116,27 +146,30 @@ const buildAuthUser = (session: StoredSession): AuthUser => ({
     if (forceRefresh) {
       await hydrateSessionFromServer();
     }
-    if (!currentSession) {
+    if (!ensureActiveSession()) {
       await hydrateSessionFromServer();
     }
-    return currentSession?.token || '';
+    return ensureActiveSession()?.token || '';
   },
   getIdTokenResult: async (forceRefresh = false) => {
     if (forceRefresh) {
       await hydrateSessionFromServer();
     }
-    if (!currentSession) {
+    if (!ensureActiveSession()) {
       await hydrateSessionFromServer();
     }
+    const activeSession = ensureActiveSession();
     return {
-      token: currentSession?.token || '',
-      expirationTime: currentSession?.expiresAt || defaultExpirationTime(),
+      token: activeSession?.token || '',
+      expirationTime: activeSession?.expiresAt || defaultExpirationTime(),
     };
   },
 });
 
-const getCurrentAuthUser = (): AuthUser | null =>
-  currentSession ? buildAuthUser(currentSession) : null;
+const getCurrentAuthUser = (): AuthUser | null => {
+  const activeSession = ensureActiveSession();
+  return activeSession ? buildAuthUser(activeSession) : null;
+};
 
 const notifyAuthListeners = () => {
   const user = getCurrentAuthUser();
@@ -150,8 +183,8 @@ const notifyAuthListeners = () => {
 };
 
 const setCurrentSession = (session: StoredSession | null) => {
-  currentSession = session;
-  writeStoredSession(session);
+  currentSession = isSessionExpired(session) ? null : session;
+  writeStoredSession(currentSession);
   notifyAuthListeners();
 };
 
@@ -195,9 +228,9 @@ const extractSession = (payload: unknown): StoredSession | null => {
   const nestedUser = normalizeUserFromPayload(sessionCandidate.user);
   const directUser = normalizeUserFromPayload(sessionCandidate);
   const rootUser = normalizeUserFromPayload(root.user);
-  const user = nestedUser || directUser || rootUser || currentSession?.user || null;
+  const user = nestedUser || directUser || rootUser || null;
 
-  if (!user) return null;
+  if (!user || !token) return null;
 
   return {
     token,
@@ -238,10 +271,13 @@ const requestAuthSession = async (
   path: string,
   method: 'GET' | 'POST',
 ): Promise<StoredSession | null> => {
+  const authToken = ensureActiveSession()?.token;
+  if (!authToken) return null;
+
   try {
     const response = await apiRequest<unknown>(path, {
       method,
-      token: currentSession?.token,
+      token: authToken,
     });
     return applySessionFromResponse(response);
   } catch (err) {
@@ -288,14 +324,7 @@ const parseSessionFromRedirectUrl = (): StoredSession | null => {
   const expiresAt = toStringValue(params.get('expiresAt') || params.get('expirationTime')).trim();
 
   if (!uid && !token) return null;
-  if (!uid && currentSession?.user.uid) {
-    return {
-      token,
-      expiresAt: expiresAt || defaultExpirationTime(),
-      user: currentSession.user,
-    };
-  }
-  if (!uid) return null;
+  if (!uid || !token) return null;
 
   return {
     token,
@@ -307,6 +336,10 @@ const parseSessionFromRedirectUrl = (): StoredSession | null => {
       photoURL,
     },
   };
+};
+
+export const clearLocalSession = (): void => {
+  setCurrentSession(null);
 };
 
 const clearRedirectSessionParams = () => {
@@ -340,7 +373,7 @@ const clearRedirectSessionParams = () => {
   }
 };
 
-const getSessionToken = () => currentSession?.token || null;
+const getSessionToken = () => ensureActiveSession()?.token || null;
 
 const tryRequestVariants = async <T>(
   requests: Array<() => Promise<T>>,
@@ -363,12 +396,24 @@ const authRequest = async <T>(
   path: string,
   options: { method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'; body?: unknown } = {},
 ): Promise<T> => {
-  const response = await apiRequest<T>(path, {
-    method: options.method || 'GET',
-    body: options.body,
-    token: getSessionToken(),
-  });
-  return response;
+  const authToken = getSessionToken();
+  if (!authToken) {
+    setCurrentSession(null);
+    throw new ApiRequestError('Session expired. Please sign in again.', 401, null);
+  }
+
+  try {
+    return await apiRequest<T>(path, {
+      method: options.method || 'GET',
+      body: options.body,
+      token: authToken,
+    });
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      setCurrentSession(null);
+    }
+    throw err;
+  }
 };
 
 const toAuthUserOrThrow = (session: StoredSession | null): AuthUser => {

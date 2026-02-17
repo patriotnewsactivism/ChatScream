@@ -303,7 +303,7 @@ const App = () => {
   }, [appState.isStreaming, appState.isRecording]);
 
   const refreshCloudStatus = useCallback(async () => {
-    if (!user?.uid) {
+    if (!user?.uid || !sessionToken) {
       setCloudStatus(null);
       setCloudSessionId(null);
       return null;
@@ -313,7 +313,7 @@ const App = () => {
     setCloudStatus(status);
     setCloudSessionId(status.activeSession?.sessionId || null);
     return status;
-  }, [user?.uid, userPlan]);
+  }, [user?.uid, userPlan, sessionToken]);
 
   useEffect(() => {
     refreshCloudStatus().catch((err) => {
@@ -322,8 +322,9 @@ const App = () => {
   }, [refreshCloudStatus]);
 
   useEffect(() => {
-    if (!user?.uid) {
+    if (!user?.uid || !sessionToken) {
       setCloudEstimate(null);
+      setCloudEstimateLoading(false);
       return;
     }
 
@@ -361,6 +362,7 @@ const App = () => {
     };
   }, [
     user?.uid,
+    sessionToken,
     cloudDestinationCount,
     cloudQuality,
     cloudBitrateKbps,
@@ -677,7 +679,7 @@ const App = () => {
 
     try {
       if (streamingMode === 'cloud') {
-        if (!user?.uid) {
+        if (!user?.uid || !sessionToken) {
           alert('Please sign in before starting cloud streaming.');
           return;
         }

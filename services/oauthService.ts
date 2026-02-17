@@ -90,7 +90,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'profile',
           'email',
         ],
-        redirectUri: `${baseRedirectUri}?platform=youtube`,
+        redirectUri: baseRedirectUri,
       };
 
     case 'facebook':
@@ -106,7 +106,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'pages_manage_posts',
           'publish_video',
         ],
-        redirectUri: `${baseRedirectUri}?platform=facebook`,
+        redirectUri: baseRedirectUri,
       };
 
     case 'twitch':
@@ -120,7 +120,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'channel:manage:broadcast',
           'channel:read:subscriptions',
         ],
-        redirectUri: `${baseRedirectUri}?platform=twitch`,
+        redirectUri: baseRedirectUri,
       };
 
     default:
@@ -466,33 +466,58 @@ export const getChannels = async (
 
 // Initiate OAuth flow for a platform
 export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => {
-  void (async () => {
-    const config = await getOAuthConfig(platform);
+  const width = 600;
+  const height = 700;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+  const popupName = `${platform}_oauth`;
+  const popupFeatures = `width=${width},height=${height},left=${left},top=${top},popup=yes`;
 
-    if (!config.clientId) {
-      console.error(`${platform} OAuth not configured. Missing client ID.`);
-      alert(
-        `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client id.`,
-      );
-      return;
+  // Open synchronously from user interaction to avoid popup blockers.
+  const popup = window.open('about:blank', popupName, popupFeatures);
+  if (popup) {
+    popup.focus();
+    try {
+      popup.document.title = `Connect ${platform}`;
+      popup.document.body.innerHTML =
+        '<div style="font-family: sans-serif; padding: 16px;">Opening secure sign-in...</div>';
+    } catch {
+      // Ignore if the browser blocks popup document updates.
     }
+  }
 
-    const authUrl = await getAuthorizationUrl(platform, userId);
+  void (async () => {
+    try {
+      const config = await getOAuthConfig(platform);
 
-    // Open OAuth popup
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
+      if (!config.clientId) {
+        console.error(`${platform} OAuth not configured. Missing client ID.`);
+        alert(
+          `${platform} integration is not configured yet. Open Admin Portal -> OAuth IDs and paste the ${platform} client ID.`,
+        );
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+        return;
+      }
 
-    const popup = window.open(
-      authUrl,
-      `${platform}_oauth`,
-      `width=${width},height=${height},left=${left},top=${top},popup=yes`,
-    );
+      const authUrl = await getAuthorizationUrl(platform, userId);
 
-    if (popup) {
-      popup.focus();
+      if (popup && !popup.closed) {
+        popup.location.href = authUrl;
+        return;
+      }
+
+      // Popup was blocked; continue OAuth in the same tab.
+      window.location.assign(authUrl);
+    } catch (error) {
+      console.error(`Failed to start ${platform} OAuth:`, error);
+      if (popup && !popup.closed) {
+        popup.close();
+      }
+      alert(
+        `Could not start ${platform} sign-in. Verify OAuth client ID and redirect URI settings, then try again.`,
+      );
     }
   })();
 };

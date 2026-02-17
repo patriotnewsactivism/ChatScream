@@ -63,6 +63,10 @@ const AWS_COST_MODEL = Object.freeze({
   },
 });
 
+const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+const YOUTUBE_API_BASE_URL = 'https://www.googleapis.com/youtube/v3';
+const YOUTUBE_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+
 const clampNumber = (value, min, max, fallback = min) => {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
@@ -142,6 +146,268 @@ const estimateAwsCloudCost = ({
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
 const normalizeCode = (value = '') => value.trim().toUpperCase();
 const nowIso = () => new Date().toISOString();
+
+const createHttpError = (status, message, details) => {
+  const error = new Error(message);
+  error.status = status;
+  if (details !== undefined) {
+    error.details = details;
+  }
+  return error;
+};
+
+const getHttpErrorStatus = (error, fallback = 500) => {
+  const status = Number(error?.status);
+  return Number.isFinite(status) ? status : fallback;
+};
+
+const parseJsonResponse = async (response) => {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+};
+
+const getYouTubeOAuthCredentials = () => {
+  const oauth = getConfig('oauth') || {};
+  return {
+    clientId: String(process.env.YOUTUBE_CLIENT_ID || oauth.youtubeClientId || '').trim(),
+    clientSecret: String(process.env.YOUTUBE_CLIENT_SECRET || '').trim(),
+  };
+};
+
+const getExpiryFromSeconds = (seconds, fallbackSeconds = 3600) => {
+  const expiresIn = Number(seconds);
+  const safeSeconds = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : fallbackSeconds;
+  return new Date(Date.now() + safeSeconds * 1000).toISOString();
+};
+
+const isExpiredOrNearExpiry = (expiresAt) => {
+  const expiresMs = new Date(String(expiresAt || '')).getTime();
+  if (!Number.isFinite(expiresMs)) return true;
+  return expiresMs <= Date.now() + YOUTUBE_TOKEN_REFRESH_SKEW_MS;
+};
+
+const requestYouTubeTokenExchange = async ({ code, redirectUri }) => {
+  const { clientId, clientSecret } = getYouTubeOAuthCredentials();
+  if (!clientId || !clientSecret) {
+    throw createHttpError(
+      500,
+      'YouTube OAuth server configuration is incomplete. Add YOUTUBE_CLIENT_SECRET.',
+    );
+  }
+  if (!code) {
+    throw createHttpError(400, 'Missing YouTube authorization code.');
+  }
+  if (!redirectUri) {
+    throw createHttpError(400, 'Missing OAuth redirect URI.');
+  }
+
+  const body = new URLSearchParams({
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  });
+
+  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    const message =
+      payload?.error_description || payload?.error || 'Failed to exchange YouTube OAuth code.';
+    const status = String(payload?.error || '').toLowerCase() === 'invalid_grant' ? 400 : 502;
+    throw createHttpError(status, message, payload);
+  }
+
+  return payload;
+};
+
+const requestYouTubeTokenRefresh = async (refreshToken) => {
+  const { clientId, clientSecret } = getYouTubeOAuthCredentials();
+  if (!clientId || !clientSecret) {
+    throw createHttpError(
+      500,
+      'YouTube OAuth server configuration is incomplete. Add YOUTUBE_CLIENT_SECRET.',
+    );
+  }
+  if (!refreshToken) {
+    throw createHttpError(401, 'YouTube refresh token missing. Reconnect your YouTube account.');
+  }
+
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'refresh_token',
+  });
+
+  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    const message =
+      payload?.error_description || payload?.error || 'Failed to refresh YouTube access token.';
+    const status = String(payload?.error || '').toLowerCase() === 'invalid_grant' ? 401 : 502;
+    throw createHttpError(status, message, payload);
+  }
+
+  return payload;
+};
+
+const buildYouTubeApiUrl = (pathName, query = {}) => {
+  const url = new URL(`${YOUTUBE_API_BASE_URL}/${pathName}`);
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    url.searchParams.set(key, String(value));
+  });
+  return url.toString();
+};
+
+const youtubeApiRequest = async ({ accessToken, pathName, method = 'GET', query, body }) => {
+  if (!accessToken) {
+    throw createHttpError(401, 'Missing YouTube access token. Reconnect your account.');
+  }
+
+  const response = await fetch(buildYouTubeApiUrl(pathName, query), {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    const message =
+      payload?.error?.message ||
+      payload?.error_description ||
+      `YouTube API request failed (${response.status}).`;
+    throw createHttpError(response.status, message, payload);
+  }
+
+  return payload;
+};
+
+const parseYouTubeChannels = (payload) => {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return items
+    .map((channel) => ({
+      id: String(channel?.id || '').trim(),
+      name: String(channel?.snippet?.title || '').trim(),
+      thumbnailUrl:
+        String(
+          channel?.snippet?.thumbnails?.default?.url ||
+            channel?.snippet?.thumbnails?.medium?.url ||
+            channel?.snippet?.thumbnails?.high?.url ||
+            '',
+        ).trim() || undefined,
+    }))
+    .filter((channel) => channel.id && channel.name);
+};
+
+const parseYouTubeIngestionInfo = (stream) => {
+  const streamKey = String(stream?.cdn?.ingestionInfo?.streamName || '').trim();
+  const ingestUrl = String(stream?.cdn?.ingestionInfo?.ingestionAddress || '').trim();
+  return { streamKey, ingestUrl };
+};
+
+const listYouTubeStreams = async (accessToken) => {
+  const payload = await youtubeApiRequest({
+    accessToken,
+    pathName: 'liveStreams',
+    query: {
+      part: 'id,snippet,cdn,status',
+      mine: 'true',
+      maxResults: '50',
+    },
+  });
+  return Array.isArray(payload?.items) ? payload.items : [];
+};
+
+const createYouTubeStream = async (accessToken) => {
+  return youtubeApiRequest({
+    accessToken,
+    pathName: 'liveStreams',
+    method: 'POST',
+    query: { part: 'id,snippet,cdn,status,contentDetails' },
+    body: {
+      snippet: { title: `ChatScream Stream ${new Date().toISOString()}` },
+      cdn: {
+        ingestionType: 'rtmp',
+        frameRate: 'variable',
+        resolution: 'variable',
+      },
+      contentDetails: { isReusable: true },
+    },
+  });
+};
+
+const getConnectedYouTubeAccount = async (uid) => {
+  const record = await getUserByUid(uid);
+  if (!record) {
+    throw createHttpError(404, 'User not found.');
+  }
+  const youtube = record.profile?.connectedPlatforms?.youtube || null;
+  if (!youtube) {
+    throw createHttpError(400, 'YouTube account is not connected.');
+  }
+  return { record, youtube };
+};
+
+const refreshStoredYouTubeAccessToken = async (uid, youtubeAccount) => {
+  const refreshed = await requestYouTubeTokenRefresh(String(youtubeAccount?.refreshToken || ''));
+  const accessToken = String(refreshed?.access_token || '').trim();
+  if (!accessToken) {
+    throw createHttpError(502, 'YouTube refresh response did not include an access token.');
+  }
+
+  const nextYoutube = {
+    ...youtubeAccount,
+    accessToken,
+    refreshToken: String(refreshed?.refresh_token || youtubeAccount?.refreshToken || '').trim(),
+    expiresAt: getExpiryFromSeconds(refreshed?.expires_in, 3600),
+    scope:
+      typeof refreshed?.scope === 'string' && refreshed.scope.trim()
+        ? refreshed.scope.trim()
+        : youtubeAccount?.scope,
+  };
+
+  await setConnectedPlatform(uid, 'youtube', nextYoutube);
+  return nextYoutube;
+};
+
+const executeWithYouTubeAccessToken = async (uid, handler) => {
+  const { youtube } = await getConnectedYouTubeAccount(uid);
+  let activeAccount = youtube;
+
+  if (isExpiredOrNearExpiry(activeAccount?.expiresAt)) {
+    activeAccount = await refreshStoredYouTubeAccessToken(uid, activeAccount);
+  }
+
+  try {
+    return await handler(activeAccount.accessToken, activeAccount);
+  } catch (error) {
+    if (getHttpErrorStatus(error, 500) !== 401 || !activeAccount?.refreshToken) {
+      throw error;
+    }
+    const refreshed = await refreshStoredYouTubeAccessToken(uid, activeAccount);
+    return handler(refreshed.accessToken, refreshed);
+  }
+};
 
 const hashPassword = (value = '') => createHash('sha256').update(value).digest('hex');
 
@@ -1111,14 +1377,69 @@ app.post(
       return;
     }
 
+    if (platform === 'youtube') {
+      const code = String(req.body?.code || '').trim();
+      const redirectUri = String(req.body?.redirectUri || '').trim();
+
+      try {
+        const tokenPayload = await requestYouTubeTokenExchange({ code, redirectUri });
+        const accessToken = String(tokenPayload?.access_token || '').trim();
+        if (!accessToken) {
+          throw createHttpError(502, 'YouTube token exchange did not return an access token.');
+        }
+
+        const channelsPayload = await youtubeApiRequest({
+          accessToken,
+          pathName: 'channels',
+          query: {
+            part: 'id,snippet',
+            mine: 'true',
+            maxResults: '50',
+          },
+        });
+        const channels = parseYouTubeChannels(channelsPayload);
+        const primaryChannel = channels[0] || null;
+        if (!primaryChannel) {
+          throw createHttpError(
+            400,
+            'No YouTube channel found for this account. Create a channel and try again.',
+          );
+        }
+
+        const existingYouTube = record.profile?.connectedPlatforms?.youtube || {};
+        const nextYouTube = {
+          ...existingYouTube,
+          accessToken,
+          refreshToken: String(
+            tokenPayload?.refresh_token || existingYouTube?.refreshToken || '',
+          ).trim(),
+          expiresAt: getExpiryFromSeconds(tokenPayload?.expires_in, 3600),
+          channelId: primaryChannel.id,
+          channelName: primaryChannel.name,
+          thumbnailUrl: primaryChannel.thumbnailUrl,
+          scope:
+            typeof tokenPayload?.scope === 'string' && tokenPayload.scope.trim()
+              ? tokenPayload.scope.trim()
+              : existingYouTube?.scope,
+        };
+
+        await setConnectedPlatform(record.uid, 'youtube', nextYouTube);
+        res.json({
+          success: true,
+          platform: 'youtube',
+          channel: primaryChannel,
+        });
+      } catch (error) {
+        console.error('YouTube OAuth exchange failed:', error);
+        const status = getHttpErrorStatus(error, 502);
+        res.status(status).json({
+          message: error instanceof Error ? error.message : 'Failed to connect YouTube account.',
+        });
+      }
+      return;
+    }
+
     const platformInfo = {
-      youtube: {
-        accessToken: `yt_access_${randomUUID().slice(0, 8)}`,
-        refreshToken: `yt_refresh_${randomUUID().slice(0, 8)}`,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        channelId: `yt_${record.uid.slice(0, 8)}`,
-        channelName: `${record.profile.displayName} YouTube`,
-      },
       facebook: {
         accessToken: `fb_access_${randomUUID().slice(0, 8)}`,
         refreshToken: `fb_refresh_${randomUUID().slice(0, 8)}`,
@@ -1145,9 +1466,36 @@ app.post(
   }),
 );
 
-app.post('/api/oauth/refresh', requireAuth, (_req, res) => {
-  res.json({ success: true });
-});
+app.post(
+  '/api/oauth/refresh',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const platform = String(req.body?.platform || '')
+      .trim()
+      .toLowerCase();
+    if (!platform) {
+      res.status(400).json({ message: 'platform is required.' });
+      return;
+    }
+
+    if (platform !== 'youtube') {
+      res.json({ success: true });
+      return;
+    }
+
+    try {
+      const { youtube } = await getConnectedYouTubeAccount(req.auth.profile.uid);
+      await refreshStoredYouTubeAccessToken(req.auth.profile.uid, youtube);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('YouTube token refresh failed:', error);
+      const status = getHttpErrorStatus(error, 502);
+      res.status(status).json({
+        message: error instanceof Error ? error.message : 'Failed to refresh YouTube token.',
+      });
+    }
+  }),
+);
 
 app.post(
   '/api/oauth/disconnect',
@@ -1180,42 +1528,174 @@ app.get(
   }),
 );
 
-app.post('/api/oauth/stream-key', requireAuth, (req, res) => {
-  const platform = String(req.body?.platform || '')
-    .trim()
-    .toLowerCase();
-  if (!platform) {
-    res.status(400).json({ message: 'platform is required.' });
-    return;
-  }
-  res.json({
-    streamKey: `${platform}_${req.auth.profile.uid.slice(0, 8)}_${Date.now().toString(36)}`,
-    ingestUrl:
-      platform === 'youtube'
-        ? 'rtmps://a.rtmps.youtube.com/live2'
-        : platform === 'facebook'
+app.post(
+  '/api/oauth/stream-key',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const platform = String(req.body?.platform || '')
+      .trim()
+      .toLowerCase();
+    if (!platform) {
+      res.status(400).json({ message: 'platform is required.' });
+      return;
+    }
+
+    if (platform === 'youtube') {
+      const requestedChannelId = String(req.body?.channelId || '').trim();
+
+      try {
+        const streamInfo = await executeWithYouTubeAccessToken(
+          req.auth.profile.uid,
+          async (accessToken) => {
+            const channelsPayload = await youtubeApiRequest({
+              accessToken,
+              pathName: 'channels',
+              query: {
+                part: 'id,snippet',
+                mine: 'true',
+                maxResults: '50',
+              },
+            });
+            const channels = parseYouTubeChannels(channelsPayload);
+            if (!channels.length) {
+              throw createHttpError(
+                400,
+                'No YouTube channels found for this account. Reconnect and try again.',
+              );
+            }
+
+            const selectedChannel = requestedChannelId
+              ? channels.find((channel) => channel.id === requestedChannelId)
+              : channels[0];
+            if (!selectedChannel) {
+              throw createHttpError(404, 'Selected YouTube channel is not available.');
+            }
+
+            const streams = await listYouTubeStreams(accessToken);
+            let selectedStream =
+              streams.find((stream) => {
+                if (!requestedChannelId) return true;
+                const streamChannelId = String(stream?.snippet?.channelId || '').trim();
+                return !streamChannelId || streamChannelId === requestedChannelId;
+              }) || null;
+
+            if (!selectedStream) {
+              selectedStream = await createYouTubeStream(accessToken);
+            }
+
+            let ingestionInfo = parseYouTubeIngestionInfo(selectedStream);
+            if ((!ingestionInfo.streamKey || !ingestionInfo.ingestUrl) && selectedStream?.id) {
+              const lookupPayload = await youtubeApiRequest({
+                accessToken,
+                pathName: 'liveStreams',
+                query: {
+                  part: 'id,snippet,cdn,status',
+                  id: String(selectedStream.id),
+                },
+              });
+              const lookedUp = Array.isArray(lookupPayload?.items) ? lookupPayload.items[0] : null;
+              ingestionInfo = parseYouTubeIngestionInfo(lookedUp || selectedStream);
+            }
+
+            if (!ingestionInfo.streamKey || !ingestionInfo.ingestUrl) {
+              throw createHttpError(
+                400,
+                'No reusable YouTube stream key was found. Create one in YouTube Studio and try again.',
+              );
+            }
+
+            return {
+              streamKey: ingestionInfo.streamKey,
+              ingestUrl: ingestionInfo.ingestUrl,
+              channelId: selectedChannel.id,
+              channelName: selectedChannel.name,
+            };
+          },
+        );
+
+        const record = await getUserByUid(req.auth.profile.uid);
+        const existingYouTube = record?.profile?.connectedPlatforms?.youtube || {};
+        await setConnectedPlatform(req.auth.profile.uid, 'youtube', {
+          ...existingYouTube,
+          channelId: streamInfo.channelId,
+          channelName: streamInfo.channelName,
+        });
+
+        res.json(streamInfo);
+      } catch (error) {
+        console.error('YouTube stream key retrieval failed:', error);
+        const status = getHttpErrorStatus(error, 502);
+        res.status(status).json({
+          message: error instanceof Error ? error.message : 'Failed to get YouTube stream info.',
+        });
+      }
+      return;
+    }
+
+    res.json({
+      streamKey: `${platform}_${req.auth.profile.uid.slice(0, 8)}_${Date.now().toString(36)}`,
+      ingestUrl:
+        platform === 'facebook'
           ? 'rtmps://live-api-s.facebook.com:443/rtmp/'
           : 'rtmp://live.twitch.tv/app',
-  });
-});
+    });
+  }),
+);
 
-app.post('/api/oauth/channels', requireAuth, (req, res) => {
-  const platform = String(req.body?.platform || '')
-    .trim()
-    .toLowerCase();
-  const uid = req.auth.profile.uid.slice(0, 8);
-  const channels =
-    platform === 'facebook'
-      ? [
-          { id: `fb_page_${uid}`, name: `${req.auth.profile.displayName} Page` },
-          { id: `fb_group_${uid}`, name: `${req.auth.profile.displayName} Group` },
-        ]
-      : [
-          { id: `${platform}_main_${uid}`, name: `${req.auth.profile.displayName} Main` },
-          { id: `${platform}_secondary_${uid}`, name: `${req.auth.profile.displayName} Alt` },
-        ];
-  res.json({ channels });
-});
+app.post(
+  '/api/oauth/channels',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const platform = String(req.body?.platform || '')
+      .trim()
+      .toLowerCase();
+    if (!platform) {
+      res.status(400).json({ message: 'platform is required.' });
+      return;
+    }
+
+    if (platform === 'youtube') {
+      try {
+        const channels = await executeWithYouTubeAccessToken(
+          req.auth.profile.uid,
+          async (accessToken) => {
+            const payload = await youtubeApiRequest({
+              accessToken,
+              pathName: 'channels',
+              query: {
+                part: 'id,snippet',
+                mine: 'true',
+                maxResults: '50',
+              },
+            });
+            return parseYouTubeChannels(payload);
+          },
+        );
+        res.json({ channels });
+      } catch (error) {
+        console.error('YouTube channel lookup failed:', error);
+        const status = getHttpErrorStatus(error, 502);
+        res.status(status).json({
+          message: error instanceof Error ? error.message : 'Failed to fetch YouTube channels.',
+        });
+      }
+      return;
+    }
+
+    const uid = req.auth.profile.uid.slice(0, 8);
+    const channels =
+      platform === 'facebook'
+        ? [
+            { id: `fb_page_${uid}`, name: `${req.auth.profile.displayName} Page` },
+            { id: `fb_group_${uid}`, name: `${req.auth.profile.displayName} Group` },
+          ]
+        : [
+            { id: `${platform}_main_${uid}`, name: `${req.auth.profile.displayName} Main` },
+            { id: `${platform}_secondary_${uid}`, name: `${req.auth.profile.displayName} Alt` },
+          ];
+    res.json({ channels });
+  }),
+);
 
 app.get('/api/leaderboard', (_req, res) => {
   seedLeaderboard();

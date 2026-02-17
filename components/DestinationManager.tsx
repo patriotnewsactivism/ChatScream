@@ -18,10 +18,12 @@ import {
   Zap,
   Settings,
 } from 'lucide-react';
-import { canAddDestination, getPlanById, type PlanTier } from '../services/stripe';
+import { canAddDestination, type PlanTier } from '../services/stripe';
 import {
   initiateOAuth,
+  getChannels,
   getStreamKey,
+  type AccountChannel,
   type OAuthPlatform as OAuthServicePlatform,
 } from '../services/oauthService';
 
@@ -45,12 +47,19 @@ interface DestinationManagerProps {
   onOpenAdmin?: () => void;
 }
 
+type OAuthOption = {
+  platform: Platform;
+  oauthPlatform: OAuthServicePlatform;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+};
+
 const DestinationManager: React.FC<DestinationManagerProps> = ({
   destinations,
   onAddDestination,
   onRemoveDestination,
   onToggleDestination,
-  onUpdateDestination = () => {},
   isStreaming,
   userPlan = 'free',
   onUpgradeClick,
@@ -64,6 +73,11 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [newKey, setNewKey] = useState('');
   const [newServerUrl, setNewServerUrl] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [showYouTubePicker, setShowYouTubePicker] = useState(false);
+  const [youtubeChannels, setYouTubeChannels] = useState<AccountChannel[]>([]);
+  const [youtubeChannelsLoading, setYouTubeChannelsLoading] = useState(false);
+  const [youtubeSelectionPending, setYouTubeSelectionPending] = useState<string | null>(null);
+  const [youtubePickerError, setYouTubePickerError] = useState<string | null>(null);
 
   const safeAlert = (message: string) => {
     const isJsdom =
@@ -84,8 +98,6 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     return canAddDestination(userPlan, destinations.length);
   }, [userPlan, destinations.length]);
 
-  const currentPlan = useMemo(() => getPlanById(userPlan), [userPlan]);
-
   const handleAddWithLimitCheck = (dest: Destination): boolean => {
     if (!destinationLimit.allowed) {
       return false; // Don't allow adding if limit reached
@@ -94,7 +106,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     return true;
   };
 
-  const oauthOptions = useMemo(
+  const oauthOptions = useMemo<OAuthOption[]>(
     () => [
       {
         platform: Platform.YOUTUBE,
@@ -121,7 +133,14 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     [],
   );
 
-  const createOAuthDestination = (platform: Platform): Destination => {
+  const createOAuthDestination = (
+    platform: Platform,
+    options: {
+      name?: string;
+      streamKey?: string;
+      serverUrl?: string;
+    } = {},
+  ): Destination => {
     const platformName = platform === Platform.CUSTOM_RTMP ? 'Custom' : platform;
     const existingCount = destinations.filter((d) => d.platform === platform).length;
     const sequence = existingCount + 1;
@@ -129,8 +148,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     return {
       id: `${platform}-${Date.now()}`,
       platform,
-      name: `${platformName} Account ${sequence}`,
-      streamKey: 'oauth-linked',
+      name: options.name || `${platformName} Account ${sequence}`,
+      streamKey: options.streamKey || 'oauth-linked',
+      serverUrl: options.serverUrl,
       authType: 'oauth',
       isEnabled: true,
       status: 'offline',
@@ -201,23 +221,93 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     initiateOAuth(platform, userId);
   };
 
-  const handleSyncStreamKey = async (dest: Destination, platform: OAuthServicePlatform) => {
+  const openYouTubeChannelPicker = async () => {
     if (!userId) {
-      safeAlert('Please sign in again to sync stream info.');
+      safeAlert('Please sign in again to manage YouTube destinations.');
       return;
     }
-    const result = await getStreamKey(platform);
+    setShowYouTubePicker(true);
+    setYouTubeChannelsLoading(true);
+    setYouTubePickerError(null);
+
+    const result = await getChannels('youtube');
+    if (result.error) {
+      setYouTubeChannels([]);
+      setYouTubePickerError(result.error);
+      setYouTubeChannelsLoading(false);
+      return;
+    }
+
+    setYouTubeChannels(result.channels);
+    if (!result.channels.length) {
+      setYouTubePickerError(
+        'No YouTube channels found. Ensure this Google account has a YouTube channel.',
+      );
+    }
+    setYouTubeChannelsLoading(false);
+  };
+
+  const handleAddYouTubeChannel = async (channel: AccountChannel) => {
+    if (!destinationLimit.allowed) {
+      safeAlert(destinationLimit.message);
+      return;
+    }
+    setYouTubeSelectionPending(channel.id);
+    const result = await getStreamKey('youtube', channel.id);
+    setYouTubeSelectionPending(null);
+
     if (result.error) {
       safeAlert(result.error);
       return;
     }
     if (!result.streamKey || !result.ingestUrl) {
       safeAlert(
-        'Stream key not available yet. Try again after connecting, or create a broadcast on the platform.',
+        'Stream key not available yet. Create or verify a reusable stream in YouTube Studio and try again.',
       );
       return;
     }
-    onUpdateDestination(dest.id, { streamKey: result.streamKey, serverUrl: result.ingestUrl });
+
+    const added = handleAddWithLimitCheck(
+      createOAuthDestination(Platform.YOUTUBE, {
+        name: `YouTube - ${channel.name}`,
+        streamKey: result.streamKey,
+        serverUrl: result.ingestUrl,
+      }),
+    );
+    if (!added) {
+      safeAlert(destinationLimit.message);
+      return;
+    }
+    setShowYouTubePicker(false);
+  };
+
+  const handleOAuthPrimaryAction = async (option: OAuthOption) => {
+    if (option.oauthPlatform === 'youtube') {
+      if (isPlatformConnected('youtube')) {
+        await openYouTubeChannelPicker();
+      } else {
+        handleConnectOAuth('youtube');
+      }
+      return;
+    }
+
+    const added = handleAddWithLimitCheck(createOAuthDestination(option.platform));
+    if (added && !isStreaming) {
+      handleConnectOAuth(option.oauthPlatform);
+    }
+  };
+
+  const handleOAuthAddDestination = async (option: OAuthOption) => {
+    if (option.oauthPlatform === 'youtube') {
+      if (isPlatformConnected('youtube')) {
+        await openYouTubeChannelPicker();
+      } else {
+        handleConnectOAuth('youtube');
+      }
+      return;
+    }
+
+    handleAddWithLimitCheck(createOAuthDestination(option.platform));
   };
 
   return (
@@ -318,28 +408,39 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const added = handleAddWithLimitCheck(
-                        createOAuthDestination(option.platform),
-                      );
-                      if (added && !isStreaming) {
-                        handleConnectOAuth(option.oauthPlatform);
-                      }
+                      void handleOAuthPrimaryAction(option);
                     }}
-                    disabled={isStreaming || !destinationLimit.allowed}
+                    disabled={
+                      isStreaming ||
+                      !destinationLimit.allowed ||
+                      (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
+                    }
                     className="text-[11px] px-2 py-1 rounded bg-brand-600/30 hover:bg-brand-600/40 border border-brand-500/20 text-brand-100 disabled:opacity-50"
                     aria-label={`Connect ${option.label}`}
                   >
-                    Connect {option.label}
+                    {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
+                      ? youtubeChannelsLoading
+                        ? 'Loading...'
+                        : 'Select channel'
+                      : `Connect ${option.label}`}
                   </button>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => handleAddWithLimitCheck(createOAuthDestination(option.platform))}
-                disabled={isStreaming || !destinationLimit.allowed}
+                onClick={() => {
+                  void handleOAuthAddDestination(option);
+                }}
+                disabled={
+                  isStreaming ||
+                  !destinationLimit.allowed ||
+                  (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
+                }
                 className="w-full text-[11px] px-2 py-2 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-gray-200 disabled:opacity-50"
               >
-                Add destination
+                {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
+                  ? 'Select destination'
+                  : 'Add destination'}
               </button>
             </div>
           </div>
@@ -347,6 +448,52 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3">
+        {showYouTubePicker && (
+          <div className="bg-gray-800 p-3 rounded border border-gray-600 mb-3 animate-fade-in space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-gray-300">SELECT YOUTUBE DESTINATION</h3>
+              <button
+                type="button"
+                onClick={() => setShowYouTubePicker(false)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            {youtubeChannelsLoading && <p className="text-xs text-gray-400">Loading channels...</p>}
+
+            {!youtubeChannelsLoading && youtubePickerError && (
+              <p className="text-xs text-amber-300">{youtubePickerError}</p>
+            )}
+
+            {!youtubeChannelsLoading && !youtubePickerError && youtubeChannels.length === 0 && (
+              <p className="text-xs text-gray-400">No channels available.</p>
+            )}
+
+            {!youtubeChannelsLoading && youtubeChannels.length > 0 && (
+              <div className="space-y-2">
+                {youtubeChannels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    onClick={() => {
+                      void handleAddYouTubeChannel(channel);
+                    }}
+                    disabled={Boolean(youtubeSelectionPending)}
+                    className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
+                  >
+                    <span className="text-sm truncate">{channel.name}</span>
+                    <span className="text-[11px] text-brand-300 shrink-0">
+                      {youtubeSelectionPending === channel.id ? 'Adding...' : 'Use channel'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {showAddForm && destinationLimit.allowed && (
           <div className="bg-gray-800 p-3 rounded border border-gray-600 mb-3 animate-fade-in">
             <h3 className="text-xs font-semibold mb-2 text-gray-400">CONNECT NEW ACCOUNT</h3>
