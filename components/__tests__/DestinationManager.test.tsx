@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import DestinationManager from '../DestinationManager';
-import { Platform } from '../../types';
+import * as oauthService from '../../services/oauthService';
 
 vi.mock('../../services/oauthService', () => ({
   initiateOAuth: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock('../../services/oauthService', () => ({
 }));
 
 describe('DestinationManager quick connect', () => {
-  it('adds an OAuth destination with one-click flow', () => {
+  it('starts YouTube OAuth connect flow', () => {
     const onAddDestination = vi.fn();
     render(
       <DestinationManager
@@ -22,14 +22,11 @@ describe('DestinationManager quick connect', () => {
       />,
     );
 
-    const twitchButton = screen.getByRole('button', { name: /Connect Twitch/i });
-    fireEvent.click(twitchButton);
+    const youtubeButton = screen.getByRole('button', { name: /Connect YouTube/i });
+    fireEvent.click(youtubeButton);
 
-    expect(onAddDestination).toHaveBeenCalledTimes(1);
-    const payload = onAddDestination.mock.calls[0][0];
-    expect(payload.platform).toBe(Platform.TWITCH);
-    expect(payload.authType).toBe('oauth');
-    expect(payload.streamKey).toBe('oauth-linked');
+    expect(vi.mocked(oauthService.initiateOAuth)).toHaveBeenCalledWith('youtube', 'user-123');
+    expect(onAddDestination).not.toHaveBeenCalled();
   });
 
   it('disables quick connect while streaming', () => {

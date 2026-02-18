@@ -115,20 +115,6 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         description: 'Stream to your main channel or brand account with YouTube verified bitrate.',
         icon: <Youtube className="text-red-500" aria-hidden />,
       },
-      {
-        platform: Platform.FACEBOOK,
-        oauthPlatform: 'facebook' as const,
-        label: 'Facebook Live',
-        description: 'Go live to your profile or page without copying stream keys.',
-        icon: <Facebook className="text-blue-500" aria-hidden />,
-      },
-      {
-        platform: Platform.TWITCH,
-        oauthPlatform: 'twitch' as const,
-        label: 'Twitch',
-        description: 'Authenticate your channel to keep VOD/audio rules in sync.',
-        icon: <Twitch className="text-purple-500" aria-hidden />,
-      },
     ],
     [],
   );

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   addChatMessage,
   addReferral,
@@ -32,6 +32,7 @@ import {
 } from './store.js';
 
 const app = express();
+app.set('trust proxy', true);
 
 void initIdentityStorage().catch((error) => {
   console.error('Failed to initialize managed identity storage:', error);
@@ -64,8 +65,11 @@ const AWS_COST_MODEL = Object.freeze({
 });
 
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo';
 const YOUTUBE_API_BASE_URL = 'https://www.googleapis.com/youtube/v3';
 const YOUTUBE_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 const clampNumber = (value, min, max, fallback = min) => {
   const num = Number(value);
@@ -168,6 +172,132 @@ const parseJsonResponse = async (response) => {
     return JSON.parse(text);
   } catch {
     return { raw: text };
+  }
+};
+
+const base64UrlEncode = (value) => Buffer.from(value, 'utf8').toString('base64url');
+const base64UrlDecode = (value) => Buffer.from(value, 'base64url').toString('utf8');
+
+const getServerBaseUrl = (req) => {
+  const configured = String(process.env.SERVER_BASE_URL || process.env.API_BASE_URL || '').trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '')
+    .split(',')[0]
+    .trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '')
+    .split(',')[0]
+    .trim();
+  const host =
+    forwardedHost ||
+    String(req.headers.host || 'localhost')
+      .split(',')[0]
+      .trim();
+  const protocol = forwardedProto || req.protocol || 'http';
+  return `${protocol}://${host || 'localhost'}`;
+};
+
+const getFrontendOAuthCallbackUrl = (req) => {
+  const configured = String(
+    process.env.AUTH_REDIRECT_URL ||
+      process.env.VITE_OAUTH_REDIRECT_URI ||
+      process.env.APP_BASE_URL ||
+      '',
+  ).trim();
+  if (configured) {
+    if (/^https?:\/\//i.test(configured)) {
+      return configured;
+    }
+    if (configured.startsWith('/')) {
+      return `${getServerBaseUrl(req)}${configured}`;
+    }
+  }
+  return new URL('/oauth/callback', getServerBaseUrl(req)).toString();
+};
+
+const redirectToFrontendOAuth = (req, res, params = {}) => {
+  const target = new URL(getFrontendOAuthCallbackUrl(req));
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    target.searchParams.set(key, String(value));
+  });
+  res.redirect(302, target.toString());
+};
+
+const getGoogleAuthCredentials = () => {
+  const oauth = getConfig('oauth') || {};
+  return {
+    clientId: String(
+      process.env.GOOGLE_CLIENT_ID ||
+        oauth.googleClientId ||
+        process.env.YOUTUBE_CLIENT_ID ||
+        oauth.youtubeClientId ||
+        '',
+    ).trim(),
+    clientSecret: String(
+      process.env.GOOGLE_CLIENT_SECRET || process.env.YOUTUBE_CLIENT_SECRET || '',
+    ).trim(),
+  };
+};
+
+const getAuthStateSecret = () =>
+  String(
+    process.env.AUTH_STATE_SECRET ||
+      process.env.GOOGLE_CLIENT_SECRET ||
+      process.env.YOUTUBE_CLIENT_SECRET ||
+      '',
+  ).trim();
+
+const signAuthState = (rawState) => {
+  const secret = getAuthStateSecret();
+  if (!secret) return '';
+  return createHmac('sha256', secret).update(rawState).digest('base64url');
+};
+
+const createAuthState = (payload) => {
+  const rawPayload = base64UrlEncode(JSON.stringify(payload));
+  const signature = signAuthState(rawPayload);
+  if (!signature) return '';
+  return `${rawPayload}.${signature}`;
+};
+
+const parseAuthState = (encodedState) => {
+  const [rawPayload, signature] = String(encodedState || '').split('.', 2);
+  if (!rawPayload || !signature) {
+    return null;
+  }
+
+  const expectedSignature = signAuthState(rawPayload);
+  if (!expectedSignature) {
+    return null;
+  }
+
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const actualBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== actualBuffer.length) {
+    return null;
+  }
+  if (!timingSafeEqual(expectedBuffer, actualBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(rawPayload));
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    const issuedAt = Number(payload.ts || 0);
+    if (!Number.isFinite(issuedAt) || issuedAt <= 0) {
+      return null;
+    }
+    if (Date.now() - issuedAt > OAUTH_STATE_MAX_AGE_MS) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
   }
 };
 
@@ -679,18 +809,115 @@ app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
     res.status(400).json({ message: 'Provider is required.' });
     return;
   }
+  if (provider !== 'google') {
+    res
+      .status(400)
+      .json({ message: `${provider} sign-in is not available yet. Use Google sign-in.` });
+    return;
+  }
   const redirectUrl = `/api/auth/oauth/${provider}${referral ? `?ref=${encodeURIComponent(referral)}` : ''}`;
   res.json({ redirectUrl });
 });
 
 app.get(
-  '/api/auth/oauth/:provider',
+  '/api/auth/oauth/google/callback',
   asyncHandler(async (req, res) => {
-    const provider = String(req.params.provider || '')
-      .trim()
-      .toLowerCase();
-    const referral = normalizeCode(req.query.ref || '');
-    const email = normalizeEmail(`demo-${provider}@chatscream.local`);
+    const queryError = String(req.query.error || '').trim();
+    if (queryError) {
+      const message = queryError === 'access_denied' ? 'Authorization was denied.' : queryError;
+      redirectToFrontendOAuth(req, res, { platform: 'google', error: message });
+      return;
+    }
+
+    const code = String(req.query.code || '').trim();
+    const state = String(req.query.state || '').trim();
+    if (!code || !state) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'google',
+        error: 'Missing authorization code or state.',
+      });
+      return;
+    }
+
+    const parsedState = parseAuthState(state);
+    if (!parsedState) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'google',
+        error: 'Invalid or expired sign-in state. Please try again.',
+      });
+      return;
+    }
+
+    const { clientId, clientSecret } = getGoogleAuthCredentials();
+    if (!clientId || !clientSecret) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'google',
+        error: 'Google sign-in is not configured.',
+      });
+      return;
+    }
+
+    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/google/callback`;
+    const tokenBody = new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    });
+
+    const tokenResponse = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenBody.toString(),
+    });
+    const tokenPayload = await parseJsonResponse(tokenResponse);
+    if (!tokenResponse.ok) {
+      const message =
+        tokenPayload?.error_description ||
+        tokenPayload?.error ||
+        'Failed to complete Google sign-in.';
+      redirectToFrontendOAuth(req, res, { platform: 'google', error: message });
+      return;
+    }
+
+    const accessToken = String(tokenPayload?.access_token || '').trim();
+    if (!accessToken) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'google',
+        error: 'Google sign-in did not return an access token.',
+      });
+      return;
+    }
+
+    const userInfoResponse = await fetch(GOOGLE_USERINFO_ENDPOINT, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const userInfo = await parseJsonResponse(userInfoResponse);
+    if (!userInfoResponse.ok) {
+      const message =
+        userInfo?.error_description || userInfo?.error || 'Failed to fetch Google profile.';
+      redirectToFrontendOAuth(req, res, { platform: 'google', error: message });
+      return;
+    }
+
+    const email = normalizeEmail(userInfo?.email || '');
+    if (!email) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'google',
+        error: 'Google account did not provide an email address.',
+      });
+      return;
+    }
+
+    const displayName =
+      String(userInfo?.name || '').trim() ||
+      String(userInfo?.given_name || '').trim() ||
+      email.split('@')[0];
+    const photoURL = String(userInfo?.picture || '').trim();
+    const referral = normalizeCode(parsedState?.ref || '');
 
     let record = await getUserByEmail(email);
     if (!record) {
@@ -699,11 +926,13 @@ app.get(
       let profile = createUserProfile({
         uid,
         email,
-        displayName: `${provider[0]?.toUpperCase() || 'O'}${provider.slice(1)} User`,
+        displayName,
         referredByCode: referredAffiliate?.code || '',
         referredByUserId: referredAffiliate?.ownerId || '',
       });
+      profile.photoURL = photoURL;
       profile = ensureAffiliateForProfile(profile);
+      profile = applyAccessOverrides(profile);
 
       await putUser({
         uid,
@@ -711,18 +940,100 @@ app.get(
         passwordHash: '',
         profile,
       });
+
+      if (referredAffiliate?.isActive) {
+        setAffiliate({
+          ...referredAffiliate,
+          totalReferrals: Number(referredAffiliate.totalReferrals || 0) + 1,
+        });
+        addReferral({
+          id: randomUUID(),
+          affiliateCode: referredAffiliate.code,
+          referrerId: referredAffiliate.ownerId,
+          referredUserId: uid,
+          createdAt: nowIso(),
+        });
+      }
+
       record = await getUserByUid(uid);
+    } else {
+      const nextProfile = applyAccessOverrides({
+        ...record.profile,
+        email,
+        displayName: record.profile?.displayName || displayName,
+        photoURL: record.profile?.photoURL || photoURL,
+      });
+      await putUser({
+        ...record,
+        email,
+        profile: nextProfile,
+      });
+      record = await getUserByUid(record.uid);
     }
 
     const issued = await issueSession(record.uid);
-    const redirect = new URL('/oauth/callback', `http://${req.headers.host || 'localhost'}`);
-    redirect.searchParams.set('platform', provider);
-    redirect.searchParams.set('token', issued.token);
-    redirect.searchParams.set('uid', record.uid);
-    redirect.searchParams.set('email', record.email);
-    redirect.searchParams.set('displayName', record.profile.displayName || 'User');
-    redirect.searchParams.set('expiresAt', issued.expiresAt);
-    res.redirect(302, `${redirect.pathname}${redirect.search}`);
+    redirectToFrontendOAuth(req, res, {
+      platform: 'google',
+      token: issued.token,
+      uid: record.uid,
+      email: record.email,
+      displayName: record.profile.displayName || 'User',
+      expiresAt: issued.expiresAt,
+    });
+  }),
+);
+
+app.get(
+  '/api/auth/oauth/:provider',
+  asyncHandler(async (req, res) => {
+    const provider = String(req.params.provider || '')
+      .trim()
+      .toLowerCase();
+    if (provider !== 'google') {
+      res
+        .status(400)
+        .json({ message: `${provider} sign-in is not available yet. Use Google sign-in.` });
+      return;
+    }
+
+    const { clientId, clientSecret } = getGoogleAuthCredentials();
+    if (!clientId || !clientSecret) {
+      res.status(500).json({
+        message: 'Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
+      });
+      return;
+    }
+
+    if (!getAuthStateSecret()) {
+      res.status(500).json({
+        message:
+          'Google sign-in state secret is missing. Set AUTH_STATE_SECRET (or GOOGLE_CLIENT_SECRET).',
+      });
+      return;
+    }
+
+    const referral = normalizeCode(req.query.ref || '');
+    const state = createAuthState({
+      ts: Date.now(),
+      nonce: randomUUID(),
+      ref: referral,
+    });
+    if (!state) {
+      res.status(500).json({ message: 'Failed to initialize secure sign-in state.' });
+      return;
+    }
+
+    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/google/callback`;
+    const authUrl = new URL(GOOGLE_AUTH_ENDPOINT);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', 'openid email profile');
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'select_account');
+    authUrl.searchParams.set('state', state);
+
+    res.redirect(302, authUrl.toString());
   }),
 );
 
@@ -1439,30 +1750,9 @@ app.post(
       return;
     }
 
-    const platformInfo = {
-      facebook: {
-        accessToken: `fb_access_${randomUUID().slice(0, 8)}`,
-        refreshToken: `fb_refresh_${randomUUID().slice(0, 8)}`,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        pageId: `fb_${record.uid.slice(0, 8)}`,
-        pageName: `${record.profile.displayName} Facebook`,
-      },
-      twitch: {
-        accessToken: `tw_access_${randomUUID().slice(0, 8)}`,
-        refreshToken: `tw_refresh_${randomUUID().slice(0, 8)}`,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        channelId: `tw_${record.uid.slice(0, 8)}`,
-        channelName: `${record.profile.displayName} Twitch`,
-      },
-    };
-
-    if (!platformInfo[platform]) {
-      res.status(400).json({ message: `Unsupported platform: ${platform}` });
-      return;
-    }
-
-    await setConnectedPlatform(record.uid, platform, platformInfo[platform]);
-    res.json({ success: true });
+    res.status(501).json({
+      message: `${platform} destination OAuth is not live yet. Only YouTube is fully implemented right now.`,
+    });
   }),
 );
 
@@ -1632,12 +1922,8 @@ app.post(
       return;
     }
 
-    res.json({
-      streamKey: `${platform}_${req.auth.profile.uid.slice(0, 8)}_${Date.now().toString(36)}`,
-      ingestUrl:
-        platform === 'facebook'
-          ? 'rtmps://live-api-s.facebook.com:443/rtmp/'
-          : 'rtmp://live.twitch.tv/app',
+    res.status(501).json({
+      message: `${platform} stream key retrieval is not live yet. Only YouTube is fully implemented right now.`,
     });
   }),
 );
@@ -1682,18 +1968,9 @@ app.post(
       return;
     }
 
-    const uid = req.auth.profile.uid.slice(0, 8);
-    const channels =
-      platform === 'facebook'
-        ? [
-            { id: `fb_page_${uid}`, name: `${req.auth.profile.displayName} Page` },
-            { id: `fb_group_${uid}`, name: `${req.auth.profile.displayName} Group` },
-          ]
-        : [
-            { id: `${platform}_main_${uid}`, name: `${req.auth.profile.displayName} Main` },
-            { id: `${platform}_secondary_${uid}`, name: `${req.auth.profile.displayName} Alt` },
-          ];
-    res.json({ channels });
+    res.status(501).json({
+      message: `${platform} channel lookup is not live yet. Only YouTube is fully implemented right now.`,
+    });
   }),
 );
 

@@ -105,24 +105,7 @@ const App = () => {
   const planLabel = getPlanById(userPlan)?.name || 'Free';
 
   // --- State ---
-  const [destinations, setDestinations] = useState<Destination[]>([
-    {
-      id: '1',
-      platform: Platform.YOUTUBE,
-      name: 'Main Channel',
-      streamKey: '****',
-      isEnabled: true,
-      status: 'offline',
-    },
-    {
-      id: '2',
-      platform: Platform.FACEBOOK,
-      name: 'Personal FB',
-      streamKey: '****',
-      isEnabled: false,
-      status: 'offline',
-    },
-  ]);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
 
   const [layout, setLayout] = useState<LayoutMode>(LayoutMode.FULL_CAM);
   const [appState, setAppState] = useState<AppState>({
@@ -165,6 +148,7 @@ const App = () => {
 
   // UI State
   const [leftSidebarTab, setLeftSidebarTab] = useState<'media' | 'graphics'>('media');
+  const [showMobileDestinationTools, setShowMobileDestinationTools] = useState(false);
   const [streamingMode, setStreamingMode] = useState<'local' | 'cloud'>('local');
   const [streamActionPending, setStreamActionPending] = useState(false);
   const [cloudQuality, setCloudQuality] = useState<CloudStreamQuality>('1080p');
@@ -226,6 +210,12 @@ const App = () => {
       setMobileTip(aiError);
     }
   }, [aiError, setMobileTip]);
+
+  useEffect(() => {
+    if (mobilePanel !== 'destinations' && showMobileDestinationTools) {
+      setShowMobileDestinationTools(false);
+    }
+  }, [mobilePanel, showMobileDestinationTools]);
 
   // Initialize RTMPSender
   useEffect(() => {
@@ -1139,90 +1129,116 @@ const App = () => {
 
   const renderDestinationsPanel = () => (
     <div className="flex flex-col h-full bg-dark-900">
-      <div className="p-4 border-b border-gray-800 shrink-0 bg-gradient-to-br from-indigo-900/20 to-transparent">
-        <h3 className="text-xs font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">
-          <Sparkles size={14} className="text-brand-400" /> AI Assistant
-        </h3>
-        <div className="space-y-3">
-          <input
-            className="w-full bg-dark-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 outline-none"
-            placeholder="Stream Topic (e.g. Gaming)"
-            value={streamTopic}
-            onChange={(e) => setStreamTopic(e.target.value)}
-          />
+      <div className="p-3 border-b border-gray-800 shrink-0 bg-dark-800/80">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-bold text-gray-300 uppercase">Destinations</h3>
+            <p className="text-[11px] text-gray-500 mt-1">Manage where your stream is sent live.</p>
+          </div>
           <button
-            onClick={handleGenerateAI}
-            disabled={isGenerating || !streamTopic}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+            type="button"
+            onClick={() => setShowMobileDestinationTools((prev) => !prev)}
+            className="text-[11px] px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-200 flex items-center gap-1.5"
           >
-            {isGenerating ? 'Generating...' : 'Generate Viral Pack'}
+            {showMobileDestinationTools ? 'Hide Tools' : 'Show Tools'}
+            {showMobileDestinationTools ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
-          {aiError && (
-            <div className="text-xs text-red-400" role="status">
-              {aiError}
-            </div>
-          )}
-          {viralPackage && (
-            <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-bold text-indigo-200 mb-1">
-                    {viralPackage.titles[0] || 'Untitled'}
-                  </div>
-                  <div className="text-xs text-gray-300">{viralPackage.descriptions[0] || ''}</div>
-                </div>
-                <button
-                  onClick={() =>
-                    copyToClipboard(
-                      `${viralPackage.titles[0] || ''}\n\n${viralPackage.descriptions[0] || ''}`.trim(),
-                    )
-                  }
-                  className="shrink-0 px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-500/30 text-xs text-indigo-100"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[11px] uppercase font-bold text-gray-400">Hashtags</div>
-                    <div className="text-xs text-gray-300 break-words">
-                      {viralPackage.hashtags.join(' ')}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(viralPackage.hashtags.join(' '))}
-                    className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
-                    type="button"
-                  >
-                    Copy
-                  </button>
-                </div>
-
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[11px] uppercase font-bold text-gray-400">Tags</div>
-                    <div className="text-xs text-gray-300 break-words">
-                      {viralPackage.tags.join(', ')}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(viralPackage.tags.join(', '))}
-                    className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
-                    type="button"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
-      {renderCloudStreamingCard()}
-      <div className="flex-1 overflow-y-auto pb-safe">
+
+      {showMobileDestinationTools && (
+        <div className="shrink-0 max-h-[52%] overflow-y-auto border-b border-gray-800 bg-dark-900/90">
+          <div className="p-4 border-b border-gray-800 bg-gradient-to-br from-indigo-900/20 to-transparent">
+            <h3 className="text-xs font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">
+              <Sparkles size={14} className="text-brand-400" /> AI Assistant
+            </h3>
+            <div className="space-y-3">
+              <input
+                className="w-full bg-dark-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 outline-none"
+                placeholder="Stream Topic (e.g. Gaming)"
+                value={streamTopic}
+                onChange={(e) => setStreamTopic(e.target.value)}
+              />
+              <button
+                onClick={handleGenerateAI}
+                disabled={isGenerating || !streamTopic}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isGenerating ? 'Generating...' : 'Generate Viral Pack'}
+              </button>
+              {aiError && (
+                <div className="text-xs text-red-400" role="status">
+                  {aiError}
+                </div>
+              )}
+              {viralPackage && (
+                <div className="bg-indigo-900/20 p-3 rounded border border-indigo-500/30 text-sm animate-fade-in space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-indigo-200 mb-1">
+                        {viralPackage.titles[0] || 'Untitled'}
+                      </div>
+                      <div className="text-xs text-gray-300">
+                        {viralPackage.descriptions[0] || ''}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(
+                          `${viralPackage.titles[0] || ''}\n\n${viralPackage.descriptions[0] || ''}`.trim(),
+                        )
+                      }
+                      className="shrink-0 px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-500/30 text-xs text-indigo-100"
+                      type="button"
+                    >
+                      Copy
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] uppercase font-bold text-gray-400">
+                          Hashtags
+                        </div>
+                        <div className="text-xs text-gray-300 break-words">
+                          {viralPackage.hashtags.join(' ')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(viralPackage.hashtags.join(' '))}
+                        className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                        type="button"
+                      >
+                        Copy
+                      </button>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] uppercase font-bold text-gray-400">Tags</div>
+                        <div className="text-xs text-gray-300 break-words">
+                          {viralPackage.tags.join(', ')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(viralPackage.tags.join(', '))}
+                        className="shrink-0 px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-800 border border-gray-700 text-[11px] text-gray-200"
+                        type="button"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {renderCloudStreamingCard()}
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto pb-safe">
         <DestinationManager
           destinations={destinations}
           onAddDestination={(d) => setDestinations([...destinations, d])}
@@ -1524,11 +1540,10 @@ const App = () => {
 
           {/* MOBILE: Portrait Bottom Sheet */}
           {!isLandscape && mobilePanel !== 'none' && (
-            <div className="fixed inset-x-0 bottom-0 top-auto max-h-[78vh] md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up">
-              <div
-                className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0 cursor-pointer"
-                onClick={() => setMobilePanel('none')}
-              >
+            <div
+              className={`fixed inset-x-0 bottom-0 top-auto ${mobilePanel === 'destinations' ? 'max-h-[92vh]' : 'max-h-[78vh]'} md:hidden z-40 bg-dark-900 border-t border-gray-700 flex flex-col rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-up`}
+            >
+              <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-dark-800 rounded-t-2xl shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-1 bg-gray-600 rounded-full mx-auto absolute left-0 right-0 top-2" />
                   <h3 className="text-sm font-bold uppercase text-gray-200 flex items-center gap-2 mt-2">
@@ -1554,7 +1569,11 @@ const App = () => {
                     )}
                   </h3>
                 </div>
-                <button className="mt-2 p-1 bg-gray-700 rounded-full">
+                <button
+                  type="button"
+                  onClick={() => setMobilePanel('none')}
+                  className="mt-2 p-1 bg-gray-700 rounded-full"
+                >
                   <ChevronDown size={16} />
                 </button>
               </div>

@@ -14,10 +14,6 @@ import {
   Check,
   Gift,
   Loader2,
-  Apple,
-  Facebook,
-  Github,
-  Twitter,
 } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup' | 'reset';
@@ -26,20 +22,8 @@ const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const {
-    user,
-    signIn,
-    signUp,
-    signInGoogle,
-    signInFacebook,
-    signInGithub,
-    signInTwitter,
-    signInApple,
-    sendResetEmail,
-    loading,
-    error,
-    clearError,
-  } = useAuth();
+  const { user, signIn, signUp, signInGoogle, sendResetEmail, loading, error, clearError } =
+    useAuth();
 
   // Determine mode from URL path
   const getInitialMode = (): AuthMode => {
@@ -125,22 +109,11 @@ const AuthPage: React.FC = () => {
     }
   };
 
-  const handleSocialSignIn = async (
-    provider: 'google' | 'facebook' | 'github' | 'twitter' | 'apple',
-  ) => {
+  const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
     try {
       const ref = referralValid ? referralCode : undefined;
-      const result =
-        provider === 'google'
-          ? await signInGoogle(ref)
-          : provider === 'facebook'
-            ? await signInFacebook(ref)
-            : provider === 'github'
-              ? await signInGithub(ref)
-              : provider === 'twitter'
-                ? await signInTwitter(ref)
-                : await signInApple(ref);
+      const result = await signInGoogle(ref);
 
       if (!result.didRedirect) {
         navigate(redirectTo, { replace: true });
@@ -382,9 +355,9 @@ const AuthPage: React.FC = () => {
                 {/* Google */}
                 <button
                   type="button"
-                  onClick={() => handleSocialSignIn('google')}
+                  onClick={handleGoogleSignIn}
                   disabled={isSubmitting || loading}
-                  className="w-full py-3 bg-white hover:bg-gray-100 text-gray-900 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-white hover:bg-gray-100 text-gray-900 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed sm:col-span-2"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path
@@ -406,47 +379,11 @@ const AuthPage: React.FC = () => {
                   </svg>
                   Google
                 </button>
-
-                {/* Apple */}
-                <button
-                  type="button"
-                  onClick={() => handleSocialSignIn('apple')}
-                  disabled={isSubmitting || loading}
-                  className="w-full py-3 bg-black hover:bg-gray-900 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Apple size={18} /> Apple
-                </button>
-
-                {/* Facebook */}
-                <button
-                  type="button"
-                  onClick={() => handleSocialSignIn('facebook')}
-                  disabled={isSubmitting || loading}
-                  className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Facebook size={18} /> Facebook
-                </button>
-
-                {/* GitHub */}
-                <button
-                  type="button"
-                  onClick={() => handleSocialSignIn('github')}
-                  disabled={isSubmitting || loading}
-                  className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-700"
-                >
-                  <Github size={18} /> GitHub
-                </button>
-
-                {/* Twitter/X */}
-                <button
-                  type="button"
-                  onClick={() => handleSocialSignIn('twitter')}
-                  disabled={isSubmitting || loading}
-                  className="w-full py-3 bg-gray-900 hover:bg-black text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-700 sm:col-span-2"
-                >
-                  <Twitter size={18} /> X (Twitter)
-                </button>
               </div>
+              <p className="mt-3 text-xs text-gray-500 text-center">
+                Google sign-in is fully supported. Additional providers are disabled until their
+                live OAuth backends are ready.
+              </p>
             </>
           )}
 
