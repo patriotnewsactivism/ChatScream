@@ -38,6 +38,35 @@ import {
 const app = express();
 app.set('trust proxy', true);
 
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
+
+const readBearerToken = (req) => {
+  const raw = req.headers.authorization || '';
+  if (!raw.startsWith('Bearer ')) return '';
+  return raw.slice('Bearer '.length).trim();
+};
+
+const requireAuth = asyncHandler(async (req, res, next) => {
+  const token = readBearerToken(req);
+  if (!token) {
+    res.status(401).json({ message: 'Missing authorization token.' });
+    return;
+  }
+  const session = await getSession(token);
+  if (!session) {
+    res.status(401).json({ message: 'Session expired. Please sign in again.' });
+    return;
+  }
+  const userRecord = await getUserByUid(session.uid);
+  if (!userRecord) {
+    res.status(401).json({ message: 'User not found.' });
+    return;
+  }
+  req.auth = { session, record: userRecord, profile: userRecord.profile };
+  next();
+});
+
 // Multer Setup
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -618,9 +647,6 @@ const executeWithYouTubeAccessToken = async (uid, handler) => {
 };
 
 const hashPassword = (value = '') => createHash('sha256').update(value).digest('hex');
-
-const asyncHandler = (handler) => (req, res, next) =>
-  Promise.resolve(handler(req, res, next)).catch(next);
 
 const issueSession = async (uid) => {
   const token = randomUUID();
