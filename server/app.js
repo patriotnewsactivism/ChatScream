@@ -57,6 +57,20 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 app.use('/uploads', express.static(uploadDir));
 
+const getServerBaseUrl = (req) => {
+  const configured = String(process.env.SERVER_BASE_URL || process.env.API_BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  const host = req.headers.host || 'localhost';
+  const protocol = req.protocol || 'http';
+  return `${protocol}://${host}`;
+};
+
+const getExpiryFromSeconds = (seconds, fallbackSeconds = 3600) => {
+  const expiresIn = Number(seconds);
+  const safeSeconds = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : fallbackSeconds;
+  return new Date(Date.now() + safeSeconds * 1000).toISOString();
+};
+
 app.get(
   '/api/media/list',
   asyncHandler(async (req, res) => {

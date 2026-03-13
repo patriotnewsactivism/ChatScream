@@ -1,17 +1,16 @@
-import app from './app.js';
-import { closeIdentityStorage, flushState } from './store.js';
+import express from 'express';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import app from './app.js';
+import { closeIdentityStorage, flushState } from './store.js';
 
 const port = Number(process.env.PORT || 8787);
-
-const server = app.listen(port, () => {
-  console.log(`ChatScream API listening on http://localhost:${port}`);
-});
+const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   console.log('🔌 New ingest WebSocket connection');
 
   let ffmpeg = null;
@@ -101,6 +100,10 @@ wss.on('connection', (ws, req) => {
       ffmpeg = null;
     }
   });
+});
+
+server.listen(port, () => {
+  console.log(`ChatScream API + WebSocket listening on http://localhost:${port}`);
 });
 
 const shutdown = async () => {
