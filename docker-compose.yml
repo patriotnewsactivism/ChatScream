@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:16
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: chatscream
       POSTGRES_PASSWORD: chatscream_password
