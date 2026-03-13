@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
+import multer from 'multer';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   addChatMessage,
@@ -19,9 +20,11 @@ import {
   getUserByUid,
   initIdentityStorage,
   listChatMessages,
+  listMediaAssets,
   listUsers,
   loadState,
   putUser,
+  removeMediaAsset,
   removeSession,
   saveSession,
   seedLeaderboard,
@@ -29,10 +32,85 @@ import {
   setCloudUsage,
   setConfig,
   setConnectedPlatform,
+  addMediaAsset,
 } from './store.js';
 
 const app = express();
 app.set('trust proxy', true);
+
+// Multer Setup
+const uploadDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  },
+});
+
+const upload = multer({ storage });
+app.use('/uploads', express.static(uploadDir));
+
+app.get(
+  '/api/media/list',
+  asyncHandler(async (req, res) => {
+    const assets = listMediaAssets();
+    res.json({ assets });
+  }),
+);
+
+app.post(
+  '/api/media/upload',
+  upload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+
+    const { filename, originalname, mimetype } = req.file;
+    const baseUrl = getServerBaseUrl(req);
+    const url = `${baseUrl}/uploads/${filename}`;
+
+    let type = 'image';
+    if (mimetype.startsWith('video/')) type = 'video';
+    else if (mimetype.startsWith('audio/')) type = 'audio';
+
+    const asset = {
+      id: randomUUID(),
+      type,
+      url,
+      name: originalname,
+      filename,
+    };
+
+    addMediaAsset(asset);
+    res.status(201).json({ asset });
+  }),
+);
+
+app.delete(
+  '/api/media/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const assets = listMediaAssets();
+    const asset = assets.find((a) => a.id === id);
+    if (asset && asset.filename) {
+      const filePath = path.join(uploadDir, asset.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    removeMediaAsset(id);
+    res.json({ success: true });
+  }),
+);
 
 void initIdentityStorage().catch((error) => {
   console.error('Failed to initialize managed identity storage:', error);
@@ -1670,6 +1748,52 @@ app.get('/api/cloud-streaming/sessions/active', requireAuth, (req, res) => {
   });
 });
 
+// --- TWITCH OAUTH ---
+const TWITCH_TOKEN_ENDPOINT = 'https://id.twitch.tv/oauth2/token';
+const TWITCH_API_BASE_URL = 'https://api.twitch.tv/helix';
+
+const requestTwitchTokenExchange = async ({ code, redirectUri }) => {
+  const response = await fetch(TWITCH_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.TWITCH_CLIENT_ID || '',
+      client_secret: process.env.TWITCH_CLIENT_SECRET || '',
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    }),
+  });
+  return response.json();
+};
+
+const twitchApiRequest = async (accessToken, pathName) => {
+  const response = await fetch(`${TWITCH_API_BASE_URL}/${pathName}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+    },
+  });
+  return response.json();
+};
+
+// --- FACEBOOK OAUTH ---
+const FACEBOOK_TOKEN_ENDPOINT = 'https://graph.facebook.com/v18.0/oauth/access_token';
+const FACEBOOK_BASE_URL = 'https://graph.facebook.com/v18.0';
+
+const requestFacebookTokenExchange = async ({ code, redirectUri }) => {
+  const response = await fetch(
+    `${FACEBOOK_TOKEN_ENDPOINT}?` +
+      new URLSearchParams({
+        client_id: process.env.FACEBOOK_APP_ID || '',
+        client_secret: process.env.FACEBOOK_APP_SECRET || '',
+        redirect_uri: redirectUri,
+        code,
+      }),
+  );
+  return response.json();
+};
+
 app.post(
   '/api/oauth/exchange',
   requireAuth,
@@ -1677,82 +1801,109 @@ app.post(
     const platform = String(req.body?.platform || '')
       .trim()
       .toLowerCase();
-    if (!platform) {
-      res.status(400).json({ message: 'platform is required.' });
-      return;
-    }
-
-    const record = await getUserByUid(req.auth.profile.uid);
-    if (!record) {
-      res.status(404).json({ message: 'User not found.' });
-      return;
-    }
+    const code = String(req.body?.code || '').trim();
+    const redirectUri = String(req.body?.redirectUri || '').trim();
+    const uid = req.auth.profile.uid;
+    const record = await getUserByUid(uid);
 
     if (platform === 'youtube') {
-      const code = String(req.body?.code || '').trim();
-      const redirectUri = String(req.body?.redirectUri || '').trim();
-
       try {
         const tokenPayload = await requestYouTubeTokenExchange({ code, redirectUri });
         const accessToken = String(tokenPayload?.access_token || '').trim();
-        if (!accessToken) {
+        if (!accessToken)
           throw createHttpError(502, 'YouTube token exchange did not return an access token.');
-        }
 
         const channelsPayload = await youtubeApiRequest({
           accessToken,
           pathName: 'channels',
-          query: {
-            part: 'id,snippet',
-            mine: 'true',
-            maxResults: '50',
-          },
+          query: { part: 'id,snippet', mine: 'true', maxResults: '50' },
         });
         const channels = parseYouTubeChannels(channelsPayload);
         const primaryChannel = channels[0] || null;
-        if (!primaryChannel) {
-          throw createHttpError(
-            400,
-            'No YouTube channel found for this account. Create a channel and try again.',
-          );
-        }
+        if (!primaryChannel) throw createHttpError(400, 'No YouTube channel found.');
 
-        const existingYouTube = record.profile?.connectedPlatforms?.youtube || {};
         const nextYouTube = {
-          ...existingYouTube,
           accessToken,
-          refreshToken: String(
-            tokenPayload?.refresh_token || existingYouTube?.refreshToken || '',
-          ).trim(),
+          refreshToken: String(tokenPayload?.refresh_token || '').trim(),
           expiresAt: getExpiryFromSeconds(tokenPayload?.expires_in, 3600),
           channelId: primaryChannel.id,
           channelName: primaryChannel.name,
           thumbnailUrl: primaryChannel.thumbnailUrl,
-          scope:
-            typeof tokenPayload?.scope === 'string' && tokenPayload.scope.trim()
-              ? tokenPayload.scope.trim()
-              : existingYouTube?.scope,
         };
-
-        await setConnectedPlatform(record.uid, 'youtube', nextYouTube);
-        res.json({
-          success: true,
-          platform: 'youtube',
-          channel: primaryChannel,
-        });
+        await setConnectedPlatform(uid, 'youtube', nextYouTube);
+        return res.json({ success: true, platform: 'youtube', account: nextYouTube });
       } catch (error) {
-        console.error('YouTube OAuth exchange failed:', error);
-        const status = getHttpErrorStatus(error, 502);
-        res.status(status).json({
-          message: error instanceof Error ? error.message : 'Failed to connect YouTube account.',
-        });
+        console.error('YouTube OAuth failed:', error);
+        res.status(500).json({ message: 'YouTube connection failed' });
       }
       return;
+    } else if (platform === 'twitch') {
+      const tokenPayload = await requestTwitchTokenExchange({ code, redirectUri });
+      const userPayload = await twitchApiRequest(tokenPayload.access_token, 'users');
+      const userData = userPayload.data?.[0];
+      const nextTwitch = {
+        accessToken: tokenPayload.access_token,
+        refreshToken: tokenPayload.refresh_token,
+        expiresAt: getExpiryFromSeconds(tokenPayload.expires_in, 3600),
+        accountId: userData?.id,
+        accountName: userData?.display_name,
+        profileImage: userData?.profile_image_url,
+      };
+      await setConnectedPlatform(uid, 'twitch', nextTwitch);
+      return res.json({ success: true, platform: 'twitch', account: nextTwitch });
+    } else if (platform === 'facebook') {
+      const tokenPayload = await requestFacebookTokenExchange({ code, redirectUri });
+      const mePayload = await (
+        await fetch(`${FACEBOOK_BASE_URL}/me?access_token=${tokenPayload.access_token}`)
+      ).json();
+      const nextFacebook = {
+        accessToken: tokenPayload.access_token,
+        expiresAt: getExpiryFromSeconds(tokenPayload.expires_in, 3600),
+        accountId: mePayload.id,
+        accountName: mePayload.name,
+      };
+      await setConnectedPlatform(uid, 'facebook', nextFacebook);
+      return res.json({ success: true, platform: 'facebook', account: nextFacebook });
     }
 
-    res.status(501).json({
-      message: `${platform} destination OAuth is not live yet. Only YouTube is fully implemented right now.`,
-    });
+    res.status(400).json({ message: 'Unsupported platform' });
+  }),
+);
+
+app.post(
+  '/api/destinations/youtube/create-broadcast',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const stream = await executeWithYouTubeAccessToken(
+      req.auth.profile.uid,
+      async (accessToken) => {
+        return createYouTubeStream(accessToken);
+      },
+    );
+    const info = parseYouTubeIngestionInfo(stream);
+    res.json(info);
+  }),
+);
+
+app.post(
+  '/api/destinations/facebook/create-live',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    const fb = record.profile?.connectedPlatforms?.facebook;
+    if (!fb) return res.status(400).json({ message: 'Facebook not connected' });
+
+    const fbRes = await fetch(
+      `${FACEBOOK_BASE_URL}/me/live_videos?access_token=${fb.accessToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'LIVE_NOW', title: 'ChatScream Live' }),
+      },
+    );
+    const fbData = await fbRes.json();
+    if (!fbData.stream_url) throw new Error('Failed to create Facebook live video');
+    res.json({ streamUrl: fbData.stream_url });
   }),
 );
 

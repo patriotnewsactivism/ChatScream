@@ -149,6 +149,7 @@ const baseState = () => ({
     sessions: {},
     usage: {},
   },
+  media: {},
   leaderboard: [],
 });
 
@@ -592,6 +593,22 @@ export const setConnectedPlatform = async (uid, platform, value) => {
     }
   });
 };
+
+export const addMediaAsset = (asset) =>
+  writeState((state) => {
+    if (!state.media) state.media = {};
+    state.media[asset.id] = asset;
+  });
+
+export const listMediaAssets = () => {
+  const state = loadState();
+  return Object.values(state.media || {});
+};
+
+export const removeMediaAsset = (id) =>
+  writeState((state) => {
+    if (state.media) delete state.media[id];
+  });
 
 export const seedLeaderboard = () =>
   writeState((state) => {

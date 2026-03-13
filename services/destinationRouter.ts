@@ -1,20 +1,4 @@
-/**
- * Destination Router/Multiplexer
- *
- * Core multi-destination streaming component that:
- * 1. Takes a single stream (Local or Cloud)
- * 2. Duplicates/forwards it to multiple configured endpoints
- * 3. Enforces subscription tier destination limits
- * 4. Manages individual destination connection states
- *
- * Architecture:
- * - Uses media server approach (NGINX RTMP, WebRTC, or SRT-based)
- * - Handles simultaneous egress to all configured destinations
- * - Real-time status tracking per destination
- */
-
 import { Destination, Platform } from '../types';
-import { canAddDestination } from './stripe';
 
 export type RouterStatus = 'idle' | 'routing' | 'error';
 export type DestinationStatus = 'offline' | 'connecting' | 'live' | 'error';
@@ -47,7 +31,9 @@ export class DestinationRouter {
   private stream: MediaStream | null = null;
   private userPlan: string = 'free';
   private onStatusUpdate: ((destId: string, status: DestinationStatus) => void) | null = null;
-  private connectionMonitors: Map<string, number> = new Map();
+
+  private ws: WebSocket | null = null;
+  private recorder: MediaRecorder | null = null;
 
   constructor(
     userPlan: string,
@@ -58,310 +44,151 @@ export class DestinationRouter {
     console.log('🔀 DestinationRouter initialized for plan:', userPlan);
   }
 
-  /**
-   * Validate and add destinations to router
-   * Enforces plan-based destination limits
-   */
-  public validateDestinations(destinations: Destination[]): {
-    allowed: Destination[];
-    rejected: Destination[];
-    message: string;
-  } {
-    const enabled = destinations.filter((d) => d.isEnabled);
-    const destinationCheck = canAddDestination(this.userPlan, enabled.length);
-
-    if (!destinationCheck.allowed) {
-      const maxDest = destinationCheck.maxDestinations;
-      return {
-        allowed: enabled.slice(0, maxDest),
-        rejected: enabled.slice(maxDest),
-        message: destinationCheck.message,
-      };
-    }
-
-    return {
-      allowed: enabled,
-      rejected: [],
-      message: destinationCheck.message,
-    };
-  }
-
-  /**
-   * Start routing stream to multiple destinations
-   */
   public async route(stream: MediaStream, destinations: Destination[]): Promise<void> {
-    console.log('🔀 Starting destination routing...');
+    console.log('🔀 Starting destination routing via WebSocket...');
 
-    // Validate destinations against plan limits
-    const validation = this.validateDestinations(destinations);
-
-    if (validation.rejected.length > 0) {
-      console.warn(`⚠️ ${validation.rejected.length} destinations rejected due to plan limits`);
-      console.warn(
-        'Rejected destinations:',
-        validation.rejected.map((d) => d.name),
-      );
-    }
-
-    if (validation.allowed.length === 0) {
-      throw new Error('No destinations allowed. Please check your subscription plan.');
-    }
+    const enabled = destinations.filter((d) => d.isEnabled);
+    if (enabled.length === 0) throw new Error('No destinations enabled');
 
     this.stream = stream;
-    this.state.status = 'routing';
-    this.state.totalDestinations = validation.allowed.length;
+    this.state.totalDestinations = enabled.length;
 
-    console.log(
-      `📡 Routing to ${validation.allowed.length} destinations:`,
-      validation.allowed.map((d) => `${d.platform}:${d.name}`),
-    );
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
 
-    // Initialize connections for each destination
-    for (const dest of validation.allowed) {
-      await this.connectDestination(dest);
-    }
+    this.ws = new WebSocket(`${protocol}//${host}`);
 
-    console.log(
-      `✅ Router active with ${this.state.liveDestinations}/${this.state.totalDestinations} live`,
-    );
+    return new Promise((resolve, reject) => {
+      if (!this.ws) return reject(new Error('WebSocket not initialized'));
+
+      this.ws.onopen = () => {
+        console.log('🔌 Ingest WebSocket connected');
+
+        this.ws?.send(
+          JSON.stringify({
+            type: 'start',
+            destinations: enabled.map((d) => ({
+              serverUrl: d.serverUrl,
+              streamKey: d.streamKey,
+            })),
+          }),
+        );
+
+        this.startRecording();
+
+        this.state.status = 'routing';
+        enabled.forEach((d) => {
+          this.state.activeConnections.set(d.id, {
+            destination: d,
+            status: 'live',
+            connectedAt: Date.now(),
+            bytesSent: 0,
+            error: null,
+          });
+          this.updateDestinationStatus(d.id, 'live');
+        });
+        this.state.liveDestinations = enabled.length;
+
+        resolve();
+      };
+
+      this.ws.onerror = (err) => {
+        console.error('WebSocket error', err);
+        reject(new Error('WebSocket connection failed'));
+      };
+
+      this.ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'error') {
+            console.error('Server streaming error:', msg.message);
+            this.state.error = msg.message;
+          }
+        } catch (e) {}
+      };
+    });
   }
 
-  /**
-   * Connect to individual destination
-   * Simulates RTMP/WebRTC connection setup
-   */
-  private async connectDestination(destination: Destination): Promise<void> {
-    console.log(`🔌 Connecting to ${destination.platform}: ${destination.name}...`);
+  private startRecording() {
+    if (!this.stream) return;
 
-    // Initialize connection state
-    const connection: DestinationConnection = {
-      destination,
-      status: 'connecting',
-      connectedAt: null,
-      bytesSent: 0,
-      error: null,
-    };
-
-    this.state.activeConnections.set(destination.id, connection);
-    this.updateDestinationStatus(destination.id, 'connecting');
-
-    // Simulate connection attempt
-    // In production, this would use:
-    // - RTMP: FFmpeg/GStreamer to push to RTMP endpoint
-    // - WebRTC: RTCPeerConnection for real-time streaming
-    // - SRT: SRT protocol for low-latency streaming
+    let options = { mimeType: 'video/webm;codecs=vp8,opus' };
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=h264,aac')) {
+      options = { mimeType: 'video/webm;codecs=h264,aac' };
+    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264,aac')) {
+      options = { mimeType: 'video/mp4;codecs=h264,aac' };
+    }
 
     try {
-      // Validate destination configuration
-      if (!destination.streamKey) {
-        throw new Error('Stream key required');
-      }
-
-      if (destination.platform === Platform.CUSTOM_RTMP && !destination.serverUrl) {
-        throw new Error('Server URL required for custom RTMP');
-      }
-
-      // Simulate connection delay (2 seconds)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Mark as live
-      connection.status = 'live';
-      connection.connectedAt = Date.now();
-      this.state.liveDestinations++;
-
-      this.updateDestinationStatus(destination.id, 'live');
-
-      // Start monitoring connection health
-      this.startConnectionMonitoring(destination.id);
-
-      console.log(`✅ ${destination.platform}:${destination.name} is LIVE`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
-      console.error(`❌ Failed to connect to ${destination.name}:`, errorMessage);
-
-      connection.status = 'error';
-      connection.error = errorMessage;
-
-      this.updateDestinationStatus(destination.id, 'error');
+      this.recorder = new MediaRecorder(this.stream, options);
+      this.recorder.ondataavailable = (evt) => {
+        if (evt.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.send(evt.data);
+        }
+      };
+      this.recorder.start(1000);
+      console.log('📼 MediaRecorder started for ingest with mimeType:', options.mimeType);
+    } catch (e) {
+      console.error('Failed to start MediaRecorder', e);
+      // Fallback to default options
+      this.recorder = new MediaRecorder(this.stream);
+      this.recorder.ondataavailable = (evt) => {
+        if (evt.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.send(evt.data);
+        }
+      };
+      this.recorder.start(1000);
     }
   }
 
-  /**
-   * Monitor individual destination connection health
-   */
-  private startConnectionMonitoring(destId: string): void {
-    // Check connection every 10 seconds
-    const monitor = window.setInterval(() => {
-      const connection = this.state.activeConnections.get(destId);
-
-      if (!connection || connection.status !== 'live') {
-        this.stopConnectionMonitoring(destId);
-        return;
-      }
-
-      // Simulate data transfer tracking
-      connection.bytesSent += Math.random() * 1000000; // ~1MB increments
-
-      // Log health stats
-      const uptime = connection.connectedAt
-        ? ((Date.now() - connection.connectedAt) / 1000 / 60).toFixed(1)
-        : '0';
-
-      console.log(
-        `📊 ${connection.destination.name}: ${uptime}min uptime, ` +
-          `${(connection.bytesSent / 1024 / 1024).toFixed(2)}MB sent`,
-      );
-    }, 10000);
-
-    this.connectionMonitors.set(destId, monitor);
-  }
-
-  /**
-   * Stop monitoring a destination
-   */
-  private stopConnectionMonitoring(destId: string): void {
-    const monitor = this.connectionMonitors.get(destId);
-    if (monitor) {
-      clearInterval(monitor);
-      this.connectionMonitors.delete(destId);
-    }
-  }
-
-  /**
-   * Disconnect specific destination
-   */
-  public async disconnectDestination(destId: string): Promise<void> {
-    const connection = this.state.activeConnections.get(destId);
-
-    if (!connection) {
-      console.warn(`⚠️ Destination ${destId} not found`);
-      return;
-    }
-
-    console.log(`🔌 Disconnecting ${connection.destination.name}...`);
-
-    this.stopConnectionMonitoring(destId);
-
-    if (connection.status === 'live') {
-      this.state.liveDestinations--;
-    }
-
-    connection.status = 'offline';
-    connection.connectedAt = null;
-
-    this.updateDestinationStatus(destId, 'offline');
-
-    this.state.activeConnections.delete(destId);
-
-    console.log(`✅ ${connection.destination.name} disconnected`);
-  }
-
-  /**
-   * Disconnect all destinations
-   */
   public async disconnectAll(): Promise<void> {
     console.log('🛑 Disconnecting all destinations...');
 
-    const destIds = Array.from(this.state.activeConnections.keys());
+    if (this.recorder && this.recorder.state !== 'inactive') {
+      this.recorder.stop();
+    }
+    this.recorder = null;
 
-    for (const destId of destIds) {
-      await this.disconnectDestination(destId);
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
 
+    const destIds = Array.from(this.state.activeConnections.keys());
+    for (const destId of destIds) {
+      this.updateDestinationStatus(destId, 'offline');
+    }
+
+    this.state.activeConnections.clear();
     this.stream = null;
     this.state.status = 'idle';
     this.state.totalDestinations = 0;
     this.state.liveDestinations = 0;
-
-    console.log('✅ All destinations disconnected');
   }
 
-  /**
-   * Add new destination to active router
-   */
   public async addDestination(destination: Destination): Promise<void> {
-    if (!this.stream) {
-      throw new Error('Router not active');
-    }
-
-    // Check if adding is allowed
-    const currentCount = this.state.activeConnections.size;
-    const validation = canAddDestination(this.userPlan, currentCount + 1);
-
-    if (!validation.allowed) {
-      throw new Error(validation.message);
-    }
-
-    console.log(`➕ Adding destination: ${destination.name}`);
-    await this.connectDestination(destination);
+    throw new Error('Dynamic destination adding not yet implemented in WebSocket mode');
   }
 
-  /**
-   * Remove destination from active router
-   */
   public async removeDestination(destId: string): Promise<void> {
-    console.log(`➖ Removing destination: ${destId}`);
-    await this.disconnectDestination(destId);
+    throw new Error('Dynamic destination removal not yet implemented');
   }
 
-  /**
-   * Get connection state for specific destination
-   */
-  public getDestinationState(destId: string): DestinationConnection | null {
-    return this.state.activeConnections.get(destId) || null;
-  }
-
-  /**
-   * Get all active connections
-   */
-  public getAllConnections(): DestinationConnection[] {
-    return Array.from(this.state.activeConnections.values());
-  }
-
-  /**
-   * Get router statistics
-   */
-  public getStats(): {
-    total: number;
-    live: number;
-    connecting: number;
-    error: number;
-    totalBytesSent: number;
-  } {
-    const connections = this.getAllConnections();
-
-    return {
-      total: connections.length,
-      live: connections.filter((c) => c.status === 'live').length,
-      connecting: connections.filter((c) => c.status === 'connecting').length,
-      error: connections.filter((c) => c.status === 'error').length,
-      totalBytesSent: connections.reduce((sum, c) => sum + c.bytesSent, 0),
-    };
-  }
-
-  /**
-   * Update destination status and notify listeners
-   */
   private updateDestinationStatus(destId: string, status: DestinationStatus): void {
     if (this.onStatusUpdate) {
       this.onStatusUpdate(destId, status);
     }
   }
 
-  /**
-   * Check if router is active
-   */
   public isActive(): boolean {
-    return this.state.status === 'routing' && this.state.liveDestinations > 0;
+    return this.state.status === 'routing';
   }
 
-  /**
-   * Get current router state
-   */
-  public getState(): RouterState {
+  public getStats(): any {
     return {
-      ...this.state,
-      activeConnections: new Map(this.state.activeConnections),
+      total: this.state.totalDestinations,
+      live: this.state.liveDestinations,
+      error: this.state.error ? 1 : 0,
     };
   }
 }

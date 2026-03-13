@@ -115,6 +115,21 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         description: 'Stream to your main channel or brand account with YouTube verified bitrate.',
         icon: <Youtube className="text-red-500" aria-hidden />,
       },
+      {
+        platform: Platform.TWITCH,
+        oauthPlatform: 'twitch' as const,
+        label: 'Twitch',
+        description:
+          'Fast, secure connection to fetch your ingest server and stream key automatically.',
+        icon: <Twitch className="text-purple-500" aria-hidden />,
+      },
+      {
+        platform: Platform.FACEBOOK,
+        oauthPlatform: 'facebook' as const,
+        label: 'Facebook',
+        description: 'Go live on your personal profile or managed pages with a single click.',
+        icon: <Facebook className="text-blue-500" aria-hidden />,
+      },
     ],
     [],
   );
@@ -172,6 +187,24 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         return <Facebook className="text-blue-500" />;
       case Platform.TWITCH:
         return <Twitch className="text-purple-500" />;
+      case Platform.KICK:
+        return (
+          <div className="w-5 h-5 bg-green-500 rounded flex items-center justify-center text-[10px] font-bold text-black">
+            K
+          </div>
+        );
+      case Platform.X_TWITTER:
+        return (
+          <div className="w-5 h-5 bg-white text-black rounded flex items-center justify-center font-black">
+            X
+          </div>
+        );
+      case Platform.RUMBLE:
+        return (
+          <div className="w-5 h-5 bg-green-600 rounded flex items-center justify-center text-[10px] font-bold text-white">
+            R
+          </div>
+        );
       default:
         return <Globe className="text-gray-400" />;
     }
@@ -269,18 +302,52 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   };
 
   const handleOAuthPrimaryAction = async (option: OAuthOption) => {
-    if (option.oauthPlatform === 'youtube') {
-      if (isPlatformConnected('youtube')) {
-        await openYouTubeChannelPicker();
-      } else {
-        handleConnectOAuth('youtube');
-      }
-      return;
-    }
+    if (!userId) return safeAlert('Please sign in');
 
-    const added = handleAddWithLimitCheck(createOAuthDestination(option.platform));
-    if (added && !isStreaming) {
-      handleConnectOAuth(option.oauthPlatform);
+    if (option.oauthPlatform === 'youtube') {
+      if (isPlatformConnected('youtube')) await openYouTubeChannelPicker();
+      else handleConnectOAuth('youtube');
+    } else if (option.oauthPlatform === 'twitch') {
+      if (isPlatformConnected('twitch')) {
+        try {
+          const res = await fetch('/api/destinations/twitch/stream-key', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` }, // Simple session token retrieval
+          });
+          const data = await res.json();
+          if (data.streamKey) {
+            onAddDestination(
+              createOAuthDestination(Platform.TWITCH, {
+                name: 'Twitch Channel',
+                streamKey: data.streamKey,
+                serverUrl: data.serverUrl,
+              }),
+            );
+          }
+        } catch (e) {
+          safeAlert('Failed to get Twitch key');
+        }
+      } else handleConnectOAuth('twitch');
+    } else if (option.oauthPlatform === 'facebook') {
+      if (isPlatformConnected('facebook')) {
+        try {
+          const res = await fetch('/api/destinations/facebook/create-live', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+          });
+          const data = await res.json();
+          if (data.streamUrl) {
+            onAddDestination(
+              createOAuthDestination(Platform.FACEBOOK, {
+                name: 'Facebook Live',
+                serverUrl: data.streamUrl,
+                streamKey: '',
+              }),
+            );
+          }
+        } catch (e) {
+          safeAlert('Failed to create Facebook live');
+        }
+      } else handleConnectOAuth('facebook');
     }
   };
 

@@ -2,7 +2,10 @@ export enum Platform {
   YOUTUBE = 'YouTube',
   FACEBOOK = 'Facebook',
   TWITCH = 'Twitch',
-  CUSTOM_RTMP = 'Custom RTMP'
+  KICK = 'Kick',
+  X_TWITTER = 'X (Twitter)',
+  RUMBLE = 'Rumble',
+  CUSTOM_RTMP = 'Custom RTMP',
 }
 
 export enum LayoutMode {
@@ -10,7 +13,7 @@ export enum LayoutMode {
   FULL_SCREEN = 'FULL_SCREEN',
   PIP = 'PIP', // Picture in Picture
   SPLIT = 'SPLIT', // Side by side
-  NEWSROOM = 'NEWSROOM' // Shoulder view
+  NEWSROOM = 'NEWSROOM', // Shoulder view
 }
 
 export type MediaType = 'image' | 'video' | 'audio';
@@ -21,7 +24,8 @@ export interface Destination {
   name: string; // e.g., "Personal YouTube", "Business YouTube"
   streamKey: string;
   serverUrl?: string;
-  authType?: 'manual' | 'oauth';
+  authType: 'manual' | 'oauth';
+  oauthTokenId?: string; // reference to stored token
   isEnabled: boolean;
   status: 'offline' | 'connecting' | 'live' | 'error';
 }
@@ -36,6 +40,26 @@ export interface MediaAsset {
   type: MediaType;
   url: string;
   name: string;
+}
+
+export interface SceneSource {
+  id: string;
+  assetId?: string; // Reference to MediaAsset if applicable
+  type: 'camera' | 'screen' | 'image' | 'video' | 'text';
+  url?: string; // For images/videos
+  x: number; // 0-1280 (or relative 0-1)
+  y: number; // 0-720
+  width: number;
+  height: number;
+  zIndex: number;
+  opacity: number;
+  isVisible: boolean;
+}
+
+export interface Scene {
+  id: string;
+  name: string;
+  sources: SceneSource[];
 }
 
 export interface BrandingSettings {
@@ -56,7 +80,7 @@ export interface AppState {
 
 // Audio Mixer Types
 export interface AudioLevels {
-  mic: number;      // 0-1 from analyser
+  mic: number; // 0-1 from analyser
   music: number;
   video: number;
 }
@@ -89,9 +113,9 @@ export interface ContentAnalysis {
 // Voice/TTS Types
 export interface VoiceConfig {
   voiceId: string;
-  rate: number;     // 0.5 - 2.0
-  pitch: number;    // 0.5 - 2.0
-  volume: number;   // 0 - 1
+  rate: number; // 0.5 - 2.0
+  pitch: number; // 0.5 - 2.0
+  volume: number; // 0 - 1
 }
 
 // Chat Screamer Types
