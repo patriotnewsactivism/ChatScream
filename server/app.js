@@ -678,37 +678,6 @@ const buildSessionPayload = async (uid, existingToken, existingExpiry) => {
   };
 };
 
-const readBearerToken = (req) => {
-  const raw = req.headers.authorization || '';
-  if (!raw.startsWith('Bearer ')) return '';
-  return raw.slice('Bearer '.length).trim();
-};
-
-const requireAuth = asyncHandler(async (req, res, next) => {
-  const token = readBearerToken(req);
-  if (!token) {
-    res.status(401).json({ message: 'Missing authorization token.' });
-    return;
-  }
-  const session = await getSession(token);
-  if (!session) {
-    res.status(401).json({ message: 'Session expired. Please sign in again.' });
-    return;
-  }
-  const userRecord = await getUserByUid(session.uid);
-  if (!userRecord) {
-    res.status(401).json({ message: 'User not found for this session.' });
-    return;
-  }
-  req.auth = {
-    token,
-    session,
-    record: userRecord,
-    profile: getPublicProfile(userRecord),
-  };
-  next();
-});
-
 const isAdmin = (profile) =>
   profile?.role === 'admin' || normalizeEmail(profile?.email || '') === 'mreardon@wtpnews.org';
 
