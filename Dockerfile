@@ -1,22 +1,34 @@
-# Stage 1: build the Vite app
-FROM node:20-alpine AS builder
+# Stage 1: Build the Vite frontend
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app
-
-# Install dependencies first for better caching
 COPY package*.json ./
 RUN npm ci
-
-# Copy source and build
 COPY . .
 RUN npm run build
 
-# Stage 2: serve static assets via nginx
-FROM nginx:1.27-alpine
+# Stage 2: Final Runtime
+FROM node:20-alpine
+WORKDIR /app
 
-# Copy built assets
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Install FFmpeg for RTMP relay
+RUN apk add --no-cache ffmpeg
 
-# Expose the default nginx port
-EXPOSE 80
+# Copy package files and install production dependencies
+COPY package*.json ./
+RUN npm ci --only=production
 
-CMD ["nginx", "-g", "daemon off;"]
+# Copy built frontend assets
+COPY --from=frontend-builder /app/dist ./dist
+
+# Copy backend server code
+COPY server ./server
+COPY types.ts .
+
+# Expose API and WebSocket port
+EXPOSE 8787
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Start the Node.js server
+CMD ["npm", "run", "start"]

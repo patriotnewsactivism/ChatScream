@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { LayoutMode, BrandingSettings, Scene, SceneSource } from '../types';
+import { ScreamAlert } from '../services/chatScreamer';
 
 interface CanvasCompositorProps {
   layout: LayoutMode;
@@ -12,6 +13,7 @@ interface CanvasCompositorProps {
   branding: BrandingSettings;
   showWatermark?: boolean; // Show ChatScream watermark (required for free tier)
   activeScene?: Scene | null;
+  activeScream?: ScreamAlert | null;
 }
 
 export interface CanvasRef {
@@ -30,6 +32,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     videoVolume,
     branding,
     activeScene,
+    activeScream,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,6 +46,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
 
   // Legacy Assets Refs
   const overlayImgRef = useRef<HTMLImageElement>(new Image());
+  const logoImgRef = useRef<HTMLImageElement>(new Image());
   const bgImgRef = useRef<HTMLImageElement>(new Image());
 
   // Animation State Refs
@@ -53,6 +57,12 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     propsRef.current = props;
   }, [props]);
 
+  useEffect(() => {
+    if (branding.logoUrl) {
+      logoImgRef.current.crossOrigin = 'anonymous';
+      logoImgRef.current.src = branding.logoUrl;
+    }
+  }, [branding.logoUrl]);
   // Initialize video elements
   useEffect(() => {
     [camVideoRef, screenVideoRef].forEach((vRef) => {
@@ -437,7 +447,26 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.restore();
       }
 
-      // 5. WATERMARK
+      // 5. BRANDING LOGO (User Uploaded)
+      if (brand.showLogo && logoImgRef.current.complete && logoImgRef.current.naturalWidth > 0) {
+        const logoSize = 100;
+        let lx = 30,
+          ly = 30;
+        if (brand.logoPosition === 'top-right') lx = w - logoSize - 30;
+        else if (brand.logoPosition === 'bottom-left')
+          ly = h - logoSize - (brand.showTicker ? 80 : 30);
+        else if (brand.logoPosition === 'bottom-right') {
+          lx = w - logoSize - 30;
+          ly = h - logoSize - (brand.showTicker ? 80 : 30);
+        }
+
+        ctx.save();
+        ctx.globalAlpha = brand.logoOpacity;
+        ctx.drawImage(logoImgRef.current, lx, ly, logoSize, logoSize);
+        ctx.restore();
+      }
+
+      // 6. WATERMARK (Free Tier)
       if (currentProps.showWatermark) {
         const watermarkText = 'ChatScream';
         const padding = 16;
@@ -476,6 +505,71 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.fillStyle = '#fbbf24';
         ctx.textAlign = 'right';
         ctx.fillText('FREE', cornerX - 8, cornerY + pillHeight + 14);
+        ctx.restore();
+      }
+
+      // 7. SCREAM ALERTS (The USP)
+      if (activeScream) {
+        const tier = activeScream.tier;
+        ctx.save();
+
+        // Shake effect for loud/maximum screams
+        if (tier.effects.animation === 'shake' || tier.effects.animation === 'explode') {
+          const intensity = tier.id === 'maximum' ? 10 : 4;
+          ctx.translate(
+            Math.random() * intensity - intensity / 2,
+            Math.random() * intensity - intensity / 2,
+          );
+        }
+
+        // Fullscreen background for maximum scream
+        if (tier.effects.overlay === 'fullscreen') {
+          const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+          grad.addColorStop(0, 'rgba(239, 68, 68, 0.8)');
+          grad.addColorStop(1, 'rgba(127, 29, 29, 0.9)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, w, h);
+        }
+
+        const alertW = tier.effects.overlay === 'fullscreen' ? 800 : 400;
+        const alertH = 150;
+        const ax = (w - alertW) / 2;
+        const ay = tier.effects.overlay === 'fullscreen' ? (h - alertH) / 2 : 100;
+
+        // Alert Box
+        ctx.fillStyle = tier.id === 'maximum' ? '#000' : 'rgba(0,0,0,0.85)';
+        ctx.strokeStyle = tier.id === 'maximum' ? '#ef4444' : '#fbbf24';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(ax, ay, alertW, alertH, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Header Text
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          `${activeScream.donorName} DONATED $${activeScream.amount}`,
+          ax + alertW / 2,
+          ay + 50,
+        );
+
+        // Message
+        ctx.fillStyle = tier.id === 'maximum' ? '#f87171' : '#fbbf24';
+        ctx.font = `italic ${tier.id === 'maximum' ? '32px' : '20px'} sans-serif`;
+        ctx.fillText(`"${activeScream.message}"`, ax + alertW / 2, ay + 100);
+
+        // Explosion particles for Maximum
+        if (tier.effects.animation === 'explode') {
+          for (let i = 0; i < 20; i++) {
+            ctx.fillStyle = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            ctx.beginPath();
+            ctx.arc(Math.random() * w, Math.random() * h, Math.random() * 10, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
         ctx.restore();
       }
 

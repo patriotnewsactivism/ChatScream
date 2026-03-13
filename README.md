@@ -70,7 +70,14 @@ Monetize your stream with aggression.
 ### Prerequisites
 
 - Node.js 20+
+- FFmpeg (required for server-side RTMP relay)
 - Docker (optional, for local container testing)
+
+#### Installing FFmpeg
+
+- **Ubuntu/Debian:** `sudo apt update && sudo apt install ffmpeg`
+- **macOS:** `brew install ffmpeg`
+- **Windows:** Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 
 ### Installation
 

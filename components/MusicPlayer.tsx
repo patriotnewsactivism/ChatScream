@@ -18,6 +18,7 @@ interface MusicPlayerProps {
   volume: number;
   onVolumeChange: (val: number) => void;
   onDeleteTrack: (id: string) => void;
+  onAudioInit?: (el: HTMLAudioElement) => void;
 }
 
 const MusicPlayer: React.FC<MusicPlayerProps> = ({
@@ -27,9 +28,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   volume,
   onVolumeChange,
   onDeleteTrack,
+  onAudioInit,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
+
+  useEffect(() => {
+    if (onAudioInit) onAudioInit(audioRef.current);
+  }, []);
 
   const activeTrack = playlist.find((t) => t.id === activeTrackId);
 

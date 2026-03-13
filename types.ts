@@ -65,6 +65,10 @@ export interface Scene {
 export interface BrandingSettings {
   showLowerThird: boolean;
   showTicker: boolean;
+  showLogo: boolean;
+  logoUrl?: string;
+  logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  logoOpacity: number;
   primaryColor: string;
   accentColor: string;
   presenterName: string;

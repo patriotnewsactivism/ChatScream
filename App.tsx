@@ -23,6 +23,7 @@ import MusicPlayer from './components/MusicPlayer';
 import SceneSelector from './components/SceneSelector';
 import { RTMPSender } from './services/RTMPSender';
 import { useAuth } from './contexts/AuthContext';
+import { createScreamAlert, ScreamAlert, calculateScreamDuration } from './services/chatScreamer';
 import {
   Settings,
   Layers,
@@ -35,6 +36,7 @@ import {
   Disc,
   Play,
   Square,
+  Zap,
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -55,17 +57,32 @@ const App: React.FC = () => {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
+  const [musicElement, setMusicElement] = useState<HTMLAudioElement | null>(null);
+  const [activeScream, setActiveScream] = useState<ScreamAlert | null>(null);
 
   const [micVolume, setMicVolume] = useState(1.0);
   const [musicVolume, setMusicVolume] = useState(0.3);
   const [videoVolume, setVideoVolume] = useState(0.8);
   const [isMicMuted, setIsMicMuted] = useState(false);
 
+  // --- Scream Handler ---
+  const triggerScream = (donor: string, amount: number, message: string) => {
+    const scream = createScreamAlert(donor, amount, message, user?.uid || 'demo');
+    if (scream) {
+      setActiveScream(scream);
+      const duration = calculateScreamDuration(scream.tier, message.length);
+      setTimeout(() => setActiveScream(null), duration);
+    }
+  };
+
   const [branding, setBranding] = useState<BrandingSettings>({
     primaryColor: '#6366f1',
     accentColor: '#818cf8',
     showLowerThird: false,
     showTicker: false,
+    showLogo: false,
+    logoPosition: 'top-right',
+    logoOpacity: 1.0,
     tickerText: '',
     presenterName: user?.displayName || '',
     presenterTitle: 'Streamer',
@@ -87,8 +104,8 @@ const App: React.FC = () => {
 
   const { initAudio, combinedStream, levels } = useAudioPipeline({
     micStream: cameraStream,
-    musicStream: null, // Music handled by MusicPlayer component for now
-    videoStream: null,
+    musicElement,
+    videoElement: canvasRef.current?.getVideoElement(),
     micVolume,
     musicVolume,
     videoVolume,
@@ -363,19 +380,30 @@ const App: React.FC = () => {
                     branding={branding}
                     showWatermark={userProfile?.subscription?.plan === 'free'}
                     activeScene={activeScene}
+                    activeScream={activeScream}
                   />
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-dark-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-2xl">
                     <button
                       onClick={toggleCamera}
                       className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
+                      title="Toggle Camera"
                     >
                       <Video size={18} />
                     </button>
                     <button
                       onClick={toggleScreen}
                       className={`p-2 rounded-full ${screenStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
+                      title="Share Screen"
                     >
                       <Monitor size={18} />
+                    </button>
+                    <div className="h-4 w-[1px] bg-gray-700 mx-1" />
+                    <button
+                      onClick={() => triggerScream('Patriot', 50, 'THIS IS A MAXIMUM SCREAM!!!')}
+                      className="p-2 rounded-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all"
+                      title="Test Maximum Scream"
+                    >
+                      <Zap size={18} />
                     </button>
                   </div>
                 </div>
@@ -432,6 +460,7 @@ const App: React.FC = () => {
                   volume={musicVolume}
                   onVolumeChange={setMusicVolume}
                   onDeleteTrack={handleMediaDelete}
+                  onAudioInit={setMusicElement}
                 />
               </div>
             </div>
