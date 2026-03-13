@@ -31,6 +31,7 @@ export class DestinationRouter {
   private stream: MediaStream | null = null;
   private userPlan: string = 'free';
   private onStatusUpdate: ((destId: string, status: DestinationStatus) => void) | null = null;
+  private onStats: ((stats: { bitrate: number }) => void) | null = null;
 
   private ws: WebSocket | null = null;
   private recorder: MediaRecorder | null = null;
@@ -38,12 +39,13 @@ export class DestinationRouter {
   constructor(
     userPlan: string,
     onStatusUpdate?: (destId: string, status: DestinationStatus) => void,
+    onStats?: (stats: { bitrate: number }) => void,
   ) {
     this.userPlan = userPlan;
     this.onStatusUpdate = onStatusUpdate || null;
+    this.onStats = onStats || null;
     console.log('🔀 DestinationRouter initialized for plan:', userPlan);
   }
-
   public async route(stream: MediaStream, destinations: Destination[]): Promise<void> {
     console.log('🔀 Starting destination routing via WebSocket...');
 
@@ -97,12 +99,14 @@ export class DestinationRouter {
         reject(new Error('WebSocket connection failed'));
       };
 
-      this.ws.onmessage = (evt) => {
+      this.ws!.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === 'error') {
             console.error('Server streaming error:', msg.message);
             this.state.error = msg.message;
+          } else if (msg.type === 'stats') {
+            if (this.onStats) this.onStats({ bitrate: msg.bitrate });
           }
         } catch (e) {}
       };

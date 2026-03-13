@@ -15,6 +15,19 @@ wss.on('connection', (ws, req) => {
   console.log('🔌 New ingest WebSocket connection');
 
   let ffmpeg = null;
+  let bytesReceived = 0;
+  let lastStatsTime = Date.now();
+
+  const statsInterval = setInterval(() => {
+    if (ffmpeg && bytesReceived > 0) {
+      const now = Date.now();
+      const dt = (now - lastStatsTime) / 1000;
+      const bitrateKbps = Math.round((bytesReceived * 8) / dt / 1000);
+      ws.send(JSON.stringify({ type: 'stats', bitrate: bitrateKbps }));
+      bytesReceived = 0;
+      lastStatsTime = now;
+    }
+  }, 2000);
 
   ws.on('message', (data, isBinary) => {
     if (!isBinary) {
@@ -27,8 +40,6 @@ wss.on('connection', (ws, req) => {
             ffmpeg.kill();
           }
 
-          // FFmpeg command to receive from pipe and push to multiple RTMP destinations
-          // We re-encode to H.264/AAC to ensure compatibility with RTMP platforms
           const ffmpegArgs = [
             '-i',
             'pipe:0',
@@ -39,7 +50,7 @@ wss.on('connection', (ws, req) => {
             '-tune',
             'zerolatency',
             '-g',
-            '60', // 2 second keyframe interval for 30fps
+            '60',
             '-c:a',
             'aac',
             '-b:a',
@@ -53,13 +64,8 @@ wss.on('connection', (ws, req) => {
             ffmpegArgs.push('-f', 'flv', `${url}${d.streamKey}`);
           });
 
-          console.log('🚀 Spawning FFmpeg with args:', ffmpegArgs.join(' '));
+          console.log('🚀 Spawning FFmpeg');
           ffmpeg = spawn('ffmpeg', ffmpegArgs);
-
-          ffmpeg.stderr.on('data', (data) => {
-            // Optional: log ffmpeg output for debugging
-            // console.log(`FFmpeg STDERR: ${data}`);
-          });
 
           ffmpeg.on('error', (err) => {
             console.error('Failed to start FFmpeg process:', err);
@@ -79,7 +85,7 @@ wss.on('connection', (ws, req) => {
         console.error('Failed to parse WS command', e);
       }
     } else {
-      // Binary data (stream chunk)
+      bytesReceived += data.length;
       if (ffmpeg && ffmpeg.stdin.writable) {
         ffmpeg.stdin.write(data);
       }
@@ -88,6 +94,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log('🔌 Ingest WebSocket connection closed');
+    clearInterval(statsInterval);
     if (ffmpeg) {
       ffmpeg.stdin.end();
       ffmpeg.kill();
@@ -106,9 +113,5 @@ const shutdown = async () => {
   });
 };
 
-process.on('SIGINT', () => {
-  void shutdown();
-});
-process.on('SIGTERM', () => {
-  void shutdown();
-});
+process.on('SIGINT', () => void shutdown());
+process.on('SIGTERM', () => void shutdown());

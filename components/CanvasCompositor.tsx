@@ -14,6 +14,7 @@ interface CanvasCompositorProps {
   showWatermark?: boolean; // Show ChatScream watermark (required for free tier)
   activeScene?: Scene | null;
   activeScream?: ScreamAlert | null;
+  nowPlaying?: string | null;
 }
 
 export interface CanvasRef {
@@ -33,6 +34,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     branding,
     activeScene,
     activeScream,
+    nowPlaying,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -570,6 +572,35 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
           }
         }
 
+        ctx.restore();
+      }
+
+      // 8. NOW PLAYING OVERLAY
+      if (brand.showNowPlaying && nowPlaying) {
+        const npW = 300;
+        const npH = 40;
+        const npx = 30;
+        const npy = 30;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.strokeStyle = brand.primaryColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(npx, npy, npW, npH, 20);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = brand.accentColor;
+        ctx.beginPath();
+        ctx.arc(npx + 20, npy + 20, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`🎶 ${nowPlaying}`, npx + 40, npy + 20);
         ctx.restore();
       }
 

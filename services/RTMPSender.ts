@@ -35,7 +35,11 @@ export class RTMPSender {
   private statusUpdater: StatusUpdate;
   private monitoringInterval: number | null = null;
 
-  constructor(statusUpdater: StatusUpdate, config: RTMPSenderConfig) {
+  constructor(
+    statusUpdater: StatusUpdate,
+    config: RTMPSenderConfig,
+    onStats?: (stats: { bitrate: number }) => void,
+  ) {
     this.statusUpdater = statusUpdater;
     this.config = config;
 
@@ -45,9 +49,13 @@ export class RTMPSender {
     });
 
     // Initialize router with plan and status callback
-    this.router = new DestinationRouter(config.userPlan, (destId: string, status: any) => {
-      this.statusUpdater(destId, status);
-    });
+    this.router = new DestinationRouter(
+      config.userPlan,
+      (destId: string, status: any) => {
+        this.statusUpdater(destId, status);
+      },
+      onStats,
+    );
 
     console.log('⚙️ Enhanced RTMPSender initialized:', {
       mode: config.streamingMode,

@@ -220,6 +220,7 @@ const App: React.FC = () => {
             cloudHoursUsed: 0,
             streamingMode: 'local',
           },
+          (stats) => setAppState((prev) => ({ ...prev, bitrate: stats.bitrate })),
         );
       }
       try {
@@ -290,11 +291,18 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black tracking-tighter">CHATSCREAM</h1>
           </div>
           {(appState.isStreaming || appState.isRecording) && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-gray-900/80 border border-gray-700 rounded-full font-mono text-xs">
-              <div
-                className={`w-2 h-2 rounded-full animate-pulse ${appState.isStreaming ? 'bg-red-500' : 'bg-brand-400'}`}
-              />
-              {formatTime(appState.streamDuration)}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1 bg-gray-900/80 border border-gray-700 rounded-full font-mono text-xs">
+                <div
+                  className={`w-2 h-2 rounded-full animate-pulse ${appState.isStreaming ? 'bg-red-500' : 'bg-brand-400'}`}
+                />
+                {formatTime(appState.streamDuration)}
+              </div>
+              {appState.isStreaming && (
+                <div className="text-[10px] font-bold text-brand-400 uppercase tracking-tight">
+                  {appState.bitrate} kbps
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -381,6 +389,7 @@ const App: React.FC = () => {
                     showWatermark={userProfile?.subscription?.plan === 'free'}
                     activeScene={activeScene}
                     activeScream={activeScream}
+                    nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
                   />
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-dark-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-2xl">
                     <button
