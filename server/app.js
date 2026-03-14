@@ -38,6 +38,14 @@ import {
 const app = express();
 app.set('trust proxy', true);
 
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, origin || true),
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: '2mb' }));
+
 const asyncHandler = (handler) => (req, res, next) =>
   Promise.resolve(handler(req, res, next)).catch(next);
 
@@ -63,7 +71,7 @@ const requireAuth = asyncHandler(async (req, res, next) => {
     res.status(401).json({ message: 'User not found.' });
     return;
   }
-  req.auth = { session, record: userRecord, profile: userRecord.profile };
+  req.auth = { session, record: userRecord, profile: userRecord.profile, token };
   next();
 });
 
@@ -734,14 +742,6 @@ const ensureAffiliateForProfile = (profile) => {
   }
   return next;
 };
-
-app.use(
-  cors({
-    origin: (origin, callback) => callback(null, origin || true),
-    credentials: true,
-  }),
-);
-app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({
