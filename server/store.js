@@ -122,7 +122,7 @@ let stateCache = null;
 let saveTimer = null;
 let persistenceEnabled = true;
 
-const loadState = () => {
+export const loadState = () => {
   if (!stateCache) {
     if (fs.existsSync(DATA_FILE)) {
       try {
