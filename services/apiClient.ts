@@ -41,14 +41,25 @@ const getFallbackApiBaseUrls = (): string[] => {
 
   const candidates = new Set<string>();
 
-  candidates.add(`${protocol}//api.${hostname}`);
+  const currentHostApi = `${protocol}//api.${hostname}`;
 
   if (hostParts.length === 2) {
-    candidates.add(`${protocol}//api.${hostname}`);
+    candidates.add(currentHostApi);
+    return Array.from(candidates);
+  }
+
+  const rootDomain = hostParts.slice(1).join('.');
+  const rootApi = rootDomain ? `${protocol}//api.${rootDomain}` : '';
+  const firstLabel = hostParts[0].toLowerCase();
+
+  if (firstLabel === 'www') {
+    if (rootApi) {
+      candidates.add(rootApi);
+    }
   } else {
-    const withoutFirstLabel = hostParts.slice(1).join('.');
-    if (withoutFirstLabel) {
-      candidates.add(`${protocol}//api.${withoutFirstLabel}`);
+    candidates.add(currentHostApi);
+    if (rootApi) {
+      candidates.add(rootApi);
     }
   }
 

@@ -58,7 +58,7 @@ describe('apiRequest', () => {
   });
 
 
-  it('falls back from subdomain frontend to root api domain', async () => {
+  it('falls back from www frontend directly to root api domain', async () => {
     Object.defineProperty(globalThis, 'window', {
       value: {
         location: {
@@ -70,13 +70,12 @@ describe('apiRequest', () => {
     });
 
     fetchMock.mockResolvedValueOnce(jsonResponse(404, { message: 'API route not found.' }));
-    fetchMock.mockResolvedValueOnce(jsonResponse(404, { message: 'API route not found.' }));
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
 
     const result = await apiRequest<{ ok: boolean }>('/api/health');
 
     expect(result).toEqual({ ok: true });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/health',
@@ -84,11 +83,6 @@ describe('apiRequest', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      'https://api.www.chatscream.live/api/health',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
       'https://api.chatscream.live/api/health',
       expect.objectContaining({ credentials: 'include' }),
     );
