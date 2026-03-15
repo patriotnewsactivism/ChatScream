@@ -22,6 +22,22 @@ export class ApiRequestError extends Error {
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
+const canUseApiSubdomainFallback = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const { hostname, protocol } = window.location;
+  if (!/^https?:$/i.test(protocol)) return false;
+  if (!hostname || hostname === 'localhost') return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return false;
+  if (hostname.startsWith('api.')) return false;
+  return hostname.includes('.');
+};
+
+const getFallbackApiBaseUrl = (): string => {
+  if (!canUseApiSubdomainFallback()) return '';
+  const { protocol, hostname } = window.location;
+  return `${protocol}//api.${hostname}`;
+};
+
 export const getApiBaseUrl = (): string => {
   const rawValue = String(import.meta.env.VITE_API_BASE_URL || '').trim();
   return rawValue ? trimTrailingSlash(rawValue) : '';
@@ -32,6 +48,23 @@ export const buildApiUrl = (path: string): string => {
   const base = getApiBaseUrl();
   if (!base) return path;
   return `${base}${path}`;
+};
+
+const getApiUrlCandidates = (path: string): string[] => {
+  if (/^https?:\/\//i.test(path)) return [path];
+
+  const configuredBase = getApiBaseUrl();
+  if (configuredBase) {
+    return [`${configuredBase}${path}`];
+  }
+
+  const sameOrigin = path;
+  const fallbackBase = getFallbackApiBaseUrl();
+  if (!fallbackBase) {
+    return [sameOrigin];
+  }
+
+  return [sameOrigin, `${fallbackBase}${path}`];
 };
 
 const parseResponseBody = async (response: Response): Promise<unknown> => {
@@ -72,18 +105,39 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(buildApiUrl(path), {
-    method: options.method || 'GET',
-    headers,
-    body: hasBody ? JSON.stringify(options.body) : undefined,
-    credentials: options.credentials || 'include',
-  });
+  const urls = getApiUrlCandidates(path);
+  let lastError: unknown;
 
-  const data = await parseResponseBody(response);
-  if (!response.ok) {
-    const message = toErrorMessage(response.status, data, response.statusText);
-    throw new ApiRequestError(message, response.status, data);
+  for (const [index, url] of urls.entries()) {
+    try {
+      const response = await fetch(url, {
+        method: options.method || 'GET',
+        headers,
+        body: hasBody ? JSON.stringify(options.body) : undefined,
+        credentials: options.credentials || 'include',
+      });
+
+      const data = await parseResponseBody(response);
+      if (response.ok) {
+        return data as T;
+      }
+
+      const message = toErrorMessage(response.status, data, response.statusText);
+      const error = new ApiRequestError(message, response.status, data);
+      lastError = error;
+
+      const shouldTryFallback =
+        index < urls.length - 1 && (response.status >= 500 || response.status === 404);
+      if (!shouldTryFallback) {
+        throw error;
+      }
+    } catch (error) {
+      lastError = error;
+      if (index === urls.length - 1) {
+        throw error;
+      }
+    }
   }
 
-  return data as T;
+  throw (lastError as Error) || new Error('Request failed.');
 };

@@ -80,6 +80,7 @@ const App: React.FC = () => {
     accentColor: '#818cf8',
     showLowerThird: false,
     showTicker: false,
+    showNowPlaying: false,
     showLogo: false,
     logoPosition: 'top-right',
     logoOpacity: 1.0,
@@ -88,10 +89,11 @@ const App: React.FC = () => {
     presenterTitle: 'Streamer',
   });
 
-  const [appState, setAppState] = useState<AppState & { streamDuration: number }>({
+  const [appState, setAppState] = useState<AppState & { streamDuration: number; bitrate: number }>({
     isStreaming: false,
     isRecording: false,
     streamDuration: 0,
+    bitrate: 0,
   });
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
