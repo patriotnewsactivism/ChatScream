@@ -30,7 +30,8 @@ const parseBoolean = (value) =>
 
 const postgresUrl = String(process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
 const redisUrl = String(process.env.REDIS_URL || '').trim();
-const managedIdentityEnabled = Boolean(postgresUrl && redisUrl);
+const managedIdentityConfigured = Boolean(postgresUrl && redisUrl);
+let managedIdentityEnabled = managedIdentityConfigured;
 
 let identityClients = null;
 let identityInitPromise = null;
@@ -61,8 +62,11 @@ const getIdentityClients = async () => {
     identityClients = { pool, db, redis };
     return identityClients;
   })().catch((error) => {
+    console.error('Managed identity storage unavailable. Falling back to local runtime store.', error);
+    managedIdentityEnabled = false;
+    identityClients = null;
     identityInitPromise = null;
-    throw error;
+    return null;
   });
 
   return identityInitPromise;
@@ -73,8 +77,8 @@ export const getIdentityStorageMode = () => (managedIdentityEnabled ? 'postgres+
 
 export const initIdentityStorage = async () => {
   if (!managedIdentityEnabled) return 'local';
-  await getIdentityClients();
-  return 'postgres+redis';
+  const clients = await getIdentityClients();
+  return clients ? 'postgres+redis' : 'local';
 };
 
 export const closeIdentityStorage = async () => {
