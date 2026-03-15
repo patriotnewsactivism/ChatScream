@@ -9,5 +9,6 @@ infrastructure/aws/.env.aws
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+firebase-debug.log*
 .vercel
 .env*.local
