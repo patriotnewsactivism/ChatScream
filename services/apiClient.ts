@@ -95,6 +95,8 @@ const getApiUrlCandidates = (path: string): string[] => {
   ];
 };
 
+const isRetryableStatus = (status: number): boolean => status >= 500 || status === 404;
+
 const parseResponseBody = async (response: Response): Promise<unknown> => {
   if (response.status === 204) return null;
 
@@ -155,12 +157,15 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
       lastError = error;
 
       const shouldTryFallback =
-        index < urls.length - 1 && (response.status >= 500 || response.status === 404);
+        index < urls.length - 1 && isRetryableStatus(response.status);
       if (!shouldTryFallback) {
         throw error;
       }
     } catch (error) {
       lastError = error;
+      if (error instanceof ApiRequestError && !isRetryableStatus(error.status)) {
+        throw error;
+      }
       if (index === urls.length - 1) {
         throw error;
       }
