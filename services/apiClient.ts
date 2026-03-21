@@ -32,10 +32,38 @@ const canUseApiSubdomainFallback = (): boolean => {
   return hostname.includes('.');
 };
 
-const getFallbackApiBaseUrl = (): string => {
-  if (!canUseApiSubdomainFallback()) return '';
+const getFallbackApiBaseUrls = (): string[] => {
+  if (!canUseApiSubdomainFallback()) return [];
+
   const { protocol, hostname } = window.location;
-  return `${protocol}//api.${hostname}`;
+  const hostParts = hostname.split('.').filter(Boolean);
+  if (hostParts.length < 2) return [];
+
+  const candidates = new Set<string>();
+
+  const currentHostApi = `${protocol}//api.${hostname}`;
+
+  if (hostParts.length === 2) {
+    candidates.add(currentHostApi);
+    return Array.from(candidates);
+  }
+
+  const rootDomain = hostParts.slice(1).join('.');
+  const rootApi = rootDomain ? `${protocol}//api.${rootDomain}` : '';
+  const firstLabel = hostParts[0].toLowerCase();
+
+  if (firstLabel === 'www') {
+    if (rootApi) {
+      candidates.add(rootApi);
+    }
+  } else {
+    candidates.add(currentHostApi);
+    if (rootApi) {
+      candidates.add(rootApi);
+    }
+  }
+
+  return Array.from(candidates);
 };
 
 export const getApiBaseUrl = (): string => {
@@ -59,13 +87,15 @@ const getApiUrlCandidates = (path: string): string[] => {
   }
 
   const sameOrigin = path;
-  const fallbackBase = getFallbackApiBaseUrl();
-  if (!fallbackBase) {
-    return [sameOrigin];
-  }
+  const fallbackBases = getFallbackApiBaseUrls();
 
-  return [sameOrigin, `${fallbackBase}${path}`];
+  return [
+    sameOrigin,
+    ...fallbackBases.map((fallbackBase) => `${fallbackBase}${path}`),
+  ];
 };
+
+const isRetryableStatus = (status: number): boolean => status >= 500 || status === 404;
 
 const parseResponseBody = async (response: Response): Promise<unknown> => {
   if (response.status === 204) return null;
@@ -127,12 +157,15 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
       lastError = error;
 
       const shouldTryFallback =
-        index < urls.length - 1 && (response.status >= 500 || response.status === 404);
+        index < urls.length - 1 && isRetryableStatus(response.status);
       if (!shouldTryFallback) {
         throw error;
       }
     } catch (error) {
       lastError = error;
+      if (error instanceof ApiRequestError && !isRetryableStatus(error.status)) {
+        throw error;
+      }
       if (index === urls.length - 1) {
         throw error;
       }
