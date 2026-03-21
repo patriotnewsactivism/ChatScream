@@ -1,5 +1,6 @@
 import {
   requestChatResponse,
+  requestContentAnalysis,
   requestModeration,
   requestStreamMetadata,
   requestViralPackage,
@@ -225,16 +226,29 @@ export async function advancedModerateMessage(
 export async function analyzeStreamContent(
   recentChat: string[],
   streamTitle: string,
-  streamTopic?: string,
+  streamTopic: string | undefined,
+  authToken: string | null,
 ): Promise<ContentAnalysis> {
-  console.warn('analyzeStreamContent fallback used; backend endpoint not implemented.');
-  return {
-    sentiment: 'neutral',
-    topics: [],
-    engagementSuggestions: ['Ask the audience a question', 'Respond to recent comments'],
-    warnings: [],
-    audienceMood: 'Unable to analyze',
-  };
+  const token = requireAuthToken(authToken);
+  try {
+    const result = await requestContentAnalysis(token, recentChat, streamTitle, streamTopic);
+    return {
+      sentiment: result.sentiment || 'neutral',
+      topics: result.topics || [],
+      engagementSuggestions: result.engagementSuggestions || [],
+      warnings: result.warnings || [],
+      audienceMood: result.audienceMood || 'Unable to analyze',
+    };
+  } catch (error) {
+    console.error('Failed to analyze stream content via backend:', error);
+    return {
+      sentiment: 'neutral',
+      topics: [],
+      engagementSuggestions: ['Ask the audience a question', 'Respond to recent comments'],
+      warnings: [],
+      audienceMood: 'Unable to analyze',
+    };
+  }
 }
 
 export async function generateAutoResponse(
