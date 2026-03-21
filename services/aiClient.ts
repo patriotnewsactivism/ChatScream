@@ -65,18 +65,18 @@ export const requestViralPackage = (
   topic: string,
   platforms: string[],
 ): Promise<ViralStreamPackageResponse> =>
-  request('/generateViralContent', authToken, 'POST', { topic, platforms });
+  request('/api/ai/viral-package', authToken, 'POST', { topic, platforms });
 
 export const requestStreamMetadata = (
   authToken: string,
   topic: string,
 ): Promise<StreamMetadataResponse> =>
-  request('/generateStreamMetadata', authToken, 'POST', { topic });
+  request('/api/ai/stream-metadata', authToken, 'POST', { topic });
 
 export const requestModeration = (
   authToken: string,
   message: string,
-): Promise<ModerationResponse> => request('/moderateChat', authToken, 'POST', { message });
+): Promise<ModerationResponse> => request('/api/ai/moderation', authToken, 'POST', { message });
 
 export const requestChatResponse = (
   authToken: string,
@@ -84,10 +84,31 @@ export const requestChatResponse = (
   streamContext: string,
   previousMessages: string[],
 ): Promise<ChatResponsePayload> =>
-  request('/generateChatResponse', authToken, 'POST', {
+  request('/api/ai/chat-response', authToken, 'POST', {
     viewerMessage,
     streamContext,
     previousMessages,
   });
 
 export { buildBaseUrl as getFunctionsBaseUrl };
+
+
+export interface ContentAnalysisResponse {
+  sentiment: 'positive' | 'neutral' | 'negative';
+  topics: string[];
+  engagementSuggestions: string[];
+  warnings: string[];
+  audienceMood: string;
+}
+
+export const requestContentAnalysis = (
+  authToken: string,
+  recentChat: string[],
+  streamTitle: string,
+  streamTopic?: string,
+): Promise<ContentAnalysisResponse> =>
+  request('/api/ai/analyze-content', authToken, 'POST', {
+    recentChat,
+    streamTitle,
+    streamTopic,
+  });

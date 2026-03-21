@@ -34,6 +34,13 @@ import {
   setConnectedPlatform,
   addMediaAsset,
 } from './store.js';
+import {
+  analyzeStreamContentWithAi,
+  generateChatResponseWithAi,
+  generateStreamMetadataWithAi,
+  generateViralPackageWithAi,
+  moderateMessageWithAi,
+} from './ai.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -129,6 +136,95 @@ app.post(
 
     addMediaAsset(asset);
     res.status(201).json({ asset });
+  }),
+);
+
+app.post(
+  '/api/ai/stream-metadata',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const topic = String(req.body?.topic || '').trim();
+    if (!topic) {
+      res.status(400).json({ message: 'Topic is required.' });
+      return;
+    }
+
+    const result = await generateStreamMetadataWithAi(topic);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/api/ai/viral-package',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const topic = String(req.body?.topic || '').trim();
+    const platforms = Array.isArray(req.body?.platforms)
+      ? req.body.platforms.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+
+    if (!topic) {
+      res.status(400).json({ message: 'Topic is required.' });
+      return;
+    }
+
+    const result = await generateViralPackageWithAi(topic, platforms);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/api/ai/moderation',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const message = String(req.body?.message || '').trim();
+    if (!message) {
+      res.status(400).json({ message: 'Message is required.' });
+      return;
+    }
+
+    const result = await moderateMessageWithAi(message);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/api/ai/chat-response',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const viewerMessage = String(req.body?.viewerMessage || '').trim();
+    const streamContext = String(req.body?.streamContext || '').trim();
+    const previousMessages = Array.isArray(req.body?.previousMessages)
+      ? req.body.previousMessages.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+
+    if (!viewerMessage || !streamContext) {
+      res.status(400).json({ message: 'viewerMessage and streamContext are required.' });
+      return;
+    }
+
+    const result = await generateChatResponseWithAi(viewerMessage, streamContext, previousMessages);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/api/ai/analyze-content',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const recentChat = Array.isArray(req.body?.recentChat)
+      ? req.body.recentChat.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const streamTitle = String(req.body?.streamTitle || '').trim();
+    const streamTopic = String(req.body?.streamTopic || '').trim();
+
+    if (!streamTitle) {
+      res.status(400).json({ message: 'streamTitle is required.' });
+      return;
+    }
+
+    const result = await analyzeStreamContentWithAi(recentChat, streamTitle, streamTopic);
+    res.json(result);
   }),
 );
 
