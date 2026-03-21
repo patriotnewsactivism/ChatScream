@@ -1,6 +1,7 @@
 import {
   requestChatResponse,
   requestModeration,
+  requestStreamContentAnalysis,
   requestStreamMetadata,
   requestViralPackage,
 } from './aiClient';
@@ -172,7 +173,7 @@ export async function moderateMessage(
 
 export async function generateContentSuggestions(
   topic: string,
-  audienceType: string = 'general',
+  _audienceType: string = 'general',
 ): Promise<string[]> {
   console.warn('generateContentSuggestions fallback used; backend endpoint not implemented.');
   return [
@@ -225,16 +226,29 @@ export async function advancedModerateMessage(
 export async function analyzeStreamContent(
   recentChat: string[],
   streamTitle: string,
-  streamTopic?: string,
+  streamTopic: string | undefined,
+  authToken: string | null,
 ): Promise<ContentAnalysis> {
-  console.warn('analyzeStreamContent fallback used; backend endpoint not implemented.');
-  return {
-    sentiment: 'neutral',
-    topics: [],
-    engagementSuggestions: ['Ask the audience a question', 'Respond to recent comments'],
-    warnings: [],
-    audienceMood: 'Unable to analyze',
-  };
+  const token = requireAuthToken(authToken);
+  try {
+    const response = await requestStreamContentAnalysis(token, recentChat, streamTitle, streamTopic);
+    return {
+      sentiment: response.sentiment || 'neutral',
+      topics: response.topics || [],
+      engagementSuggestions: response.engagementSuggestions || [],
+      warnings: response.warnings || [],
+      audienceMood: response.audienceMood || 'Audience sentiment is mixed.',
+    };
+  } catch (error) {
+    console.error('Failed to analyze stream content via backend:', error);
+    return {
+      sentiment: 'neutral',
+      topics: [],
+      engagementSuggestions: ['Ask the audience a question', 'Respond to recent comments'],
+      warnings: [],
+      audienceMood: 'Unable to analyze',
+    };
+  }
 }
 
 export async function generateAutoResponse(

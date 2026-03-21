@@ -34,6 +34,13 @@ import {
   setConnectedPlatform,
   addMediaAsset,
 } from './store.js';
+import {
+  analyzeStreamContentWithAi,
+  generateChatResponseWithAi,
+  generateStreamMetadataWithAi,
+  generateViralPackageWithAi,
+  moderateChatMessageWithAi,
+} from './ai.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -751,6 +758,82 @@ app.get('/api/health', (_req, res) => {
     identityStorage: getIdentityStorageMode(),
   });
 });
+
+
+app.post(
+  '/generateStreamMetadata',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const topic = String(req.body?.topic || '').trim();
+    if (!topic) {
+      res.status(400).json({ message: 'Topic is required.' });
+      return;
+    }
+    const result = await generateStreamMetadataWithAi(topic);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/generateViralContent',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const topic = String(req.body?.topic || '').trim();
+    const platforms = Array.isArray(req.body?.platforms) ? req.body.platforms : [];
+    if (!topic) {
+      res.status(400).json({ message: 'Topic is required.' });
+      return;
+    }
+    const result = await generateViralPackageWithAi(topic, platforms);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/moderateChat',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const message = String(req.body?.message || '').trim();
+    if (!message) {
+      res.status(400).json({ message: 'Message is required.' });
+      return;
+    }
+    const result = await moderateChatMessageWithAi(message);
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/generateChatResponse',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const viewerMessage = String(req.body?.viewerMessage || '').trim();
+    const streamContext = String(req.body?.streamContext || '').trim();
+    const previousMessages = Array.isArray(req.body?.previousMessages) ? req.body.previousMessages : [];
+    if (!viewerMessage) {
+      res.status(400).json({ message: 'Viewer message is required.' });
+      return;
+    }
+    const result = await generateChatResponseWithAi({ viewerMessage, streamContext, previousMessages });
+    res.json(result);
+  }),
+);
+
+app.post(
+  '/analyzeStreamContent',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const recentChat = Array.isArray(req.body?.recentChat) ? req.body.recentChat : [];
+    const streamTitle = String(req.body?.streamTitle || '').trim();
+    const streamTopic = String(req.body?.streamTopic || '').trim();
+    if (!streamTitle) {
+      res.status(400).json({ message: 'Stream title is required.' });
+      return;
+    }
+    const result = await analyzeStreamContentWithAi({ recentChat, streamTitle, streamTopic });
+    res.json(result);
+  }),
+);
 
 app.post(
   '/api/auth/signup',

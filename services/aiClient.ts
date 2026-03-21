@@ -60,6 +60,14 @@ export interface ChatResponsePayload {
   suggestions?: string[];
 }
 
+export interface StreamContentAnalysisResponse {
+  sentiment: 'positive' | 'neutral' | 'negative';
+  topics: string[];
+  engagementSuggestions: string[];
+  warnings: string[];
+  audienceMood: string;
+}
+
 export const requestViralPackage = (
   authToken: string,
   topic: string,
@@ -91,3 +99,15 @@ export const requestChatResponse = (
   });
 
 export { buildBaseUrl as getFunctionsBaseUrl };
+
+export const requestStreamContentAnalysis = (
+  authToken: string,
+  recentChat: string[],
+  streamTitle: string,
+  streamTopic?: string,
+): Promise<StreamContentAnalysisResponse> =>
+  request('/analyzeStreamContent', authToken, 'POST', {
+    recentChat,
+    streamTitle,
+    streamTopic,
+  });
