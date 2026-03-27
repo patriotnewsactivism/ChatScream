@@ -1,44 +1,44 @@
 #!/usr/bin/env bash
-# One-time setup: installs chatscream as a systemd service that starts on boot
-# and restarts automatically on crash.
+# One-time setup: installs chatscream as an init.d service that starts on boot
+# and makes it easy to restart/check logs.
 #
 # Usage: sudo bash scripts/setup-autostart.sh
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_NAME="chatscream"
-SERVICE_SRC="${REPO_DIR}/${SERVICE_NAME}.service"
-SYSTEMD_DIR="/etc/systemd/system"
+INITD_DIR="/etc/init.d"
 
 if [[ $EUID -ne 0 ]]; then
   echo "ERROR: This script must be run as root (sudo bash scripts/setup-autostart.sh)"
   exit 1
 fi
 
-if [[ ! -f "${SERVICE_SRC}" ]]; then
-  echo "ERROR: ${SERVICE_SRC} not found. Make sure you are running from the ChatScream repo."
+if [[ ! -f "${INITD_DIR}/${SERVICE_NAME}" ]]; then
+  echo "ERROR: ${INITD_DIR}/${SERVICE_NAME} not found."
+  echo "Make sure the init.d script was installed. You may need to run this from the server."
   exit 1
 fi
 
-echo "Installing ${SERVICE_NAME}.service..."
-cp "${SERVICE_SRC}" "${SYSTEMD_DIR}/${SERVICE_NAME}.service"
+# Install npm dependencies if missing
+if [[ ! -d "${REPO_DIR}/node_modules" ]]; then
+  echo "Installing npm dependencies..."
+  cd "${REPO_DIR}" && npm install
+fi
 
-echo "Reloading systemd daemon..."
-systemctl daemon-reload
-
-echo "Enabling service (auto-start on boot)..."
-systemctl enable "${SERVICE_NAME}"
+echo "Registering ${SERVICE_NAME} for auto-start on boot..."
+update-rc.d "${SERVICE_NAME}" defaults
 
 echo "Starting service now..."
-systemctl start "${SERVICE_NAME}"
+service "${SERVICE_NAME}" start
 
 echo ""
 echo "=== Status ==="
-systemctl status "${SERVICE_NAME}" --no-pager -l || true
+service "${SERVICE_NAME}" status || true
 
 echo ""
 echo "Done. Useful commands:"
-echo "  View logs:     journalctl -u ${SERVICE_NAME} -f"
-echo "  Stop server:   systemctl stop ${SERVICE_NAME}"
-echo "  Restart:       systemctl restart ${SERVICE_NAME}"
-echo "  Disable boot:  systemctl disable ${SERVICE_NAME}"
+echo "  View logs:    service ${SERVICE_NAME} logs  (or: tail -f /var/log/${SERVICE_NAME}.log)"
+echo "  Stop server:  service ${SERVICE_NAME} stop"
+echo "  Restart:      service ${SERVICE_NAME} restart"
+echo "  Status:       service ${SERVICE_NAME} status"

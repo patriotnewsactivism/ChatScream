@@ -23,11 +23,11 @@
     "lint-staged": "lint-staged",
     "db:push": "drizzle-kit push",
     "service:setup": "sudo bash scripts/setup-autostart.sh",
-    "service:start": "sudo systemctl start chatscream",
-    "service:stop": "sudo systemctl stop chatscream",
-    "service:restart": "sudo systemctl restart chatscream",
-    "service:logs": "journalctl -u chatscream -f",
-    "service:status": "systemctl status chatscream"
+    "service:start": "sudo service chatscream start",
+    "service:stop": "sudo service chatscream stop",
+    "service:restart": "sudo service chatscream restart",
+    "service:logs": "tail -f /var/log/chatscream.log",
+    "service:status": "service chatscream status"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",

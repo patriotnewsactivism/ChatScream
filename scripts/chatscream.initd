@@ -1,0 +1,65 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          chatscream
+# Required-Start:    $syslog $remote_fs postgresql redis-server
+# Required-Stop:     $syslog $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: ChatScream API + WebSocket Server
+# Description:       Starts the ChatScream backend API and WebSocket server
+### END INIT INFO
+
+PATH=/opt/node22/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/opt/node22/bin/node
+DAEMON_ARGS=server/index.js
+NAME=chatscream
+DESC="ChatScream API + WebSocket Server"
+PIDFILE=/run/chatscream.pid
+LOGFILE=/var/log/chatscream.log
+APP_DIR=/home/user/ChatScream
+
+. /lib/lsb/init-functions
+
+# Load production env vars if the file exists
+if [ -f "$APP_DIR/.env.production" ]; then
+    set -a
+    . "$APP_DIR/.env.production"
+    set +a
+fi
+
+case "$1" in
+  start)
+    log_daemon_msg "Starting $DESC" "$NAME"
+    cd "$APP_DIR"
+    start-stop-daemon --start --quiet --background \
+        --make-pidfile --pidfile "$PIDFILE" \
+        --chdir "$APP_DIR" \
+        --exec "$DAEMON" -- $DAEMON_ARGS \
+        >> "$LOGFILE" 2>&1
+    log_end_msg $?
+    ;;
+  stop)
+    log_daemon_msg "Stopping $DESC" "$NAME"
+    start-stop-daemon --stop --quiet --pidfile "$PIDFILE" \
+        --retry=TERM/30/KILL/5
+    rm -f "$PIDFILE"
+    log_end_msg $?
+    ;;
+  restart|force-reload)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  status)
+    status_of_proc -p "$PIDFILE" "$DAEMON" "$NAME" && exit 0 || exit $?
+    ;;
+  logs)
+    tail -f "$LOGFILE"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status|logs}" >&2
+    exit 1
+    ;;
+esac
+
+exit 0
