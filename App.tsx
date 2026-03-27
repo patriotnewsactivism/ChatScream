@@ -156,8 +156,12 @@ const App: React.FC = () => {
     } else {
       try {
         const s = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
-          audio: true,
+          video: { width: 1280, height: 720, facingMode: 'user' },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         });
         setCameraStream(s);
         initAudio();

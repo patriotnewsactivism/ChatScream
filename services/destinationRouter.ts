@@ -171,11 +171,63 @@ export class DestinationRouter {
   }
 
   public async addDestination(destination: Destination): Promise<void> {
-    throw new Error('Dynamic destination adding not yet implemented in WebSocket mode');
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('WebSocket not connected');
+    }
+
+    this.state.activeConnections.set(destination.id, {
+      destination,
+      status: 'connecting',
+      connectedAt: null,
+      bytesSent: 0,
+      error: null,
+    });
+    this.state.totalDestinations++;
+
+    const allDestinations = Array.from(this.state.activeConnections.values()).map((c) => ({
+      serverUrl: c.destination.serverUrl,
+      streamKey: c.destination.streamKey,
+    }));
+
+    this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: allDestinations }));
+
+    // Mark as live once server acknowledges (optimistic update after short delay)
+    setTimeout(() => {
+      const conn = this.state.activeConnections.get(destination.id);
+      if (conn && conn.status === 'connecting') {
+        conn.status = 'live';
+        conn.connectedAt = Date.now();
+        this.state.liveDestinations++;
+        this.updateDestinationStatus(destination.id, 'live');
+      }
+    }, 1500);
+
+    console.log(`➕ Added destination: ${destination.name}`);
   }
 
   public async removeDestination(destId: string): Promise<void> {
-    throw new Error('Dynamic destination removal not yet implemented');
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('WebSocket not connected');
+    }
+
+    const conn = this.state.activeConnections.get(destId);
+    if (!conn) return;
+
+    this.state.activeConnections.delete(destId);
+    this.state.totalDestinations = Math.max(0, this.state.totalDestinations - 1);
+    if (conn.status === 'live') {
+      this.state.liveDestinations = Math.max(0, this.state.liveDestinations - 1);
+    }
+
+    const remaining = Array.from(this.state.activeConnections.values()).map((c) => ({
+      serverUrl: c.destination.serverUrl,
+      streamKey: c.destination.streamKey,
+    }));
+
+    this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: remaining }));
+    this.updateDestinationStatus(destId, 'offline');
+
+    console.log(`➖ Removed destination: ${destId}`);
   }
 
   private updateDestinationStatus(destId: string, status: DestinationStatus): void {
