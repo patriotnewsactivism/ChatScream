@@ -150,6 +150,28 @@ export const generateScreamTTS = async (
   return null;
 };
 
+// Synthesise an alert tone using Web Audio API (no file needed)
+const playSynthTone = (frequency: number, gainValue: number, durationSec: number): void => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(gainValue, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationSec);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + durationSec);
+    osc.onended = () => ctx.close();
+  } catch (err) {
+    console.warn('Synth tone error:', err);
+  }
+};
+
 // Play scream sound effect based on tier
 export const playScreamSound = (tier: ScreamTier, customSound?: string | null): void => {
   const defaultSounds = {
@@ -159,11 +181,29 @@ export const playScreamSound = (tier: ScreamTier, customSound?: string | null): 
   };
 
   const soundUrl = customSound || defaultSounds[tier.id as keyof typeof defaultSounds];
+  const volume = tier.effects.volume / 100;
 
   if (soundUrl) {
     const audio = new Audio(soundUrl);
-    audio.volume = tier.effects.volume / 100;
-    audio.play().catch(err => console.warn('Could not play scream sound:', err));
+    audio.volume = volume;
+    audio.play().catch(() => {
+      // File doesn't exist — fall back to synthesised tone
+      const toneMap: Record<string, [number, number, number]> = {
+        standard: [880, volume * 0.5, 0.6],   // A5 short ding
+        loud:     [660, volume * 0.7, 1.0],   // E5 medium ding
+        maximum:  [440, volume * 0.9, 1.8],   // A4 long boom
+      };
+      const params = toneMap[tier.id] ?? toneMap.standard;
+      playSynthTone(...params);
+    });
+  } else {
+    const toneMap: Record<string, [number, number, number]> = {
+      standard: [880, volume * 0.5, 0.6],
+      loud:     [660, volume * 0.7, 1.0],
+      maximum:  [440, volume * 0.9, 1.8],
+    };
+    const params = toneMap[tier.id] ?? toneMap.standard;
+    playSynthTone(...params);
   }
 };
 

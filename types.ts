@@ -2,9 +2,11 @@ export enum Platform {
   YOUTUBE = 'YouTube',
   FACEBOOK = 'Facebook',
   TWITCH = 'Twitch',
+  TIKTOK = 'TikTok',
   KICK = 'Kick',
   X_TWITTER = 'X (Twitter)',
   RUMBLE = 'Rumble',
+  LINKEDIN = 'LinkedIn',
   CUSTOM_RTMP = 'Custom RTMP',
 }
 
@@ -14,6 +16,7 @@ export enum LayoutMode {
   PIP = 'PIP', // Picture in Picture
   SPLIT = 'SPLIT', // Side by side
   NEWSROOM = 'NEWSROOM', // Shoulder view
+  PORTRAIT = 'PORTRAIT', // 9:16 vertical — TikTok / Instagram Reels
 }
 
 export type MediaType = 'image' | 'video' | 'audio';

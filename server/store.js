@@ -120,6 +120,7 @@ const baseState = () => ({
   cloud: { sessions: {}, usage: {} },
   media: {},
   leaderboard: [],
+  schedules: {},
 });
 
 let stateCache = null;
@@ -291,6 +292,26 @@ export const setConnectedPlatform = async (uid, platform, value) => {
     await putUser(user);
   }
 };
+
+// --- SCHEDULE OPERATIONS ---
+
+export const listSchedules = (userId) => {
+  const all = loadState().schedules || {};
+  return Object.values(all).filter((s) => s.userId === userId);
+};
+
+export const getSchedule = (id) => (loadState().schedules || {})[id] || null;
+
+export const putSchedule = (schedule) =>
+  writeState((state) => {
+    if (!state.schedules) state.schedules = {};
+    state.schedules[schedule.id] = schedule;
+  });
+
+export const deleteSchedule = (id) =>
+  writeState((state) => {
+    if (state.schedules) delete state.schedules[id];
+  });
 
 export const seedLeaderboard = () => {}; // No-op for now
 export const addChatMessage = (msg) =>

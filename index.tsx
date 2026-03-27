@@ -14,6 +14,7 @@ const Studio = lazy(() => import('./App'));
 const CreatorDashboard = lazy(() => import('./pages/CreatorDashboard'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'));
+const GuestPage = lazy(() => import('./pages/GuestPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
@@ -127,6 +128,9 @@ const AppRouter: React.FC = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Guest camera join page — public, no auth required */}
+          <Route path="/guest/:roomId" element={<GuestPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<NotFoundPage />} />
