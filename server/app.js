@@ -33,6 +33,10 @@ import {
   setConfig,
   setConnectedPlatform,
   addMediaAsset,
+  listSchedules,
+  getSchedule,
+  putSchedule,
+  deleteSchedule,
 } from './store.js';
 import {
   analyzeStreamContentWithAi,
@@ -2242,6 +2246,12 @@ app.get(
     const hasActiveSession = Boolean(usage.activeCloudSession);
     const totalStreams = Number(hasRecentStream) + Number(hasActiveSession);
     const avgDuration = totalStreams > 0 ? Math.round(totalDuration / totalStreams) : 0;
+    // Count chat screams (donation alerts) for this user
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const userMessages = listChatMessages().filter(
+      (m) => m.userId === userId && new Date(m.createdAt || 0) >= cutoff,
+    );
+    const totalScreams = userMessages.filter((m) => m.isScream).length;
 
     const recentSessions = [];
     if (usage.activeCloudSession) {
@@ -2280,13 +2290,105 @@ app.get(
         totalDuration,
         avgDuration,
         peakViewers: 0,
-        totalScreams: 0,
+        totalScreams,
         totalRevenue: 0,
       },
       recentSessions,
     });
   }),
 );
+
+// ── Stream Scheduling ────────────────────────────────────────────────────────
+
+app.get(
+  '/api/streams/schedule',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth.profile.uid;
+    res.json({ schedules: listSchedules(userId) });
+  }),
+);
+
+app.post(
+  '/api/streams/schedule',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth.profile.uid;
+    const { title, description, scheduledAt, platforms, recurrence, autoStart } = req.body || {};
+
+    if (!title || !scheduledAt) {
+      res.status(400).json({ message: 'title and scheduledAt are required.' });
+      return;
+    }
+
+    const schedule = {
+      id: randomUUID(),
+      userId,
+      title: String(title).slice(0, 200),
+      description: String(description || '').slice(0, 2000),
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      platforms: Array.isArray(platforms) ? platforms : [],
+      recurrence: recurrence || null,
+      autoStart: Boolean(autoStart),
+      status: 'scheduled',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    putSchedule(schedule);
+    res.status(201).json({ schedule });
+  }),
+);
+
+app.patch(
+  '/api/streams/schedule/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth.profile.uid;
+    const existing = getSchedule(req.params.id);
+
+    if (!existing || existing.userId !== userId) {
+      res.status(404).json({ message: 'Schedule not found.' });
+      return;
+    }
+
+    const { title, description, scheduledAt, platforms, recurrence, autoStart, status } =
+      req.body || {};
+    const updated = {
+      ...existing,
+      ...(title !== undefined && { title: String(title).slice(0, 200) }),
+      ...(description !== undefined && { description: String(description).slice(0, 2000) }),
+      ...(scheduledAt !== undefined && { scheduledAt: new Date(scheduledAt).toISOString() }),
+      ...(platforms !== undefined && { platforms: Array.isArray(platforms) ? platforms : [] }),
+      ...(recurrence !== undefined && { recurrence }),
+      ...(autoStart !== undefined && { autoStart: Boolean(autoStart) }),
+      ...(status !== undefined && { status }),
+      updatedAt: nowIso(),
+    };
+
+    putSchedule(updated);
+    res.json({ schedule: updated });
+  }),
+);
+
+app.delete(
+  '/api/streams/schedule/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth.profile.uid;
+    const existing = getSchedule(req.params.id);
+
+    if (!existing || existing.userId !== userId) {
+      res.status(404).json({ message: 'Schedule not found.' });
+      return;
+    }
+
+    deleteSchedule(req.params.id);
+    res.json({ success: true });
+  }),
+);
+
+// ── Billing ──────────────────────────────────────────────────────────────────
 
 app.post('/api/create-checkout-session', requireAuth, (req, res) => {
   const successUrl = String(req.body?.successUrl || '');

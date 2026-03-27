@@ -8,9 +8,58 @@ import { closeIdentityStorage, flushState } from './store.js';
 const port = Number(process.env.PORT || 8787);
 const server = http.createServer(app);
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, path: undefined });
 
-wss.on('connection', (ws) => {
+// ── WebRTC Signaling rooms ────────────────────────────────────────────────
+// Room map: roomId → Set<WebSocket>
+const signalingRooms = new Map();
+
+const getRoom = (roomId) => {
+  if (!signalingRooms.has(roomId)) signalingRooms.set(roomId, new Set());
+  return signalingRooms.get(roomId);
+};
+
+const broadcast = (roomId, msg, exclude) => {
+  const room = signalingRooms.get(roomId);
+  if (!room) return;
+  const raw = JSON.stringify(msg);
+  room.forEach((client) => {
+    if (client !== exclude && client.readyState === 1) client.send(raw);
+  });
+};
+
+wss.on('connection', (ws, req) => {
+  // Route /ws/signal/:roomId to the signaling handler
+  const url = req.url || '';
+  const signalMatch = url.match(/^\/ws\/signal\/([^/?]+)/);
+  if (signalMatch) {
+    const roomId = signalMatch[1];
+    const room = getRoom(roomId);
+    room.add(ws);
+    console.log(`📡 Signal client joined room ${roomId} (${room.size} peers)`);
+
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        // Relay the message to all other peers in the room
+        broadcast(roomId, msg, ws);
+      } catch (e) {
+        console.error('[Signal] Bad message', e);
+      }
+    });
+
+    ws.on('close', () => {
+      room.delete(ws);
+      if (room.size === 0) signalingRooms.delete(roomId);
+      broadcast(roomId, { type: 'peer-left' }, null);
+      console.log(`📡 Signal client left room ${roomId} (${room.size} peers)`);
+    });
+
+    return; // Don't fall through to the RTMP ingest handler
+  }
+
+  // ── RTMP ingest handler (original) ───────────────────────────────────────
+  if (!url.startsWith('/ws/signal')) {
   console.log('🔌 New ingest WebSocket connection');
 
   let ffmpeg = null;
@@ -135,6 +184,7 @@ wss.on('connection', (ws) => {
     }
     pendingBuffer = [];
   });
+  } // end of RTMP ingest handler
 });
 
 server.listen(port, () => {
