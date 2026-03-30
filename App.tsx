@@ -34,6 +34,7 @@ import {
 } from './services/webrtcGuestService';
 import { useAuth } from './contexts/AuthContext';
 import { createScreamAlert, ScreamAlert, calculateScreamDuration } from './services/chatScreamer';
+import { apiRequest, ApiRequestError, buildApiUrl } from './services/apiClient';
 import {
   Settings,
   Layers,
@@ -99,6 +100,7 @@ const App: React.FC = () => {
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
   const [musicElement, setMusicElement] = useState<HTMLAudioElement | null>(null);
   const [activeScream, setActiveScream] = useState<ScreamAlert | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   // audio mixer
   const [micVolume, setMicVolume] = useState(1.0);
@@ -165,13 +167,20 @@ const App: React.FC = () => {
 
   const fetchMedia = useCallback(async () => {
     try {
-      const res = await fetch('/api/media/list');
-      const data = await res.json();
+      const data = await apiRequest<{ assets?: MediaAsset[] }>('/api/media/list', {
+        token: sessionToken,
+      });
       setAssets(data.assets || []);
+      setMediaError(null);
     } catch (e) {
       console.error(e);
+      const message =
+        e instanceof ApiRequestError
+          ? e.message
+          : 'Failed to load media assets. Please try again.';
+      setMediaError(message);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
     fetchMedia();
@@ -213,21 +222,55 @@ const App: React.FC = () => {
   const handleMediaUpload = async (file: File, type: MediaType) => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('type', type);
     try {
-      const res = await fetch('/api/media/upload', { method: 'POST', body: formData });
+      const headers: Record<string, string> = {};
+      if (sessionToken) {
+        headers.Authorization = `Bearer ${sessionToken}`;
+      }
+      const res = await fetch(buildApiUrl('/api/media/upload'), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers,
+      });
+      if (!res.ok) {
+        const errorData = (await res.json().catch(() => null)) as
+          | { message?: string; error?: string }
+          | null;
+        const message =
+          errorData?.message || errorData?.error || `Failed to upload media (${res.status}).`;
+        throw new Error(message);
+      }
       const data = await res.json();
-      if (data.asset) setAssets((prev) => [...prev, data.asset]);
+      if (data.asset) {
+        setAssets((prev) => [...prev, data.asset]);
+      } else {
+        throw new Error('Upload succeeded but no asset was returned.');
+      }
+      setMediaError(null);
     } catch (e) {
       console.error(e);
+      const message = e instanceof Error ? e.message : 'Failed to upload media. Please try again.';
+      setMediaError(message);
     }
   };
 
   const handleMediaDelete = async (id: string) => {
     try {
-      await fetch(`/api/media/${id}`, { method: 'DELETE' });
+      await apiRequest(`/api/media/${id}`, {
+        method: 'DELETE',
+        token: sessionToken,
+      });
       setAssets((prev) => prev.filter((a) => a.id !== id));
+      setMediaError(null);
     } catch (e) {
       console.error(e);
+      const message =
+        e instanceof ApiRequestError
+          ? e.message
+          : 'Failed to delete media. Please try again.';
+      setMediaError(message);
     }
   };
 
@@ -736,7 +779,25 @@ const App: React.FC = () => {
 
           {activeTab === 'media' && (
             <div className={`flex flex-1 overflow-hidden p-4 gap-4 ${isMobile ? 'flex-col' : ''}`}>
-              <div className={isMobile ? 'w-full' : 'w-80'}>
+              <div className={`space-y-3 ${isMobile ? 'w-full' : 'w-80'}`}>
+                {mediaError && (
+                  <div
+                    className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200"
+                    role="alert"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p>{mediaError}</p>
+                      <button
+                        type="button"
+                        onClick={() => setMediaError(null)}
+                        className="text-red-200 hover:text-white"
+                        aria-label="Dismiss media error"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <MediaBin
                   assets={assets}
                   activeAssets={{ image: activeImageId, video: activeVideoId, audio: activeAudioId }}
