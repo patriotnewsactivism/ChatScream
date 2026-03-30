@@ -21,7 +21,8 @@
       "Bash(curl:*)",
       "Bash(taskkill /F /IM node.exe)",
       "Bash(taskkill:*)",
-      "Bash(firebase:*)"
+      "Bash(firebase:*)",
+      "Bash(git push:*)"
     ]
   }
 }
