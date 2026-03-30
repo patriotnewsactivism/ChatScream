@@ -151,7 +151,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setSessionToken(tokenResult.token);
 
           const profile = await getUserProfile(backendUser.uid);
-          setUserProfile(applyLocalAccessOverrides(profile, backendUser.email));
+          setUserProfile(applyLocalAccessOverrides(profile));
           ensureAffiliateForSignedInUser().catch(() => {});
           scheduleTokenRefresh(tokenResult, backendUser);
         } catch (err: any) {
@@ -324,7 +324,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (user) {
       try {
         const profile = await getUserProfile(user.uid);
-        setUserProfile(applyLocalAccessOverrides(profile, user.email));
+        setUserProfile(applyLocalAccessOverrides(profile));
       } catch (err: any) {
         const message = getErrorMessage(err);
         setError(message);

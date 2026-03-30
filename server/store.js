@@ -15,9 +15,6 @@ const defaultDataDir = process.env.VERCEL
 const DATA_DIR = envDataDir || defaultDataDir;
 const DATA_FILE = path.join(DATA_DIR, 'runtime.json');
 
-const MASTER_EMAILS = ['mreardon@wtpnews.org'];
-const DEFAULT_BETA_TESTERS = ['leroytruth247@gmail.com'];
-
 const nowIso = () => new Date().toISOString();
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
 const normalizeCode = (value = '') => value.trim().toUpperCase();
@@ -126,8 +123,10 @@ const baseState = () => ({
   referrals: [],
   config: {
     access: {
-      admins: [...MASTER_EMAILS],
-      betaTesters: [...DEFAULT_BETA_TESTERS],
+      admins: [],
+      betaTesters: [],
+      adminUids: [],
+      betaTesterUids: [],
       updatedAt: nowIso(),
       updatedBy: 'system',
     },
@@ -359,7 +358,45 @@ export const addReferral = (ref) =>
   writeState((state) => {
     state.referrals.push(ref);
   });
-export const applyAccessOverrides = () => {};
+export const applyAccessOverrides = (profile) => {
+  if (!profile || typeof profile !== 'object') return profile;
+
+  const accessConfig = getConfig('access') || {};
+  const adminEmails = Array.isArray(accessConfig.admins)
+    ? accessConfig.admins.map((value) => normalizeEmail(value)).filter(Boolean)
+    : [];
+  const betaEmails = Array.isArray(accessConfig.betaTesters)
+    ? accessConfig.betaTesters.map((value) => normalizeEmail(value)).filter(Boolean)
+    : [];
+  const adminUids = Array.isArray(accessConfig.adminUids)
+    ? accessConfig.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const betaUids = Array.isArray(accessConfig.betaTesterUids)
+    ? accessConfig.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+
+  const email = normalizeEmail(profile.email || '');
+  const uid = String(profile.uid || '').trim();
+
+  const isAdmin = adminUids.includes(uid) || adminEmails.includes(email);
+  const isBetaTester = betaUids.includes(uid) || betaEmails.includes(email) || isAdmin;
+
+  const nextRole = isAdmin ? 'admin' : isBetaTester ? 'beta_tester' : profile.role || 'user';
+  const nextPlan = isBetaTester ? 'enterprise' : profile.subscription?.plan || 'free';
+  const nextStatus = isBetaTester ? 'active' : profile.subscription?.status || 'active';
+
+  return {
+    ...profile,
+    role: nextRole,
+    betaTester: isBetaTester,
+    subscription: {
+      ...(profile.subscription || {}),
+      plan: nextPlan,
+      status: nextStatus,
+      betaOverride: isBetaTester ? true : profile.subscription?.betaOverride,
+    },
+  };
+};
 export const createAffiliateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 export const getCloudUsage = (uid) => loadState().cloud.usage[uid] || {};
 export const setCloudUsage = (uid, usage) =>

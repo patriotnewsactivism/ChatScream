@@ -1,9 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import CreatorDashboard from '../CreatorDashboard';
+import LandingPage from '../LandingPage';
 
 const mockNavigate = vi.fn();
-const mockFetch = vi.fn().mockResolvedValue({ status: 200 } as Response);
 const mockUseAuth = vi.fn();
 
 vi.mock('react-router-dom', async () => {
@@ -18,14 +17,12 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-describe('CreatorDashboard', () => {
+describe('LandingPage admin access controls', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', mockFetch);
     mockUseAuth.mockReturnValue({
-      user: { email: 'tester@example.com' },
+      user: { email: 'viewer@example.com', uid: 'viewer-1' },
       userProfile: {
         role: 'user',
-        subscription: { plan: 'pro' },
       },
       logout: vi.fn(),
       loading: false,
@@ -39,30 +36,11 @@ describe('CreatorDashboard', () => {
     });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('shows plan cloud hours and quick actions', async () => {
-    render(
-      <MemoryRouter>
-        <CreatorDashboard />
-      </MemoryRouter>,
-    );
-
-    await screen.findByText('Auth Session');
-    expect(screen.getByText('Creator control center')).toBeInTheDocument();
-    expect(screen.getByText(/Cloud VM hours/i)).toBeInTheDocument();
-    expect(screen.getByText('10 hrs')).toBeInTheDocument();
-    expect(screen.getByText(/One-click destinations/i)).toBeInTheDocument();
-  });
-
-  it('shows admin portal action when role claim is admin', async () => {
+  it('shows the admin button for users with admin role claim', () => {
     mockUseAuth.mockReturnValue({
-      user: { email: 'viewer@example.com' },
+      user: { email: 'creator@example.com', uid: 'admin-1' },
       userProfile: {
         role: 'admin',
-        subscription: { plan: 'pro' },
       },
       logout: vi.fn(),
       loading: false,
@@ -77,20 +55,18 @@ describe('CreatorDashboard', () => {
 
     render(
       <MemoryRouter>
-        <CreatorDashboard />
+        <LandingPage />
       </MemoryRouter>,
     );
 
-    await screen.findByText('Auth Session');
-    expect(screen.getByRole('button', { name: /admin portal/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /admin/i })).toBeInTheDocument();
   });
 
-  it('hides admin portal action when email matches legacy admin but role is not admin', async () => {
+  it('does not show the admin button for legacy admin email without admin role', () => {
     mockUseAuth.mockReturnValue({
-      user: { email: 'mreardon@wtpnews.org' },
+      user: { email: 'mreardon@wtpnews.org', uid: 'user-1' },
       userProfile: {
         role: 'user',
-        subscription: { plan: 'pro' },
       },
       logout: vi.fn(),
       loading: false,
@@ -105,11 +81,10 @@ describe('CreatorDashboard', () => {
 
     render(
       <MemoryRouter>
-        <CreatorDashboard />
+        <LandingPage />
       </MemoryRouter>,
     );
 
-    await screen.findByText('Auth Session');
-    expect(screen.queryByRole('button', { name: /admin portal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /admin/i })).not.toBeInTheDocument();
   });
 });
