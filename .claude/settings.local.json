@@ -19,7 +19,9 @@
       "Bash(taskkill //F //PID 18820)",
       "Bash(kill -9 18820)",
       "Bash(curl:*)",
-      "Bash(taskkill /F /IM node.exe)"
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill:*)",
+      "Bash(firebase:*)"
     ]
   }
 }
