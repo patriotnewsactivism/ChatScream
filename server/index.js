@@ -191,9 +191,9 @@ const startServer = async () => {
   try {
     const identityStorage = await initIdentityStorage();
     seedLeaderboard();
-    server.listen(port, () => {
+    server.listen(port, '0.0.0.0', () => {
       console.log(
-        `ChatScream API + WebSocket listening on http://localhost:${port} (identity: ${identityStorage})`,
+        `ChatScream API + WebSocket listening on http://0.0.0.0:${port} (identity: ${identityStorage})`,
       );
     });
   } catch (error) {
