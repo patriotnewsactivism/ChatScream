@@ -2753,7 +2753,7 @@ app.delete(
 
 const getStripe = (() => {
   let stripe = null;
-  return () => {
+  return async () => {
     if (stripe) return stripe;
     const key = String(process.env.STRIPE_SECRET_KEY || '').trim();
     if (!key || key.startsWith('sk_test_your')) return null;

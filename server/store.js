@@ -32,7 +32,7 @@ const identityStorageMode = String(process.env.IDENTITY_STORAGE_MODE || 'managed
   .toLowerCase();
 const managedIdentityRequired = identityStorageMode !== 'local';
 const managedIdentityConfigured = Boolean(postgresUrl && redisUrl);
-let managedIdentityEnabled = managedIdentityConfigured;
+let managedIdentityEnabled = managedIdentityConfigured && managedIdentityRequired;
 
 let identityClients = null;
 let identityInitPromise = null;
