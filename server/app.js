@@ -59,6 +59,27 @@ const app = express();
 app.set('trust proxy', true);
 
 const parseAllowedOrigins = () => {
+  const addOriginWithWwwVariants = (accumulator, rawOrigin) => {
+    const origin = String(rawOrigin || '').trim();
+    if (!origin) return;
+
+    accumulator.add(origin);
+
+    try {
+      const parsed = new URL(origin);
+      const hostname = parsed.hostname;
+
+      if (hostname.startsWith('www.')) {
+        const withoutWww = hostname.replace(/^www\./, '');
+        accumulator.add(`${parsed.protocol}//${withoutWww}${parsed.port ? `:${parsed.port}` : ''}`);
+      } else if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
+        accumulator.add(`${parsed.protocol}//www.${hostname}${parsed.port ? `:${parsed.port}` : ''}`);
+      }
+    } catch {
+      // Ignore malformed origins; they are not valid allowlist entries.
+    }
+  };
+
   const configuredOrigins = String(process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
@@ -70,7 +91,11 @@ const parseAllowedOrigins = () => {
     'http://localhost:8787',
     'http://127.0.0.1:8787',
   ];
-  return new Set([...defaults, ...configuredOrigins, appBaseUrl].filter(Boolean));
+  const allOrigins = new Set();
+  [...defaults, ...configuredOrigins, appBaseUrl].forEach((origin) =>
+    addOriginWithWwwVariants(allOrigins, origin),
+  );
+  return allOrigins;
 };
 
 const allowedOrigins = parseAllowedOrigins();
