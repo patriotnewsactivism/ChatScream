@@ -14,11 +14,11 @@ import {
   getCloudUsage,
   getConfig,
   getIdentityStorageMode,
+  isManagedIdentityStorageRequired,
   getPublicProfile,
   getSession,
   getUserByEmail,
   getUserByUid,
-  initIdentityStorage,
   listChatMessages,
   listMediaAssets,
   listUsers,
@@ -271,10 +271,6 @@ app.delete(
     res.json({ success: true });
   }),
 );
-
-void initIdentityStorage().catch((error) => {
-  console.error('Failed to initialize managed identity storage:', error);
-});
 
 const PLAN_HOURS = {
   free: 0,
@@ -872,6 +868,20 @@ app.get('/api/health', (_req, res) => {
     service: 'chatscream-api',
     timestamp: nowIso(),
     identityStorage: getIdentityStorageMode(),
+    managedIdentityRequired: isManagedIdentityStorageRequired(),
+  });
+});
+
+app.get('/api/ready', (_req, res) => {
+  const identityStorage = getIdentityStorageMode();
+  const managedRequired = isManagedIdentityStorageRequired();
+  const ready = !managedRequired || identityStorage === 'postgres+redis';
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    service: 'chatscream-api',
+    timestamp: nowIso(),
+    identityStorage,
+    managedIdentityRequired: managedRequired,
   });
 });
 

@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import app from './app.js';
-import { closeIdentityStorage, flushState } from './store.js';
+import { closeIdentityStorage, flushState, initIdentityStorage } from './store.js';
 
 const port = Number(process.env.PORT || 8787);
 const server = http.createServer(app);
@@ -187,9 +187,21 @@ wss.on('connection', (ws, req) => {
   } // end of RTMP ingest handler
 });
 
-server.listen(port, () => {
-  console.log(`ChatScream API + WebSocket listening on http://localhost:${port}`);
-});
+const startServer = async () => {
+  try {
+    const identityStorage = await initIdentityStorage();
+    server.listen(port, () => {
+      console.log(
+        `ChatScream API + WebSocket listening on http://localhost:${port} (identity: ${identityStorage})`,
+      );
+    });
+  } catch (error) {
+    console.error('Failed to initialize identity storage. Refusing to boot API.', error);
+    process.exit(1);
+  }
+};
+
+void startServer();
 
 const shutdown = async () => {
   console.log('Shutting down server...');

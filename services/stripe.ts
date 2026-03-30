@@ -1,5 +1,6 @@
 // ChatScream Billing Service
 // This handles subscription management and checkout
+import { buildApiUrl } from './apiClient';
 
 export interface PricingPlan {
   id: string;
@@ -140,7 +141,7 @@ export const createCheckoutSession = async (
   referralCode?: string
 ): Promise<string> => {
   // In production, this would call your Cloud Function
-  const response = await fetch('/api/create-checkout-session', {
+  const response = await fetch(buildApiUrl('/api/create-checkout-session'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -168,7 +169,7 @@ export const createPortalSession = async (
   customerId: string,
   returnUrl: string
 ): Promise<string> => {
-  const response = await fetch('/api/create-portal-session', {
+  const response = await fetch(buildApiUrl('/api/create-portal-session'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
