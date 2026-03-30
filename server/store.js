@@ -33,6 +33,7 @@ const redisUrl = String(process.env.REDIS_URL || '').trim();
 const identityStorageMode = String(process.env.IDENTITY_STORAGE_MODE || 'managed')
   .trim()
   .toLowerCase();
+const requiredManagedIdentityVars = ['POSTGRES_URL', 'REDIS_URL'];
 const managedIdentityRequired = identityStorageMode !== 'local';
 const managedIdentityConfigured = Boolean(postgresUrl && redisUrl);
 let managedIdentityEnabled = managedIdentityConfigured;
@@ -41,10 +42,38 @@ let identityClients = null;
 let identityInitPromise = null;
 
 const sessionKey = (token) => `chatscream:session:${token}`;
+const getMissingManagedIdentityVars = () =>
+  requiredManagedIdentityVars.filter((name) => !String(process.env[name] || '').trim());
+const getIdentityPreflightInfo = () => ({
+  requestedMode: identityStorageMode,
+  managedRequired: managedIdentityRequired,
+  managedConfigured: managedIdentityConfigured,
+  effectiveMode: managedIdentityEnabled ? 'postgres+redis' : 'local',
+  missingManagedVars: getMissingManagedIdentityVars(),
+});
+const getManagedIdentityFixCommands = () => [
+  'export POSTGRES_URL="postgres://USER:PASSWORD@HOST:5432/DB"',
+  'export REDIS_URL="redis://:PASSWORD@HOST:6379/0"',
+  'npm run dev',
+];
+const getLocalIdentityFixCommands = () => ['export IDENTITY_STORAGE_MODE=local', 'npm run dev'];
+const formatFixCommands = (commands) => commands.map((command) => `  - ${command}`).join('\n');
+const logIdentityStartupPreflight = () => {
+  const info = getIdentityPreflightInfo();
+  const missingVarText = info.missingManagedVars.length ? info.missingManagedVars.join(', ') : 'none';
+  console.info(
+    `[identity:preflight] requested=${info.requestedMode} effective=${info.effectiveMode} managedRequired=${info.managedRequired} missingVars=${missingVarText}`,
+  );
+};
 const ensureManagedIdentityAvailable = () => {
   if (managedIdentityRequired && !managedIdentityEnabled) {
+    const missingVars = getMissingManagedIdentityVars();
     throw new Error(
-      'Managed identity storage is required but unavailable. Configure POSTGRES_URL and REDIS_URL (or set IDENTITY_STORAGE_MODE=local for explicit local development only).',
+      `Managed identity storage is required but unavailable.${
+        missingVars.length ? ` Missing variables: ${missingVars.join(', ')}.` : ''
+      }\nFix with managed storage:\n${formatFixCommands(
+        getManagedIdentityFixCommands(),
+      )}\nOr run local-only mode explicitly:\n${formatFixCommands(getLocalIdentityFixCommands())}`,
     );
   }
 };
@@ -92,9 +121,15 @@ export const isManagedIdentityStorageRequired = () => managedIdentityRequired;
 export const getIdentityStorageMode = () => (managedIdentityEnabled ? 'postgres+redis' : 'local');
 
 export const initIdentityStorage = async () => {
+  logIdentityStartupPreflight();
   if (managedIdentityRequired && !managedIdentityConfigured) {
+    const missingVars = getMissingManagedIdentityVars();
     throw new Error(
-      'Missing managed identity storage configuration. Set POSTGRES_URL and REDIS_URL (and optional TLS flags).',
+      `Missing managed identity storage configuration.${
+        missingVars.length ? ` Missing variables: ${missingVars.join(', ')}.` : ''
+      }\nFix with managed storage:\n${formatFixCommands(
+        getManagedIdentityFixCommands(),
+      )}\nOr run local-only mode explicitly:\n${formatFixCommands(getLocalIdentityFixCommands())}`,
     );
   }
   if (!managedIdentityEnabled) return 'local';

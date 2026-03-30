@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:local": "IDENTITY_STORAGE_MODE=local npm run dev",
     "dev:web": "vite",
     "dev:api": "node --watch server/index.js",
     "start": "node server/index.js",

@@ -103,8 +103,15 @@ Monetize your stream with aggression.
 
     - _Required:_ `VITE_API_BASE_URL` (or leave blank for same-origin API)
     - _Required for managed auth (default):_ `POSTGRES_URL` + `REDIS_URL`
-    - Optional explicit local-only dev override: `IDENTITY_STORAGE_MODE=local`
+    - For no-infra local mode, set `IDENTITY_STORAGE_MODE=local`
     - _Optional (for full features):_ Stripe keys, Claude API key.
+
+    Example for no-infra local mode:
+
+    ```bash
+    cp .env.example .env
+    echo "IDENTITY_STORAGE_MODE=local" >> .env
+    ```
 
 4.  **Run Local Development**
     ```bash
