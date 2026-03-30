@@ -20,3 +20,13 @@ export const viralContent = pgTable('viral_content', {
   embedding: vector('embedding', { dimensions: 768 }), // For Google/Claude embeddings
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  tokenHash: text('token_hash').primaryKey(),
+  uid: text('uid')
+    .notNull()
+    .references(() => users.uid, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  usedAt: timestamp('used_at'),
+});

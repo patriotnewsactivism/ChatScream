@@ -26,6 +26,8 @@ import {
   putUser,
   removeMediaAsset,
   removeSession,
+  consumePasswordResetToken,
+  savePasswordResetToken,
   saveSession,
   seedLeaderboard,
   setAffiliate,
@@ -38,6 +40,12 @@ import {
   putSchedule,
   deleteSchedule,
 } from './store.js';
+import {
+  confirmPasswordReset,
+  dispatchPasswordResetEmail,
+  getGenericResetResponse,
+  issuePasswordResetToken,
+} from './auth/passwordReset.js';
 import {
   analyzeStreamContentWithAi,
   generateChatResponseWithAi,
@@ -1002,9 +1010,58 @@ app.post(
   }),
 );
 
-app.post('/api/auth/reset-password', (_req, res) => {
-  res.json({ success: true });
-});
+app.post(
+  '/api/auth/reset-password',
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body?.email || '');
+    const result = await issuePasswordResetToken({
+      email,
+      ip: req.ip,
+      getUserByEmail,
+      savePasswordResetToken,
+    });
+
+    if (result.email && result.token) {
+      try {
+        await dispatchPasswordResetEmail({
+          email: result.email,
+          token: result.token,
+        });
+      } catch (error) {
+        console.error('Failed to dispatch password reset email:', error);
+      }
+    }
+
+    const payload = getGenericResetResponse();
+    if (
+      (process.env.NODE_ENV === 'test' ||
+        String(process.env.AUTH_INCLUDE_RESET_TOKEN_IN_RESPONSE || '').toLowerCase() === 'true') &&
+      result.token
+    ) {
+      payload.resetToken = result.token;
+      payload.expiresAt = result.expiresAt;
+    }
+    res.json(payload);
+  }),
+);
+
+app.post(
+  '/api/auth/reset-password/confirm',
+  asyncHandler(async (req, res) => {
+    const outcome = await confirmPasswordReset({
+      token: req.body?.token,
+      nextPassword: req.body?.password,
+      ip: req.ip,
+      consumePasswordResetToken,
+      getUserByUid,
+      putUser,
+    });
+    if (!outcome.ok && outcome.status === 429 && outcome.retryAfterSeconds > 0) {
+      res.setHeader('Retry-After', String(outcome.retryAfterSeconds));
+    }
+    res.status(outcome.status).json(outcome.body);
+  }),
+);
 
 app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
   const provider = String(req.body?.provider || '')

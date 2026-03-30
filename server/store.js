@@ -41,6 +41,7 @@ let identityClients = null;
 let identityInitPromise = null;
 
 const sessionKey = (token) => `chatscream:session:${token}`;
+const passwordResetTokenKey = (tokenHash) => `chatscream:password_reset:${tokenHash}`;
 const ensureManagedIdentityAvailable = () => {
   if (managedIdentityRequired && !managedIdentityEnabled) {
     throw new Error(
@@ -145,6 +146,7 @@ const baseState = () => ({
   media: {},
   leaderboard: [],
   schedules: {},
+  passwordResetTokens: {},
 });
 
 let stateCache = null;
@@ -283,6 +285,56 @@ export const removeSession = async (token) => {
   writeState((state) => {
     delete state.sessions[token];
   });
+};
+
+// --- PASSWORD RESET TOKEN OPERATIONS ---
+
+export const savePasswordResetToken = async (tokenRecord) => {
+  if (managedIdentityEnabled) {
+    const { redis } = await getIdentityClients();
+    const ttl = Math.floor((new Date(tokenRecord.expiresAt).getTime() - Date.now()) / 1000);
+    if (ttl > 0) {
+      await redis.set(
+        passwordResetTokenKey(tokenRecord.tokenHash),
+        JSON.stringify(tokenRecord),
+        'EX',
+        ttl,
+      );
+    }
+    return;
+  }
+  ensureManagedIdentityAvailable();
+  writeState((state) => {
+    state.passwordResetTokens[tokenRecord.tokenHash] = tokenRecord;
+  });
+};
+
+export const consumePasswordResetToken = async (tokenHash) => {
+  if (!tokenHash) return null;
+  if (managedIdentityEnabled) {
+    const { redis } = await getIdentityClients();
+    const key = passwordResetTokenKey(tokenHash);
+    const [raw] = await redis.multi().get(key).del(key).exec();
+    const data = Array.isArray(raw) && raw.length > 1 ? raw[1] : null;
+    if (!data) return null;
+    const tokenRecord = JSON.parse(data);
+    const expiresAt = new Date(tokenRecord.expiresAt).getTime();
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      return null;
+    }
+    return tokenRecord;
+  }
+  ensureManagedIdentityAvailable();
+  const existing = loadState().passwordResetTokens[tokenHash];
+  if (!existing) return null;
+  writeState((state) => {
+    delete state.passwordResetTokens[tokenHash];
+  });
+  const expiresAt = new Date(existing.expiresAt).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return null;
+  }
+  return existing;
 };
 
 // --- CONFIG & APP STATE ---
