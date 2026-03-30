@@ -138,14 +138,16 @@ export const createCheckoutSession = async (
   userEmail: string,
   successUrl: string,
   cancelUrl: string,
-  referralCode?: string
+  referralCode?: string,
+  token?: string | null,
 ): Promise<string> => {
-  // In production, this would call your Cloud Function
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch(buildApiUrl('/api/create-checkout-session'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
+    credentials: 'include',
     body: JSON.stringify({
       priceId,
       userId,
@@ -157,7 +159,8 @@ export const createCheckoutSession = async (
   });
 
   if (!response.ok) {
-    throw new Error('Failed to create checkout session');
+    const data = await response.json().catch(() => ({}));
+    throw new Error((data as { message?: string }).message || 'Failed to create checkout session');
   }
 
   const data = await response.json();
@@ -167,13 +170,16 @@ export const createCheckoutSession = async (
 // Create Customer Portal Session
 export const createPortalSession = async (
   customerId: string,
-  returnUrl: string
+  returnUrl: string,
+  token?: string | null,
 ): Promise<string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch(buildApiUrl('/api/create-portal-session'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
+    credentials: 'include',
     body: JSON.stringify({
       customerId,
       returnUrl,
@@ -181,7 +187,8 @@ export const createPortalSession = async (
   });
 
   if (!response.ok) {
-    throw new Error('Failed to create portal session');
+    const data = await response.json().catch(() => ({}));
+    throw new Error((data as { message?: string }).message || 'Failed to create portal session');
   }
 
   const data = await response.json();

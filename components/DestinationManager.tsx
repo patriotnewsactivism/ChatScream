@@ -553,10 +553,53 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           ))}
         </div>
         {visibleOAuthOptions.length === 0 && (
-          <p className="text-xs text-amber-300">
-            OAuth destinations are unavailable right now. Ask an admin to configure provider
-            credentials in backend capabilities.
-          </p>
+          <div className="space-y-2">
+            <p className="text-xs text-amber-300 mb-3">
+              OAuth quick-connect requires provider credentials. Ask an admin to configure them in the Admin Portal.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {oauthOptions.map((option) => (
+                <div
+                  key={option.platform}
+                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
+                >
+                  <div className="mt-0.5">{option.icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm">{option.label}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
+                        Coming Soon
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {visibleOAuthOptions.length > 0 && visibleOAuthOptions.length < oauthOptions.length && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            {oauthOptions
+              .filter((o) => !oauthCapability[o.oauthPlatform])
+              .map((option) => (
+                <div
+                  key={option.platform}
+                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
+                >
+                  <div className="mt-0.5">{option.icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm">{option.label}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
+                        Coming Soon
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
+                  </div>
+                </div>
+              ))}
+          </div>
         )}
       </section>
 

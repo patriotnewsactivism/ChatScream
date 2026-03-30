@@ -2751,20 +2751,77 @@ app.delete(
 
 // ── Billing ──────────────────────────────────────────────────────────────────
 
-app.post('/api/create-checkout-session', requireAuth, (req, res) => {
-  const successUrl = String(req.body?.successUrl || '');
-  const fallback = '/dashboard?checkout=success';
-  res.json({
-    url: successUrl || fallback,
-  });
-});
+const getStripe = (() => {
+  let stripe = null;
+  return () => {
+    if (stripe) return stripe;
+    const key = String(process.env.STRIPE_SECRET_KEY || '').trim();
+    if (!key || key.startsWith('sk_test_your')) return null;
+    try {
+      const Stripe = (await import('stripe')).default;
+      stripe = new Stripe(key, { apiVersion: '2024-11-20.acacia' });
+    } catch {
+      stripe = null;
+    }
+    return stripe;
+  };
+})();
 
-app.post('/api/create-portal-session', requireAuth, (req, res) => {
-  const returnUrl = String(req.body?.returnUrl || '');
-  res.json({
-    url: returnUrl || '/dashboard?portal=opened',
-  });
-});
+app.post(
+  '/api/create-checkout-session',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const priceId = String(req.body?.priceId || '').trim();
+    const successUrl = String(req.body?.successUrl || `${process.env.APP_BASE_URL || ''}/dashboard?checkout=success`);
+    const cancelUrl = String(req.body?.cancelUrl || `${process.env.APP_BASE_URL || ''}/dashboard`);
+
+    if (!priceId) {
+      return res.status(400).json({ message: 'priceId is required.' });
+    }
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      return res.status(503).json({ message: 'Payments are not configured yet. Please contact support.' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      customer_email: req.auth.profile?.email || undefined,
+      client_reference_id: req.auth.record.uid,
+      metadata: { uid: req.auth.record.uid },
+    });
+
+    res.json({ url: session.url });
+  }),
+);
+
+app.post(
+  '/api/create-portal-session',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const returnUrl = String(req.body?.returnUrl || `${process.env.APP_BASE_URL || ''}/dashboard`);
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      return res.status(503).json({ message: 'Payments are not configured yet. Please contact support.' });
+    }
+
+    const customerId = String(req.body?.customerId || req.auth.profile?.stripeCustomerId || '').trim();
+    if (!customerId) {
+      return res.status(400).json({ message: 'No billing account found. Please complete a purchase first.' });
+    }
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl,
+    });
+
+    res.json({ url: portalSession.url });
+  }),
+);
 
 app.use((error, _req, res, next) => {
   if (res.headersSent) {

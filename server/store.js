@@ -395,7 +395,22 @@ export const deleteSchedule = (id) =>
     if (state.schedules) delete state.schedules[id];
   });
 
-export const seedLeaderboard = () => {}; // No-op for now
+export const seedLeaderboard = () =>
+  writeState((state) => {
+    if (state.leaderboard && state.leaderboard.length > 0) return;
+    state.leaderboard = [
+      { rank: 1, username: 'StreamKingXL', screams: 847, donated: 1240, weeklyGain: 12 },
+      { rank: 2, username: 'NovaBlastLive', screams: 634, donated: 890, weeklyGain: 8 },
+      { rank: 3, username: 'VortexCaster', screams: 521, donated: 730, weeklyGain: 5 },
+      { rank: 4, username: 'PixelHeroTV', screams: 418, donated: 610, weeklyGain: 3 },
+      { rank: 5, username: 'ChaosCrafter', screams: 379, donated: 560, weeklyGain: 2 },
+      { rank: 6, username: 'ZeroCoolGaming', screams: 312, donated: 445, weeklyGain: 1 },
+      { rank: 7, username: 'LunaticStreamer', screams: 271, donated: 390, weeklyGain: 0 },
+      { rank: 8, username: 'SurgeWave99', screams: 234, donated: 320, weeklyGain: -1 },
+      { rank: 9, username: 'EchoBlitz', screams: 198, donated: 285, weeklyGain: -2 },
+      { rank: 10, username: 'TurboHostPro', screams: 156, donated: 210, weeklyGain: -3 },
+    ];
+  });
 export const addChatMessage = (msg) =>
   writeState((state) => {
     state.chatMessages.push(msg);
