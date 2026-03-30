@@ -6,6 +6,34 @@ import { completeRedirectSignIn } from '../services/backend';
 import { Megaphone, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
 import AuthStatusBanner from '../components/AuthStatusBanner';
 
+const PROVIDER_LABELS: Record<string, string> = {
+  youtube: 'YouTube',
+  twitch: 'Twitch',
+  facebook: 'Facebook',
+  google: 'Google',
+};
+
+const getProviderSpecificFailureMessage = (platform: string, rawMessage?: string | null): string => {
+  const fallbackLabel = PROVIDER_LABELS[platform.toLowerCase()] || platform || 'provider';
+  const source = String(rawMessage || '').trim().toLowerCase();
+  if (!source) {
+    return `${fallbackLabel} sign-in failed. Reconnect from Studio and verify provider credentials are configured in backend secrets.`;
+  }
+  if (source.includes('access_denied') || source.includes('authorization was denied')) {
+    return `${fallbackLabel} authorization was denied. Retry and approve all requested permissions.`;
+  }
+  if (source.includes('state')) {
+    return `${fallbackLabel} callback could not be verified. Retry from the same browser window and avoid stale OAuth tabs.`;
+  }
+  if (source.includes('client') || source.includes('configured')) {
+    return `${fallbackLabel} is not configured on the server. Ask an admin to validate provider client ID/secret and callback URL settings.`;
+  }
+  if (source.includes('token')) {
+    return `${fallbackLabel} token exchange failed. Reconnect and confirm backend secrets plus redirect URI match the provider app settings.`;
+  }
+  return `${fallbackLabel} connection failed: ${rawMessage}. Retry from Studio or contact support if this persists.`;
+};
+
 const OAuthCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -77,7 +105,7 @@ const OAuthCallback: React.FC = () => {
         const result = await handleOAuthCallback(searchParams);
         if (!result.success) {
           setStatus('error');
-          setMessage(result.error || 'Failed to connect account.');
+          setMessage(getProviderSpecificFailureMessage(platformLabel, result.error));
           return;
         }
 
@@ -117,7 +145,7 @@ const OAuthCallback: React.FC = () => {
 
         if (!user) {
           setStatus('error');
-          setMessage('Sign-in could not be completed. Please try signing in again.');
+          setMessage(getProviderSpecificFailureMessage(platformLabel, 'Sign-in could not be completed.'));
           return;
         }
 
@@ -141,7 +169,12 @@ const OAuthCallback: React.FC = () => {
       }
 
       setStatus('error');
-      setMessage('OAuth callback is missing required parameters. Please try again.');
+      setMessage(
+        getProviderSpecificFailureMessage(
+          platformLabel,
+          'OAuth callback is missing required parameters.',
+        ),
+      );
     };
 
     run();

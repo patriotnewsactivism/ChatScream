@@ -545,6 +545,17 @@ export interface OAuthPublicConfig {
   redirectUriBase: string;
 }
 
+export interface BackendCapabilities {
+  authProviders: {
+    google: boolean;
+  };
+  streamKeyPlatforms: {
+    youtube: boolean;
+    facebook: boolean;
+    twitch: boolean;
+  };
+}
+
 const specialAffiliateCodes: Record<string, AffiliateCode> = {
   MMM: {
     code: 'MMM',
@@ -884,6 +895,38 @@ export const getOAuthPublicConfig = async (): Promise<OAuthPublicConfig> => {
     facebookAppId: toStringValue(data?.facebookAppId),
     twitchClientId: toStringValue(data?.twitchClientId),
     redirectUriBase: toStringValue(data?.redirectUriBase),
+  };
+};
+
+const toBooleanValue = (value: unknown): boolean => value === true;
+
+export const getBackendCapabilities = async (): Promise<BackendCapabilities> => {
+  const response = await tryRequestVariants<unknown>(
+    [() => apiRequest('/api/public/capabilities'), () => authRequest('/api/capabilities')],
+    {},
+  );
+
+  const data = (response && typeof response === 'object'
+    ? (response as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const authProviders =
+    data.authProviders && typeof data.authProviders === 'object'
+      ? (data.authProviders as Record<string, unknown>)
+      : {};
+  const streamKeyPlatforms =
+    data.streamKeyPlatforms && typeof data.streamKeyPlatforms === 'object'
+      ? (data.streamKeyPlatforms as Record<string, unknown>)
+      : {};
+
+  return {
+    authProviders: {
+      google: toBooleanValue(authProviders.google),
+    },
+    streamKeyPlatforms: {
+      youtube: toBooleanValue(streamKeyPlatforms.youtube),
+      facebook: toBooleanValue(streamKeyPlatforms.facebook),
+      twitch: toBooleanValue(streamKeyPlatforms.twitch),
+    },
   };
 };
 
