@@ -816,6 +816,17 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+const OAUTH_PLATFORMS = new Set(['youtube', 'facebook', 'twitch']);
+const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const parseValidatedUserId = (value) => {
+  const userId = String(value || '').trim();
+  if (!userId || !USER_ID_PATTERN.test(userId)) {
+    return null;
+  }
+  return userId;
+};
+
 const deepMerge = (target, patch) => {
   if (!patch || typeof patch !== 'object') return target;
   const next = Array.isArray(target) ? [...target] : { ...(target || {}) };
@@ -2073,7 +2084,28 @@ app.post(
     const platform = String(req.body?.platform || '')
       .trim()
       .toLowerCase();
-    const userId = String(req.body?.userId || req.auth.profile.uid);
+    if (!OAUTH_PLATFORMS.has(platform)) {
+      res.status(400).json({ message: 'Unsupported platform.' });
+      return;
+    }
+
+    let userId = req.auth.profile.uid;
+    const requestedUserId = String(req.body?.userId || '').trim();
+    const isCrossUserRequest = requestedUserId && requestedUserId !== req.auth.profile.uid;
+
+    if (isCrossUserRequest) {
+      if (!isAdmin(req.auth.profile)) {
+        userId = req.auth.profile.uid;
+      } else {
+        const validatedUserId = parseValidatedUserId(requestedUserId);
+        if (!validatedUserId) {
+          res.status(400).json({ message: 'A valid userId is required for admin cross-user access.' });
+          return;
+        }
+        userId = validatedUserId;
+      }
+    }
+
     await setConnectedPlatform(userId, platform, null);
     res.json({ success: true });
   }),
@@ -2087,7 +2119,18 @@ app.get(
   '/api/oauth/platforms',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const userId = String(req.query.userId || req.auth.profile.uid);
+    let userId = req.auth.profile.uid;
+    const requestedUserId = String(req.query.userId || '').trim();
+    const isCrossUserRequest = requestedUserId && requestedUserId !== req.auth.profile.uid;
+    if (isCrossUserRequest && isAdmin(req.auth.profile)) {
+      const validatedUserId = parseValidatedUserId(requestedUserId);
+      if (!validatedUserId) {
+        res.status(400).json({ message: 'A valid userId is required for admin cross-user access.' });
+        return;
+      }
+      userId = validatedUserId;
+    }
+
     const record = await getUserByUid(userId);
     if (!record) {
       res.json({ platforms: {} });
