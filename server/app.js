@@ -49,9 +49,32 @@ import {
 const app = express();
 app.set('trust proxy', true);
 
+const parseAllowedOrigins = () => {
+  const configuredOrigins = String(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const appBaseUrl = String(process.env.APP_BASE_URL || '').trim();
+  const defaults = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:8787',
+    'http://127.0.0.1:8787',
+  ];
+  return new Set([...defaults, ...configuredOrigins, appBaseUrl].filter(Boolean));
+};
+
+const allowedOrigins = parseAllowedOrigins();
+
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, origin || true),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origin not allowed by CORS'));
+    },
     credentials: true,
   }),
 );
