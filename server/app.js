@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import multer from 'multer';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import {
   addChatMessage,
   addReferral,
@@ -773,7 +774,44 @@ const executeWithYouTubeAccessToken = async (uid, handler) => {
   }
 };
 
-const hashPassword = (value = '') => createHash('sha256').update(value).digest('hex');
+const LEGACY_HASH_ALGORITHM = 'sha256';
+const PASSWORD_HASH_ALGORITHM = 'bcrypt';
+const BCRYPT_ROUNDS = Math.max(12, Number.parseInt(process.env.BCRYPT_COST || '12', 10) || 12);
+
+const hashLegacyPassword = (value = '') => createHash('sha256').update(value).digest('hex');
+const isLegacySha256Hash = (value = '') => /^[a-f0-9]{64}$/i.test(String(value || '').trim());
+const isBcryptHash = (value = '') => /^\$2[aby]\$/i.test(String(value || '').trim());
+const hashPassword = async (value = '') => bcrypt.hash(value, BCRYPT_ROUNDS);
+
+const verifyPassword = async (value = '', record = null) => {
+  const passwordHash = String(record?.passwordHash || '');
+  const passwordAlgorithm = String(record?.passwordAlgorithm || '')
+    .trim()
+    .toLowerCase();
+
+  if (!passwordHash || !value) {
+    return { verified: false, needsUpgrade: false };
+  }
+
+  if (passwordAlgorithm === PASSWORD_HASH_ALGORITHM || isBcryptHash(passwordHash)) {
+    const verified = await bcrypt.compare(value, passwordHash);
+    return {
+      verified,
+      needsUpgrade: verified && passwordAlgorithm !== PASSWORD_HASH_ALGORITHM,
+    };
+  }
+
+  const legacyMatch = hashLegacyPassword(value) === passwordHash;
+  if (legacyMatch && (passwordAlgorithm === LEGACY_HASH_ALGORITHM || isLegacySha256Hash(passwordHash))) {
+    return {
+      verified: true,
+      needsUpgrade: true,
+      upgradedHash: await hashPassword(value),
+    };
+  }
+
+  return { verified: false, needsUpgrade: false };
+};
 
 const issueSession = async (uid) => {
   const token = randomUUID();
@@ -980,7 +1018,8 @@ app.post(
     await putUser({
       uid,
       email,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
+      passwordAlgorithm: PASSWORD_HASH_ALGORITHM,
       profile,
     });
 
@@ -996,9 +1035,24 @@ app.post(
     const password = String(req.body?.password || '');
     const record = await getUserByEmail(email);
 
-    if (!record || record.passwordHash !== hashPassword(password)) {
+    if (!record) {
       res.status(401).json({ message: 'Invalid email or password.' });
       return;
+    }
+
+    const verification = await verifyPassword(password, record);
+    if (!verification.verified) {
+      res.status(401).json({ message: 'Invalid email or password.' });
+      return;
+    }
+
+    if (verification.needsUpgrade) {
+      await putUser({
+        ...record,
+        email: normalizeEmail(record.email),
+        passwordHash: verification.upgradedHash || (await hashPassword(password)),
+        passwordAlgorithm: PASSWORD_HASH_ALGORITHM,
+      });
     }
 
     const payload = await buildSessionPayload(record.uid);
