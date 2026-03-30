@@ -18,7 +18,8 @@
       "Bash(netstat -ano)",
       "Bash(taskkill //F //PID 18820)",
       "Bash(kill -9 18820)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }
