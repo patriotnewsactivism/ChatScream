@@ -143,6 +143,9 @@ const App: React.FC = () => {
   const [guestConnections, setGuestConnections] = useState<GuestConnection[]>([]);
   const [showGuestInvite, setShowGuestInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [showScreamDemo, setShowScreamDemo] = useState(false);
+  const [screamDemoName, setScreamDemoName] = useState('');
+  const [screamDemoAmount, setScreamDemoAmount] = useState('50');
   const guestServiceRef = useRef<GuestHostService | null>(null);
 
   // refs
@@ -566,9 +569,9 @@ const App: React.FC = () => {
         <div className="h-4 w-[1px] bg-gray-700 mx-1" />
 
         <button
-          onClick={() => triggerScream('Patriot', 50, 'THIS IS A MAXIMUM SCREAM!!!')}
+          onClick={() => setShowScreamDemo(true)}
           className="p-2 rounded-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all"
-          title="Test Scream Alert"
+          title="Demo Scream Alert"
         >
           <Zap size={18} />
         </button>
@@ -614,6 +617,59 @@ const App: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+
+  // ── scream demo modal ─────────────────────────────────────────────────────
+
+  const screamDemoModal = showScreamDemo && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-dark-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+            <Zap size={18} className="text-red-400" /> Demo Scream Alert
+          </h3>
+          <button onClick={() => setShowScreamDemo(false)} className="text-gray-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Simulate a donation scream to preview the overlay in action.
+        </p>
+        <div className="space-y-3 mb-5">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Donor Name</label>
+            <input
+              value={screamDemoName}
+              onChange={(e) => setScreamDemoName(e.target.value)}
+              placeholder="e.g. StreamFan99"
+              className="w-full bg-dark-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Donation Amount ($)</label>
+            <input
+              type="number"
+              min="1"
+              value={screamDemoAmount}
+              onChange={(e) => setScreamDemoAmount(e.target.value)}
+              className="w-full bg-dark-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+            />
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            const name = screamDemoName.trim() || 'Anonymous';
+            const amount = Math.max(1, Number(screamDemoAmount) || 50);
+            const msg = amount >= 50 ? 'THIS IS A MAXIMUM SCREAM!!!' : amount >= 20 ? 'LOUD SCREAM!!!' : 'Scream!';
+            triggerScream(name, amount, msg);
+            setShowScreamDemo(false);
+          }}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-500 hover:to-orange-400 font-semibold text-white transition-all"
+        >
+          Fire Scream 🔥
+        </button>
       </div>
     </div>
   );
@@ -882,6 +938,7 @@ const App: React.FC = () => {
       />
 
       {guestInviteModal}
+      {screamDemoModal}
       {mobileTipToast}
     </div>
   );

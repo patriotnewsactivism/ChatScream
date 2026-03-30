@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Copy, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, Copy, ExternalLink, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
-import { getPlanById } from '../services/stripe';
+import { createCheckoutSession, getPlanById, PRICING_PLANS } from '../services/stripe';
 import BackendStatusCard from '../components/BackendStatusCard';
 import AuthStatusBanner from '../components/AuthStatusBanner';
 
@@ -16,7 +16,9 @@ const planMinutes: Record<string, number> = {
 
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { userProfile, logout } = useAuth();
+  const { userProfile, logout, sessionToken } = useAuth();
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState('');
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
   const planLabel = getPlanById(plan)?.name || 'Free';
@@ -25,6 +27,7 @@ const CreatorDashboard: React.FC = () => {
     ? ''
     : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
   const canAccessAdmin = userProfile?.role === 'admin';
+  const nextPlan = PRICING_PLANS.find(p => p.price > 0 && p.id !== plan);
 
   const copyToClipboard = async (text: string) => {
     if (!text) return;
@@ -35,10 +38,53 @@ const CreatorDashboard: React.FC = () => {
     }
   };
 
+  const handleUpgrade = async () => {
+    if (!nextPlan || !userProfile) return;
+    setUpgrading(true);
+    setUpgradeError('');
+    try {
+      const url = await createCheckoutSession(
+        nextPlan.stripePriceId,
+        userProfile.uid,
+        userProfile.email,
+        `${window.location.origin}/dashboard?checkout=success`,
+        `${window.location.origin}/dashboard`,
+        referralCode || undefined,
+        sessionToken,
+      );
+      window.location.href = url;
+    } catch (err) {
+      setUpgradeError(err instanceof Error ? err.message : 'Could not start checkout.');
+      setUpgrading(false);
+    }
+  };
+
+  const connected = userProfile?.connectedPlatforms || {};
   const destinations = [
-    { name: 'YouTube', platform: Platform.YOUTUBE, status: 'Connected via OAuth' },
-    { name: 'Facebook Live', platform: Platform.FACEBOOK, status: 'Quick connect available' },
-    { name: 'Twitch', platform: Platform.TWITCH, status: 'One-click connect ready' },
+    {
+      name: 'YouTube',
+      platform: Platform.YOUTUBE,
+      status: connected.youtube?.channelName
+        ? `Connected — ${connected.youtube.channelName}`
+        : 'Not connected',
+      isConnected: Boolean(connected.youtube),
+    },
+    {
+      name: 'Facebook Live',
+      platform: Platform.FACEBOOK,
+      status: connected.facebook?.pageName
+        ? `Connected — ${connected.facebook.pageName}`
+        : 'Not connected',
+      isConnected: Boolean(connected.facebook),
+    },
+    {
+      name: 'Twitch',
+      platform: Platform.TWITCH,
+      status: connected.twitch?.channelName
+        ? `Connected — ${connected.twitch.channelName}`
+        : 'Not connected',
+      isConnected: Boolean(connected.twitch),
+    },
   ];
 
   return (
@@ -221,17 +267,20 @@ const CreatorDashboard: React.FC = () => {
               </div>
               <div className="space-y-2">
                 {destinations.map(dest => (
-                  <div key={dest.platform} className="p-3 rounded-lg border border-gray-700 bg-dark-900">
-                    <p className="text-sm font-semibold">{dest.name}</p>
-                    <p className="text-xs text-gray-400">{dest.status}</p>
+                  <div key={dest.platform} className="p-3 rounded-lg border border-gray-700 bg-dark-900 flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${dest.isConnected ? 'bg-green-400' : 'bg-gray-600'}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{dest.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{dest.status}</p>
+                    </div>
                   </div>
                 ))}
               </div>
               <button
                 onClick={() => navigate('/studio#destinations')}
-                className="mt-3 text-sm text-brand-300 hover:text-brand-200"
+                className="mt-3 text-sm text-brand-300 hover:text-brand-200 inline-flex items-center gap-1"
               >
-                Add or edit destinations
+                <ExternalLink size={13} /> Manage in Studio
               </button>
             </div>
             <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70">
@@ -244,6 +293,26 @@ const CreatorDashboard: React.FC = () => {
                 <ShieldCheck size={14} /> Secure payouts configured
               </div>
             </div>
+
+            {plan === 'free' && nextPlan && (
+              <div className="p-5 border border-brand-500/30 rounded-xl bg-brand-500/5">
+                <p className="text-xs text-brand-400 font-semibold uppercase tracking-wide mb-1">Upgrade your plan</p>
+                <p className="text-sm text-gray-300 mb-3">
+                  Unlock cloud streaming, more destinations, and advanced screams with {nextPlan.name}.
+                </p>
+                {upgradeError && (
+                  <p className="text-xs text-red-400 mb-2">{upgradeError}</p>
+                )}
+                <button
+                  onClick={handleUpgrade}
+                  disabled={upgrading}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 font-semibold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
+                >
+                  <ArrowUpRight size={15} />
+                  {upgrading ? 'Redirecting…' : `Upgrade to ${nextPlan.name} — $${nextPlan.price}/mo`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

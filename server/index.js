@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import app from './app.js';
-import { closeIdentityStorage, flushState, initIdentityStorage } from './store.js';
+import { closeIdentityStorage, flushState, initIdentityStorage, seedLeaderboard } from './store.js';
 
 const port = Number(process.env.PORT || 8787);
 const server = http.createServer(app);
@@ -190,6 +190,7 @@ wss.on('connection', (ws, req) => {
 const startServer = async () => {
   try {
     const identityStorage = await initIdentityStorage();
+    seedLeaderboard();
     server.listen(port, () => {
       console.log(
         `ChatScream API + WebSocket listening on http://localhost:${port} (identity: ${identityStorage})`,
