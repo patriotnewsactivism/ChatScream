@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getAffiliateByCode } from '../services/backend';
+import { getAffiliateByCode, getBackendCapabilities } from '../services/backend';
 import {
   Megaphone,
   Mail,
@@ -42,6 +42,8 @@ const AuthPage: React.FC = () => {
   const [referralInfo, setReferralInfo] = useState<string>('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleSignInSupported, setGoogleSignInSupported] = useState(true);
+  const [authCapabilityMessage, setAuthCapabilityMessage] = useState('');
   const redirectTo = (location.state as any)?.from?.pathname || '/dashboard';
 
   // Redirect if already logged in
@@ -56,6 +58,27 @@ const AuthPage: React.FC = () => {
     clearError();
     setSuccess('');
   }, [mode]);
+
+  useEffect(() => {
+    const loadCapabilities = async () => {
+      try {
+        const capabilities = await getBackendCapabilities();
+        setGoogleSignInSupported(capabilities.authProviders.google);
+        if (!capabilities.authProviders.google) {
+          setAuthCapabilityMessage(
+            'Google sign-in is currently unavailable. Use email + password while OAuth credentials are being configured.',
+          );
+        } else {
+          setAuthCapabilityMessage('');
+        }
+      } catch {
+        setGoogleSignInSupported(true);
+        setAuthCapabilityMessage('');
+      }
+    };
+
+    void loadCapabilities();
+  }, []);
 
   // Validate referral code
   useEffect(() => {
@@ -356,7 +379,7 @@ const AuthPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
-                  disabled={isSubmitting || loading}
+                  disabled={isSubmitting || loading || !googleSignInSupported}
                   className="w-full py-3 bg-white hover:bg-gray-100 text-gray-900 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed sm:col-span-2"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -381,8 +404,9 @@ const AuthPage: React.FC = () => {
                 </button>
               </div>
               <p className="mt-3 text-xs text-gray-500 text-center">
-                Google sign-in is fully supported. Additional providers are disabled until their
-                live OAuth backends are ready.
+                {googleSignInSupported
+                  ? 'Google sign-in is available. Additional providers will appear when enabled by backend capabilities.'
+                  : authCapabilityMessage}
               </p>
             </>
           )}

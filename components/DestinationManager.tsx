@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Destination, Platform } from '../types';
 import {
   Trash2,
@@ -28,6 +28,7 @@ import {
   type OAuthPlatform as OAuthServicePlatform,
 } from '../services/oauthService';
 import { apiRequest } from '../services/apiClient';
+import { getBackendCapabilities } from '../services/backend';
 
 type ConnectedPlatformsSummary = {
   youtube?: { channelName?: string };
@@ -80,6 +81,11 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [youtubeChannelsLoading, setYouTubeChannelsLoading] = useState(false);
   const [youtubeSelectionPending, setYouTubeSelectionPending] = useState<string | null>(null);
   const [youtubePickerError, setYouTubePickerError] = useState<string | null>(null);
+  const [oauthCapability, setOauthCapability] = useState({
+    youtube: true,
+    facebook: true,
+    twitch: true,
+  });
 
   const safeAlert = (message: string) => {
     const isJsdom =
@@ -98,6 +104,19 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const destinationLimit = useMemo(() => {
     return canAddDestination(userPlan, destinations.length);
   }, [userPlan, destinations.length]);
+
+  useEffect(() => {
+    const loadCapabilities = async () => {
+      try {
+        const capabilities = await getBackendCapabilities();
+        setOauthCapability(capabilities.streamKeyPlatforms);
+      } catch {
+        setOauthCapability({ youtube: true, facebook: true, twitch: true });
+      }
+    };
+
+    void loadCapabilities();
+  }, []);
 
   const handleAddWithLimitCheck = (dest: Destination): boolean => {
     if (!destinationLimit.allowed) {
@@ -133,6 +152,11 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       },
     ],
     [],
+  );
+
+  const visibleOAuthOptions = useMemo(
+    () => oauthOptions.filter((option) => oauthCapability[option.oauthPlatform]),
+    [oauthCapability, oauthOptions],
   );
 
   const createOAuthDestination = (
@@ -327,7 +351,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             );
           }
         } catch {
-          safeAlert('Failed to get Twitch key');
+          safeAlert(
+            'Twitch stream key retrieval failed. Confirm Twitch OAuth is connected and TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are configured server-side.',
+          );
         }
       } else handleConnectOAuth('twitch');
     } else if (option.oauthPlatform === 'facebook') {
@@ -351,7 +377,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             );
           }
         } catch {
-          safeAlert('Failed to create Facebook live');
+          safeAlert(
+            'Facebook live creation failed. Confirm your account can go live and FACEBOOK_APP_ID/FACEBOOK_APP_SECRET are configured server-side.',
+          );
         }
       } else handleConnectOAuth('facebook');
     }
@@ -443,7 +471,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {oauthOptions.map((option) => (
+          {visibleOAuthOptions.map((option) => (
             <div
               key={option.platform}
               className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900/80 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/30 ${
@@ -524,6 +552,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             </div>
           ))}
         </div>
+        {visibleOAuthOptions.length === 0 && (
+          <p className="text-xs text-amber-300">
+            OAuth destinations are unavailable right now. Ask an admin to configure provider
+            credentials in backend capabilities.
+          </p>
+        )}
       </section>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">

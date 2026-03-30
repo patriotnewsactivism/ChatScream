@@ -477,6 +477,30 @@ const getGoogleAuthCredentials = () => {
   };
 };
 
+const getBackendCapabilities = () => {
+  const oauth = getConfig('oauth') || {};
+  const { clientId: googleClientId, clientSecret: googleClientSecret } = getGoogleAuthCredentials();
+  const authStateSecret = getAuthStateSecret();
+
+  const youtubeClientId = String(process.env.YOUTUBE_CLIENT_ID || oauth.youtubeClientId || '').trim();
+  const youtubeClientSecret = String(process.env.YOUTUBE_CLIENT_SECRET || '').trim();
+  const facebookAppId = String(process.env.FACEBOOK_APP_ID || oauth.facebookAppId || '').trim();
+  const facebookAppSecret = String(process.env.FACEBOOK_APP_SECRET || '').trim();
+  const twitchClientId = String(process.env.TWITCH_CLIENT_ID || oauth.twitchClientId || '').trim();
+  const twitchClientSecret = String(process.env.TWITCH_CLIENT_SECRET || '').trim();
+
+  return {
+    authProviders: {
+      google: Boolean(googleClientId && googleClientSecret && authStateSecret),
+    },
+    streamKeyPlatforms: {
+      youtube: Boolean(youtubeClientId && youtubeClientSecret),
+      facebook: Boolean(facebookAppId && facebookAppSecret),
+      twitch: Boolean(twitchClientId && twitchClientSecret),
+    },
+  };
+};
+
 const getAuthStateSecret = () =>
   String(
     process.env.AUTH_STATE_SECRET ||
@@ -1576,6 +1600,14 @@ app.post(
 app.get('/api/config/oauth', requireAuth, (_req, res) => {
   const oauth = getConfig('oauth');
   res.json(oauth);
+});
+
+app.get('/api/public/capabilities', (_req, res) => {
+  res.json(getBackendCapabilities());
+});
+
+app.get('/api/capabilities', requireAuth, (_req, res) => {
+  res.json(getBackendCapabilities());
 });
 
 app.patch('/api/config/oauth', requireAuth, requireAdmin, (req, res) => {

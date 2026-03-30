@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getOAuthPublicConfig, setOAuthPublicConfig } from '../services/backend';
+import {
+  getBackendCapabilities,
+  getOAuthPublicConfig,
+  setOAuthPublicConfig,
+} from '../services/backend';
 import {
   Youtube,
   Facebook,
@@ -110,6 +114,11 @@ const OAuthSetup: React.FC = () => {
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [supportedPlatforms, setSupportedPlatforms] = useState<Record<PlatformKey, boolean>>({
+    youtube: true,
+    facebook: true,
+    twitch: true,
+  });
 
   const isAdmin =
     userProfile?.role === 'admin' || user?.email?.toLowerCase() === 'mreardon@wtpnews.org';
@@ -128,6 +137,19 @@ const OAuthSetup: React.FC = () => {
 
   useEffect(() => {
     loadConfig();
+  }, []);
+
+  useEffect(() => {
+    const loadCapabilities = async () => {
+      try {
+        const capabilities = await getBackendCapabilities();
+        setSupportedPlatforms(capabilities.streamKeyPlatforms);
+      } catch {
+        setSupportedPlatforms({ youtube: true, facebook: true, twitch: true });
+      }
+    };
+
+    void loadCapabilities();
   }, []);
 
   const loadConfig = async () => {
@@ -339,6 +361,9 @@ const OAuthSetup: React.FC = () => {
       {/* Platform Cards */}
       <div className="grid gap-6">
         {(Object.keys(PLATFORM_INFO) as Array<keyof typeof PLATFORM_INFO>).map((platform) => {
+          if (!supportedPlatforms[platform]) {
+            return null;
+          }
           const info = PLATFORM_INFO[platform];
           const Icon = info.icon;
           const platformConfig = config[platform];
@@ -455,6 +480,11 @@ const OAuthSetup: React.FC = () => {
             </div>
           );
         })}
+        {!Object.values(supportedPlatforms).some(Boolean) && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">
+            No OAuth providers are currently enabled by backend capabilities.
+          </div>
+        )}
       </div>
 
       {/* Server-Side Secrets Note */}
