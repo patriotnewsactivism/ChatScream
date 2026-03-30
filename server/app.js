@@ -829,6 +829,44 @@ const deepMerge = (target, patch) => {
   return next;
 };
 
+const NON_ADMIN_EDITABLE_PROFILE_FIELDS = new Set(['displayName', 'photoURL', 'settings']);
+const NON_ADMIN_BLOCKED_PROFILE_FIELDS = new Set([
+  'role',
+  'subscription',
+  'usage',
+  'affiliate',
+  'connectedPlatforms',
+]);
+
+const canEditUserProfile = (authProfile, authUid, targetUid) => isAdmin(authProfile) || authUid === targetUid;
+
+const validateUserProfileWrite = (isAdminCaller, payload = {}) => {
+  if (isAdminCaller) {
+    return { ok: true };
+  }
+
+  const keys = Object.keys(payload || {});
+  const blockedKeys = keys.filter((key) => NON_ADMIN_BLOCKED_PROFILE_FIELDS.has(key));
+  if (blockedKeys.length) {
+    return {
+      ok: false,
+      status: 403,
+      message: `You are not allowed to edit sensitive profile fields: ${blockedKeys.join(', ')}`,
+    };
+  }
+
+  const disallowedKeys = keys.filter((key) => !NON_ADMIN_EDITABLE_PROFILE_FIELDS.has(key));
+  if (disallowedKeys.length) {
+    return {
+      ok: false,
+      status: 403,
+      message: `You can only edit these fields: ${Array.from(NON_ADMIN_EDITABLE_PROFILE_FIELDS).join(', ')}`,
+    };
+  }
+
+  return { ok: true };
+};
+
 const ensureAffiliateForProfile = (profile) => {
   const next = { ...profile };
   if (!next.affiliate) {
@@ -1275,6 +1313,23 @@ app.patch(
   '/api/users/:uid',
   requireAuth,
   asyncHandler(async (req, res) => {
+    const isAdminCaller = isAdmin(req.auth?.profile);
+    if (!canEditUserProfile(req.auth?.profile, req.auth?.record?.uid, req.params.uid)) {
+      res.status(403).json({ message: 'You can only update your own profile.' });
+      return;
+    }
+
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({ message: 'Request body must be a JSON object.' });
+      return;
+    }
+
+    const validation = validateUserProfileWrite(isAdminCaller, req.body);
+    if (!validation.ok) {
+      res.status(validation.status).json({ message: validation.message });
+      return;
+    }
+
     const record = await getUserByUid(req.params.uid);
     if (!record) {
       res.status(404).json({ message: 'User not found.' });
@@ -1303,6 +1358,23 @@ app.put(
   '/api/user/:uid',
   requireAuth,
   asyncHandler(async (req, res) => {
+    const isAdminCaller = isAdmin(req.auth?.profile);
+    if (!canEditUserProfile(req.auth?.profile, req.auth?.record?.uid, req.params.uid)) {
+      res.status(403).json({ message: 'You can only update your own profile.' });
+      return;
+    }
+
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({ message: 'Request body must be a JSON object.' });
+      return;
+    }
+
+    const validation = validateUserProfileWrite(isAdminCaller, req.body);
+    if (!validation.ok) {
+      res.status(validation.status).json({ message: validation.message });
+      return;
+    }
+
     const record = await getUserByUid(req.params.uid);
     if (!record) {
       res.status(404).json({ message: 'User not found.' });
