@@ -9,6 +9,7 @@ Deploy ChatScream backend to Railway with full WebSocket support.
 3. Select your `ChatScream` repository
 4. Railway will auto-detect the `railway.json` configuration
 5. Click "Deploy"
+6. **IMPORTANT:** Add environment variables (see below) before deployment or redeploy after adding them
 
 ## Manual Setup (CLI)
 
