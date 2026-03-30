@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy } from 'lucide-react';
+import { buildApiUrl } from '../services/apiClient';
 
 type EndpointStatus = {
   name: string;
@@ -11,14 +12,14 @@ type EndpointStatus = {
 
 const testEndpoint = async (name: string, path: string): Promise<EndpointStatus> => {
   try {
-    const res = await fetch(path, { method: 'GET' });
-    const ok = res.status !== 404;
+    const res = await fetch(buildApiUrl(path), { method: 'GET', credentials: 'include' });
+    const ok = res.status < 500;
     return {
       name,
       path,
       ok,
       status: res.status,
-      detail: ok ? 'Reachable' : 'Not deployed (404)',
+      detail: ok ? 'Reachable' : 'Unavailable',
     };
   } catch (err: any) {
     return {
@@ -47,6 +48,7 @@ const BackendStatusCard: React.FC = () => {
     (async () => {
       setChecking(true);
       const results = await Promise.all([
+        testEndpoint('Readiness', '/api/ready'),
         testEndpoint('Health', '/api/health'),
         testEndpoint('Leaderboard', '/api/leaderboard'),
         testEndpoint('Auth Session', '/api/auth/session'),

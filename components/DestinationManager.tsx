@@ -27,6 +27,7 @@ import {
   type AccountChannel,
   type OAuthPlatform as OAuthServicePlatform,
 } from '../services/oauthService';
+import { apiRequest } from '../services/apiClient';
 
 type ConnectedPlatformsSummary = {
   youtube?: { channelName?: string };
@@ -310,10 +311,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     } else if (option.oauthPlatform === 'twitch') {
       if (isPlatformConnected('twitch')) {
         try {
-          const res = await fetch('/api/destinations/twitch/stream-key', {
-            headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` }, // Simple session token retrieval
-          });
-          const data = await res.json();
+          const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
+            '/api/destinations/twitch/stream-key',
+            {
+              headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+            },
+          );
           if (data.streamKey) {
             onAddDestination(
               createOAuthDestination(Platform.TWITCH, {
@@ -323,18 +326,21 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               }),
             );
           }
-        } catch (e) {
+        } catch {
           safeAlert('Failed to get Twitch key');
         }
       } else handleConnectOAuth('twitch');
     } else if (option.oauthPlatform === 'facebook') {
       if (isPlatformConnected('facebook')) {
         try {
-          const res = await fetch('/api/destinations/facebook/create-live', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
-          });
-          const data = await res.json();
+          const data = await apiRequest<{ streamUrl?: string }>(
+            '/api/destinations/facebook/create-live',
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+              body: {},
+            },
+          );
           if (data.streamUrl) {
             onAddDestination(
               createOAuthDestination(Platform.FACEBOOK, {
@@ -344,7 +350,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               }),
             );
           }
-        } catch (e) {
+        } catch {
           safeAlert('Failed to create Facebook live');
         }
       } else handleConnectOAuth('facebook');
