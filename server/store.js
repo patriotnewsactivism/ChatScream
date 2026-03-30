@@ -30,6 +30,10 @@ const parseBoolean = (value) =>
 
 const postgresUrl = String(process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
 const redisUrl = String(process.env.REDIS_URL || '').trim();
+const identityStorageMode = String(process.env.IDENTITY_STORAGE_MODE || 'managed')
+  .trim()
+  .toLowerCase();
+const managedIdentityRequired = identityStorageMode !== 'local';
 const managedIdentityConfigured = Boolean(postgresUrl && redisUrl);
 let managedIdentityEnabled = managedIdentityConfigured;
 
@@ -37,8 +41,16 @@ let identityClients = null;
 let identityInitPromise = null;
 
 const sessionKey = (token) => `chatscream:session:${token}`;
+const ensureManagedIdentityAvailable = () => {
+  if (managedIdentityRequired && !managedIdentityEnabled) {
+    throw new Error(
+      'Managed identity storage is required but unavailable. Configure POSTGRES_URL and REDIS_URL (or set IDENTITY_STORAGE_MODE=local for explicit local development only).',
+    );
+  }
+};
 
 const getIdentityClients = async () => {
+  ensureManagedIdentityAvailable();
   if (!managedIdentityEnabled) return null;
   if (identityClients) return identityClients;
   if (identityInitPromise) return identityInitPromise;
@@ -62,10 +74,13 @@ const getIdentityClients = async () => {
     identityClients = { pool, db, redis };
     return identityClients;
   })().catch((error) => {
-    console.error('Managed identity storage unavailable. Falling back to local runtime store.', error);
+    console.error('Managed identity storage unavailable.', error);
     managedIdentityEnabled = false;
     identityClients = null;
     identityInitPromise = null;
+    if (managedIdentityRequired) {
+      throw error;
+    }
     return null;
   });
 
@@ -73,11 +88,20 @@ const getIdentityClients = async () => {
 };
 
 export const isManagedIdentityStorageEnabled = () => managedIdentityEnabled;
+export const isManagedIdentityStorageRequired = () => managedIdentityRequired;
 export const getIdentityStorageMode = () => (managedIdentityEnabled ? 'postgres+redis' : 'local');
 
 export const initIdentityStorage = async () => {
+  if (managedIdentityRequired && !managedIdentityConfigured) {
+    throw new Error(
+      'Missing managed identity storage configuration. Set POSTGRES_URL and REDIS_URL (and optional TLS flags).',
+    );
+  }
   if (!managedIdentityEnabled) return 'local';
   const clients = await getIdentityClients();
+  if (managedIdentityRequired && !clients) {
+    throw new Error('Managed identity storage failed to initialize.');
+  }
   return clients ? 'postgres+redis' : 'local';
 };
 
@@ -177,6 +201,7 @@ export const putUser = async (record) => {
       });
     return;
   }
+  ensureManagedIdentityAvailable();
 
   writeState((state) => {
     state.users[record.uid] = record;
@@ -194,6 +219,7 @@ export const getUserByUid = async (uid) => {
     if (!result) return null;
     return { ...result, passwordHash: result.passwordHash }; // normalize naming
   }
+  ensureManagedIdentityAvailable();
   return loadState().users[uid] || null;
 };
 
@@ -206,6 +232,7 @@ export const getUserByEmail = async (email) => {
     });
     return result || null;
   }
+  ensureManagedIdentityAvailable();
   const uid = loadState().usersByEmail[norm];
   return uid ? loadState().users[uid] : null;
 };
@@ -215,6 +242,7 @@ export const listUsers = async () => {
     const { db } = await getIdentityClients();
     return await db.select().from(schema.users);
   }
+  ensureManagedIdentityAvailable();
   return Object.values(loadState().users);
 };
 
@@ -229,6 +257,7 @@ export const saveSession = async (session) => {
     }
     return;
   }
+  ensureManagedIdentityAvailable();
   writeState((state) => {
     state.sessions[session.token] = session;
   });
@@ -240,6 +269,7 @@ export const getSession = async (token) => {
     const data = await redis.get(sessionKey(token));
     return data ? JSON.parse(data) : null;
   }
+  ensureManagedIdentityAvailable();
   return loadState().sessions[token] || null;
 };
 
@@ -249,6 +279,7 @@ export const removeSession = async (token) => {
     await redis.del(sessionKey(token));
     return;
   }
+  ensureManagedIdentityAvailable();
   writeState((state) => {
     delete state.sessions[token];
   });
