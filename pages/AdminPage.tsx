@@ -9,6 +9,7 @@ import {
   getAccessListConfig,
   setAccessListConfig,
   setUserAccessOverrides,
+  setUserAdminStatus,
   ensureAffiliateForSignedInUser,
   type AccessListConfig,
   getOAuthPublicConfig,
@@ -57,10 +58,7 @@ const AdminPage: React.FC = () => {
     return `${origin}/signup?ref=${encodeURIComponent(myAffiliateCode)}`;
   }, [myAffiliateCode]);
 
-  const isMaster = useMemo(() => {
-    const email = user?.email ? normalizeEmail(user.email) : '';
-    return email === 'mreardon@wtpnews.org' || userProfile?.role === 'admin';
-  }, [user?.email, userProfile?.role]);
+  const isMaster = useMemo(() => userProfile?.role === 'admin', [userProfile?.role]);
 
   useEffect(() => {
     if (!user) return;
@@ -195,12 +193,7 @@ const AdminPage: React.FC = () => {
   const handleGrantAdmin = async (uid: string) => {
     setLookupStatus('Applying admin access…');
     try {
-      await setUserAccessOverrides(uid, {
-        role: 'admin',
-        betaTester: true,
-        plan: 'enterprise',
-        status: 'active',
-      });
+      await setUserAdminStatus(uid, true);
       setLookupStatus('Admin access applied.');
     } catch (err: any) {
       setLookupStatus(err?.message || 'Failed to apply admin access.');

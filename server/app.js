@@ -875,8 +875,7 @@ const buildSessionPayload = async (uid, existingToken, existingExpiry) => {
   };
 };
 
-const isAdmin = (profile) =>
-  profile?.role === 'admin' || normalizeEmail(profile?.email || '') === 'mreardon@wtpnews.org';
+const isAdmin = (profile) => profile?.role === 'admin';
 
 const requireAdmin = (req, res, next) => {
   if (!isAdmin(req.auth?.profile)) {
@@ -1693,11 +1692,19 @@ app.put('/api/config/access', requireAuth, requireAdmin, (req, res) => {
   const betaTesters = Array.isArray(req.body?.betaTesters)
     ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
     : [];
+  const adminUids = Array.isArray(req.body?.adminUids)
+    ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
+    ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
   setConfig(
     'access',
     {
       admins: [...new Set(admins)],
       betaTesters: [...new Set(betaTesters)],
+      adminUids: [...new Set(adminUids)],
+      betaTesterUids: [...new Set(betaTesterUids)],
     },
     req.auth.profile.uid,
   );
@@ -1715,11 +1722,19 @@ app.post('/api/access/list', requireAuth, requireAdmin, (req, res) => {
   const betaTesters = Array.isArray(req.body?.betaTesters)
     ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
     : [];
+  const adminUids = Array.isArray(req.body?.adminUids)
+    ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
+    ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
   setConfig(
     'access',
     {
       admins: [...new Set(admins)],
       betaTesters: [...new Set(betaTesters)],
+      adminUids: [...new Set(adminUids)],
+      betaTesterUids: [...new Set(betaTesterUids)],
     },
     req.auth.profile.uid,
   );
@@ -1784,6 +1799,61 @@ app.patch(
       },
     };
     await putUser({ ...record, profile });
+    res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
+  }),
+);
+
+app.post(
+  '/api/admin/users/:uid/admin',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const targetUid = String(req.params.uid || '').trim();
+    if (!targetUid) {
+      res.status(400).json({ message: 'User id is required.' });
+      return;
+    }
+
+    const record = await getUserByUid(targetUid);
+    if (!record) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+
+    const makeAdmin = req.body?.isAdmin === true;
+    const profile = {
+      ...record.profile,
+      role: makeAdmin ? 'admin' : 'user',
+      betaTester: makeAdmin ? true : Boolean(record.profile?.betaTester),
+      subscription: {
+        ...record.profile.subscription,
+        plan: makeAdmin ? 'enterprise' : record.profile.subscription?.plan || 'free',
+        status: makeAdmin ? 'active' : record.profile.subscription?.status || 'active',
+        betaOverride: makeAdmin ? true : record.profile.subscription?.betaOverride,
+      },
+    };
+
+    await putUser({ ...record, profile });
+
+    const currentAccessConfig = getConfig('access') || {};
+    const nextAdminUids = new Set(
+      Array.isArray(currentAccessConfig.adminUids) ? currentAccessConfig.adminUids : [],
+    );
+    if (makeAdmin) {
+      nextAdminUids.add(targetUid);
+    } else {
+      nextAdminUids.delete(targetUid);
+    }
+
+    setConfig(
+      'access',
+      {
+        ...(currentAccessConfig || {}),
+        adminUids: Array.from(nextAdminUids),
+      },
+      req.auth.profile.uid,
+    );
+
     res.json({ success: true, profile: getPublicProfile({ ...record, profile }) });
   }),
 );

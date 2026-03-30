@@ -106,7 +106,7 @@ const PLATFORM_INFO = {
 };
 
 const OAuthSetup: React.FC = () => {
-  const { user, userProfile } = useAuth();
+  const { userProfile } = useAuth();
   const [config, setConfig] = useState<OAuthConfig>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,8 +120,7 @@ const OAuthSetup: React.FC = () => {
     twitch: true,
   });
 
-  const isAdmin =
-    userProfile?.role === 'admin' || user?.email?.toLowerCase() === 'mreardon@wtpnews.org';
+  const isAdmin = userProfile?.role === 'admin';
 
   const isFacebookPlatform = (platform: PlatformKey): platform is 'facebook' =>
     platform === 'facebook';

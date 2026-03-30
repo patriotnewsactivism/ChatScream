@@ -16,7 +16,7 @@ const planMinutes: Record<string, number> = {
 
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user, userProfile, logout } = useAuth();
+  const { userProfile, logout } = useAuth();
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
   const planLabel = getPlanById(plan)?.name || 'Free';
@@ -24,7 +24,7 @@ const CreatorDashboard: React.FC = () => {
   const referralLink = typeof window === 'undefined' || !referralCode
     ? ''
     : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
-  const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org' || userProfile?.role === 'admin';
+  const canAccessAdmin = userProfile?.role === 'admin';
 
   const copyToClipboard = async (text: string) => {
     if (!text) return;

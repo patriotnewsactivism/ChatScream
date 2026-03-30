@@ -1,7 +1,5 @@
 import { ApiRequestError, apiRequest } from './apiClient';
 
-const MASTER_EMAILS = ['mreardon@wtpnews.org'];
-const DEFAULT_BETA_TESTERS = ['leroytruth247@gmail.com'];
 const PENDING_AUTH_REFERRAL_KEY = 'pending_auth_referral';
 const SESSION_STORAGE_KEY = 'chatscream.auth.session';
 
@@ -64,12 +62,6 @@ const sanitizeDisplayName = (value: string | null, fallbackEmail: string | null)
   if (value && value.trim()) return value.trim();
   if (fallbackEmail && fallbackEmail.trim()) return fallbackEmail.trim();
   return 'User';
-};
-
-const isMasterEmail = (email?: string | null): boolean => {
-  if (!email) return false;
-  const normalized = normalizeEmail(email);
-  return MASTER_EMAILS.includes(normalized);
 };
 
 const parseSessionStorage = (rawValue: string | null): StoredSession | null => {
@@ -536,6 +528,8 @@ export interface AffiliateCode {
 export interface AccessListConfig {
   admins: string[];
   betaTesters: string[];
+  adminUids?: string[];
+  betaTesterUids?: string[];
 }
 
 export interface OAuthPublicConfig {
@@ -950,8 +944,10 @@ export const setOAuthPublicConfig = async (patch: Partial<OAuthPublicConfig>): P
 
 export const getAccessListConfig = async (): Promise<AccessListConfig> => {
   const fallback: AccessListConfig = {
-    admins: MASTER_EMAILS.map(normalizeEmail),
-    betaTesters: DEFAULT_BETA_TESTERS.map(normalizeEmail),
+    admins: [],
+    betaTesters: [],
+    adminUids: [],
+    betaTesterUids: [],
   };
 
   const response = await tryRequestVariants<unknown>(
@@ -970,20 +966,34 @@ export const getAccessListConfig = async (): Promise<AccessListConfig> => {
   const betaTesters = Array.isArray(data?.betaTesters)
     ? data.betaTesters.map((value) => normalizeEmail(toStringValue(value))).filter(Boolean)
     : fallback.betaTesters;
+  const adminUids = Array.isArray(data?.adminUids)
+    ? data.adminUids.map((value) => toStringValue(value).trim()).filter(Boolean)
+    : fallback.adminUids || [];
+  const betaTesterUids = Array.isArray(data?.betaTesterUids)
+    ? data.betaTesterUids.map((value) => toStringValue(value).trim()).filter(Boolean)
+    : fallback.betaTesterUids || [];
 
   return {
-    admins: Array.from(new Set(admins.length ? admins : fallback.admins)),
-    betaTesters: Array.from(new Set(betaTesters.length ? betaTesters : fallback.betaTesters)),
+    admins: Array.from(new Set(admins)),
+    betaTesters: Array.from(new Set(betaTesters)),
+    adminUids: Array.from(new Set(adminUids)),
+    betaTesterUids: Array.from(new Set(betaTesterUids)),
   };
 };
 
 export const setAccessListConfig = async (
   admins: string[],
   betaTesters: string[],
+  adminUids: string[] = [],
+  betaTesterUids: string[] = [],
 ): Promise<void> => {
   const payload = {
     admins: Array.from(new Set(admins.map(normalizeEmail).filter(Boolean))),
     betaTesters: Array.from(new Set(betaTesters.map(normalizeEmail).filter(Boolean))),
+    adminUids: Array.from(new Set(adminUids.map((value) => value.trim()).filter(Boolean))),
+    betaTesterUids: Array.from(
+      new Set(betaTesterUids.map((value) => value.trim()).filter(Boolean)),
+    ),
   };
 
   await tryRequestVariants(
@@ -1054,6 +1064,13 @@ export const setUserAccessOverrides = async (
   );
 };
 
+export const setUserAdminStatus = async (uid: string, isAdmin: boolean): Promise<void> => {
+  await authRequest(`/api/admin/users/${encodeURIComponent(uid)}/admin`, {
+    method: 'POST',
+    body: { isAdmin },
+  });
+};
+
 export const ensureAffiliateForSignedInUser = async (): Promise<string> => {
   const currentUser = getCurrentAuthUser();
   if (!currentUser) return '';
@@ -1078,22 +1095,8 @@ export const ensureAffiliateForSignedInUser = async (): Promise<string> => {
 
 export const applyLocalAccessOverrides = (
   profile: UserProfile | null,
-  email?: string | null,
 ): UserProfile | null => {
-  if (!profile) return profile;
-  if (!isMasterEmail(email)) return profile;
-
-  return {
-    ...profile,
-    role: 'admin',
-    betaTester: true,
-    subscription: {
-      ...profile.subscription,
-      plan: 'enterprise',
-      status: 'active',
-      betaOverride: true,
-    },
-  };
+  return profile;
 };
 
 export const onAuthChange = (callback: AuthListener) => {

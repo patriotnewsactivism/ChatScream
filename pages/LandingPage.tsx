@@ -58,7 +58,7 @@ import {
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeScreamTier, setActiveScreamTier] = useState(0);
@@ -99,7 +99,7 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  const canAccessAdmin = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org';
+  const canAccessAdmin = userProfile?.role === 'admin';
 
   const screamTiers = [
     {
