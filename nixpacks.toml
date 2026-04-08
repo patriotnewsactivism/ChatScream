@@ -1,11 +1,5 @@
-# ChatScream Nixpacks Configuration for Railway
-# Installs FFmpeg for server-side RTMP relay/transcoding
+# ChatScream Railway Configuration
+# Only adding FFmpeg for RTMP relay - Railway auto-detects Node.js build/start
 
 [phases.setup]
-aptPkgs = ["ffmpeg"]
-
-[phases.build]
-cmds = ["npm ci", "npm run build"]
-
-[start]
-cmd = "node server/railway.js"
+nixPkgs = ["ffmpeg"]
