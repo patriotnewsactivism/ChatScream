@@ -112,6 +112,27 @@ app.use(
     credentials: true,
   }),
 );
+// ── Stripe Webhook (must be BEFORE express.json to get raw body) ──────────
+app.post(
+  '/api/webhooks/stripe',
+  express.raw({ type: 'application/json' }),
+  (() => {
+    let handler = null;
+    return async (req, res) => {
+      if (!handler) {
+        try {
+          const { createStripeWebhookHandler } = await import('./webhooks/stripe.js');
+          handler = createStripeWebhookHandler({ getUserByUid, putUser });
+        } catch (err) {
+          console.error('Failed to load Stripe webhook handler:', err);
+          return res.status(500).json({ error: 'Webhook handler not available' });
+        }
+      }
+      return handler(req, res);
+    };
+  })(),
+);
+
 app.use(express.json({ limit: '2mb' }));
 
 const asyncHandler = (handler) => (req, res, next) =>
@@ -179,9 +200,22 @@ app.post(
       return;
     }
 
-    const { filename, originalname, mimetype } = req.file;
+    const { originalname, mimetype } = req.file;
     const baseUrl = getServerBaseUrl(req);
-    const url = `${baseUrl}/uploads/${filename}`;
+
+    // Use S3-compatible storage if configured, otherwise local fallback
+    let url;
+    let storageKey;
+    try {
+      const { uploadFile } = await import('./storage.js');
+      const result = await uploadFile(req.file, baseUrl);
+      url = result.url;
+      storageKey = result.key;
+    } catch {
+      // Fallback to legacy local path
+      url = `${baseUrl}/uploads/${req.file.filename}`;
+      storageKey = req.file.filename;
+    }
 
     let type = 'image';
     if (mimetype.startsWith('video/')) type = 'video';
@@ -192,13 +226,24 @@ app.post(
       type,
       url,
       name: originalname,
-      filename,
+      filename: req.file.filename || storageKey,
+      storageKey,
     };
 
     addMediaAsset(asset);
     res.status(201).json({ asset });
   }),
 );
+
+// Storage info endpoint (for admin/debugging)
+app.get('/api/storage/info', asyncHandler(async (_req, res) => {
+  try {
+    const { getStorageInfo } = await import('./storage.js');
+    res.json(getStorageInfo());
+  } catch {
+    res.json({ backend: 'local', warning: 'Storage module not loaded' });
+  }
+}));
 
 app.post(
   '/api/ai/stream-metadata',
