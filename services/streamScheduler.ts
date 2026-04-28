@@ -151,7 +151,7 @@ export class StreamScheduler {
             userId,
             title,
             description,
-            scheduledTime: scheduledTime.toISOString(),
+            scheduledAt: scheduledTime.toISOString(),
             destinations,
             ...options,
           },
@@ -202,13 +202,10 @@ export class StreamScheduler {
     }
 
     try {
-      const response = await apiRequest<{ success: boolean }>('/api/streams/schedule/update', {
-        method: 'PUT',
+      const response = await apiRequest<{ success: boolean; schedule?: unknown }>(`/api/streams/schedule/${streamId}`, {
+        method: 'PATCH',
         token: token(),
-        body: {
-          streamId,
-          ...updates,
-        },
+        body: updates,
       });
 
       if (response.success) {
@@ -237,10 +234,9 @@ export class StreamScheduler {
     }
 
     try {
-      const response = await apiRequest<{ success: boolean }>('/api/streams/schedule/cancel', {
-        method: 'POST',
+      const response = await apiRequest<{ success: boolean }>(`/api/streams/schedule/${streamId}`, {
+        method: 'DELETE',
         token: token(),
-        body: { streamId },
       });
 
       if (response.success) {
@@ -333,15 +329,15 @@ export class StreamScheduler {
   ): Promise<ScheduledStream[]> {
     try {
       const url = status
-        ? `/api/streams/schedule?userId=${encodeURIComponent(userId)}&status=${status}`
-        : `/api/streams/schedule?userId=${encodeURIComponent(userId)}`;
+        ? `/api/streams/schedule?status=${status}`
+        : '/api/streams/schedule';
 
-      const response = await apiRequest<{ streams: ScheduledStream[] }>(url, {
+      const response = await apiRequest<{ schedules: ScheduledStream[] }>(url, {
         method: 'GET',
         token: token(),
       });
 
-      return response.streams || [];
+      return response.schedules || [];
     } catch (error) {
       console.error('Error fetching scheduled streams:', error);
       return [];

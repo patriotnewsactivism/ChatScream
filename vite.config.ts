@@ -30,11 +30,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Legacy Gemini API support
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      // Claude API
-      'import.meta.env.VITE_CLAUDE_API_KEY': JSON.stringify(env.VITE_CLAUDE_API_KEY || ''),
+      // NOTE: API keys removed — AI calls go through the server, not the client.
       // Backend API
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL || ''),
       'import.meta.env.VITE_FUNCTIONS_BASE_URL': JSON.stringify(env.VITE_FUNCTIONS_BASE_URL || ''),
