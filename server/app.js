@@ -165,7 +165,9 @@ const requireAuth = asyncHandler(async (req, res, next) => {
 });
 
 // Multer Setup
-const uploadDir = path.join(process.cwd(), 'uploads');
+const uploadDir = process.env.VERCEL
+  ? path.join('/tmp', 'uploads')
+  : path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
