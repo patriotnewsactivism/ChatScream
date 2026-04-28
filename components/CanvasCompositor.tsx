@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { LayoutMode, BrandingSettings, Scene, SceneSource } from '../types';
 import { ScreamAlert } from '../services/chatScreamer';
+import type { GraphicsState } from './GraphicsOverlay';
 
 interface CanvasCompositorProps {
   layout: LayoutMode;
@@ -15,6 +16,7 @@ interface CanvasCompositorProps {
   activeScene?: Scene | null;
   activeScream?: ScreamAlert | null;
   nowPlaying?: string | null;
+  graphics?: GraphicsState | null; // Scoreboard, timer, lower-third, image overlays
 }
 
 export interface CanvasRef {
@@ -35,6 +37,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     activeScene,
     activeScream,
     nowPlaying,
+    graphics,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -602,6 +605,147 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.textBaseline = 'middle';
         ctx.fillText(`🎶 ${nowPlaying}`, npx + 40, npy + 20);
         ctx.restore();
+      }
+
+      // 9. GRAPHICS OVERLAYS (Scoreboard, Timer, Lower-Third, Custom Images)
+      const gfx = currentProps.graphics;
+      if (gfx) {
+        // Scoreboard
+        if (gfx.scoreboard?.visible) {
+          const sb = gfx.scoreboard;
+          const sbW = 380;
+          const sbH = 56;
+          const sbX = (w - sbW) / 2;
+          const sbY = 20;
+
+          ctx.save();
+          // Team 1 side
+          ctx.fillStyle = sb.team1.color;
+          ctx.fillRect(sbX, sbY, sbW / 2, sbH);
+          // Team 2 side
+          ctx.fillStyle = sb.team2.color;
+          ctx.fillRect(sbX + sbW / 2, sbY, sbW / 2, sbH);
+
+          // Team names
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(sb.team1.name, sbX + sbW / 4, sbY + 6);
+          ctx.fillText(sb.team2.name, sbX + (sbW * 3) / 4, sbY + 6);
+
+          // Scores
+          ctx.font = 'bold 22px sans-serif';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(String(sb.team1.score), sbX + sbW / 4, sbY + sbH - 4);
+          ctx.fillText(String(sb.team2.score), sbX + (sbW * 3) / 4, sbY + sbH - 4);
+
+          // Period/clock center divider
+          ctx.fillStyle = '#000';
+          ctx.fillRect(sbX + sbW / 2 - 30, sbY, 60, sbH);
+          ctx.fillStyle = '#fbbf24';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textBaseline = 'top';
+          ctx.textAlign = 'center';
+          ctx.fillText(sb.period, sbX + sbW / 2, sbY + 8);
+          ctx.font = '12px monospace';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(sb.clock, sbX + sbW / 2, sbY + sbH - 6);
+
+          // Border
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(sbX, sbY, sbW, sbH);
+          ctx.restore();
+        }
+
+        // Timer overlay
+        if (gfx.timer?.visible) {
+          const tm = gfx.timer;
+          const secs = tm.seconds;
+          const mm = Math.floor(secs / 60).toString().padStart(2, '0');
+          const ss = (secs % 60).toString().padStart(2, '0');
+          const timerText = `${mm}:${ss}`;
+
+          ctx.save();
+          const tmW = 260;
+          const tmH = 70;
+          const tmX = (w - tmW) / 2;
+          const tmY = (h - tmH) / 2;
+
+          ctx.fillStyle = 'rgba(0,0,0,0.8)';
+          ctx.beginPath();
+          ctx.roundRect(tmX, tmY, tmW, tmH, 12);
+          ctx.fill();
+
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 32px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(timerText, tmX + tmW / 2, tmY + tmH / 2 + (tm.label ? 6 : 0));
+
+          if (tm.label) {
+            ctx.font = '13px sans-serif';
+            ctx.fillStyle = '#a5b4fc';
+            ctx.fillText(tm.label, tmX + tmW / 2, tmY + 18);
+          }
+          ctx.restore();
+        }
+
+        // Custom lower-third (overrides branding L3 when visible)
+        if (gfx.lowerThird?.visible && (gfx.lowerThird.name || gfx.lowerThird.title)) {
+          const l3 = gfx.lowerThird;
+          const l3X = 60;
+          const l3Y = h - 160;
+          ctx.save();
+
+          ctx.fillStyle = l3.bgColor;
+          ctx.fillRect(l3X, l3Y, 400, 50);
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(l3.name, l3X + 20, l3Y + 25);
+
+          if (l3.title) {
+            ctx.fillStyle = l3.accentColor;
+            ctx.fillRect(l3X, l3Y + 50, 300, 30);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText(l3.title, l3X + 20, l3Y + 65);
+          }
+          ctx.restore();
+        }
+
+        // Custom image overlays
+        if (gfx.images) {
+          gfx.images.forEach((img) => {
+            if (!img.visible || !img.url) return;
+            const cached = imageCacheRef.current.get(img.url);
+            if (!cached) {
+              // Load and cache the image
+              const el = new Image();
+              el.crossOrigin = 'anonymous';
+              el.src = img.url;
+              imageCacheRef.current.set(img.url, el);
+              return;
+            }
+            if (!cached.complete || cached.naturalWidth === 0) return;
+
+            const imgW = cached.naturalWidth * img.scale;
+            const imgH = cached.naturalHeight * img.scale;
+            let ix = 0, iy = 0;
+            const pad = 20;
+            switch (img.position) {
+              case 'top-left':     ix = pad;            iy = pad;            break;
+              case 'top-right':    ix = w - imgW - pad; iy = pad;            break;
+              case 'bottom-left':  ix = pad;            iy = h - imgH - pad; break;
+              case 'bottom-right': ix = w - imgW - pad; iy = h - imgH - pad; break;
+              case 'center':       ix = (w - imgW) / 2; iy = (h - imgH) / 2; break;
+            }
+            ctx.drawImage(cached, ix, iy, imgW, imgH);
+          });
+        }
       }
 
       animationId = requestAnimationFrame(draw);

@@ -13,7 +13,10 @@ import { useAudioPipeline } from './hooks/useAudioPipeline';
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { useAutoCaption } from './hooks/useAutoCaption';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useResourceGuard } from './hooks/useResourceGuard';
+import { useLocalRecording } from './hooks/useLocalRecording';
 import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
+import ProgramPreview from './components/ProgramPreview';
 import DestinationManager from './components/DestinationManager';
 import LayoutSelector from './components/LayoutSelector';
 import MediaBin from './components/MediaBin';
@@ -24,6 +27,8 @@ import AuthStatusBanner from './components/AuthStatusBanner';
 import ChatStream from './components/ChatStream';
 import MusicPlayer from './components/MusicPlayer';
 import SceneSelector from './components/SceneSelector';
+import GraphicsOverlay, { defaultGraphicsState, GraphicsState } from './components/GraphicsOverlay';
+import ResourceHealthBar from './components/ResourceHealthBar';
 import { RTMPSender } from './services/RTMPSender';
 import { ClipBuffer } from './services/clipBuffer';
 import {
@@ -56,6 +61,10 @@ import {
   Copy,
   Check,
   X,
+  SplitSquareVertical,
+  Trophy,
+  Pause,
+  Circle,
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -84,9 +93,18 @@ const App: React.FC = () => {
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   // sidebar / bottom-tab navigation
-  const [activeTab, setActiveTab] = useState<'studio' | 'destinations' | 'branding' | 'media'>(
+  const [activeTab, setActiveTab] = useState<'studio' | 'destinations' | 'branding' | 'media' | 'graphics'>(
     'studio',
   );
+
+  // Switcher: program/preview multiview
+  const [multiviewEnabled, setMultiviewEnabled] = useState(false);
+
+  // Graphics/scoreboard overlay state
+  const [graphicsState, setGraphicsState] = useState<GraphicsState>(defaultGraphicsState);
+
+  // Resource guard — protects phones from freezing
+  const resourceGuard = useResourceGuard(true);
 
   // canvas / media state
   const [layout, setLayout] = useState<LayoutMode>(LayoutMode.FULL_CAM);
@@ -153,6 +171,9 @@ const App: React.FC = () => {
   const rtmpSenderRef = useRef<RTMPSender | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
+
+  // Safe local recording (chunked, memory-aware)
+  const localRecording = useLocalRecording({ quality: 'auto' }, resourceGuard.level);
   const clipBufferRef = useRef<ClipBuffer | null>(null);
 
   // audio pipeline
@@ -405,31 +426,22 @@ const App: React.FC = () => {
   };
 
   const toggleRecording = () => {
-    if (appState.isRecording) {
-      mediaRecorderRef.current?.stop();
+    if (localRecording.isRecording) {
+      localRecording.stopRecording();
       setAppState((prev) => ({ ...prev, isRecording: false }));
     } else {
+      // Safety check for low-memory devices
+      if (!resourceGuard.safeToEnable('recording')) {
+        setMobileTip('⚠️ Device memory too low to record safely. Close other apps and try again.');
+        return;
+      }
       const canvasStream = canvasRef.current?.getStream();
       if (!canvasStream || !combinedStream) return;
       const combined = new MediaStream([
         ...canvasStream.getVideoTracks(),
         ...combinedStream.getAudioTracks(),
       ]);
-      const recorder = new MediaRecorder(combined, { mimeType: 'video/webm;codecs=vp9' });
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `recording-${Date.now()}.webm`;
-        a.click();
-        recordedChunks.current = [];
-      };
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
+      localRecording.startRecording(combined);
       setAppState((prev) => ({ ...prev, isRecording: true }));
     }
   };
@@ -469,7 +481,61 @@ const App: React.FC = () => {
 
   // ── shared canvas preview + overlay ───────────────────────────────────────
 
-  const canvasPreview = (
+  // Multiview TAKE handler — pushes preview layout → program (live)
+  const handleMultiviewTake = useCallback(
+    (newLayout: LayoutMode, newScene: Scene | null) => {
+      setLayout(newLayout);
+      setActiveScene(newScene);
+    },
+    [],
+  );
+
+  const canvasPreview = multiviewEnabled ? (
+    // ── Switcher-style Program / Preview split ──
+    <div className="w-full space-y-2">
+      <ProgramPreview
+        programLayout={layout}
+        programScene={activeScene || null}
+        cameraStream={cameraStream}
+        screenStream={screenStream}
+        activeMediaUrl={activeImageUrl}
+        activeVideoUrl={activeVideoUrl}
+        backgroundUrl={activeBackgroundUrl}
+        videoVolume={videoVolume}
+        branding={branding}
+        showWatermark={userProfile?.subscription?.plan === 'free'}
+        activeScream={activeScream || null}
+        nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
+        onTake={handleMultiviewTake}
+        programCanvasRef={canvasRef}
+        compact={isMobile}
+        graphics={graphicsState}
+      />
+      {/* Quick controls bar (below multiview) */}
+      <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
+        <button onClick={toggleCamera} className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Toggle Camera (F)">
+          {cameraStream ? <Video size={18} /> : <VideoOff size={18} />}
+        </button>
+        {isMobile && cameraStream && (
+          <button onClick={flipCamera} className="p-2 rounded-full bg-gray-800 text-gray-400" title="Flip Camera"><Layers size={18} /></button>
+        )}
+        <button onClick={toggleScreen} className={`p-2 rounded-full ${screenStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Share Screen"><Monitor size={18} /></button>
+        <button onClick={() => setIsMicMuted((m) => !m)} className={`p-2 rounded-full ${isMicMuted ? 'bg-red-600/30 text-red-400' : 'bg-gray-800 text-gray-400'}`} title="Mute / Unmute Mic (M)">
+          {isMicMuted ? <MicOff size={18} /> : <Mic size={18} />}
+        </button>
+        <div className="h-4 w-[1px] bg-gray-700 mx-1" />
+        <button onClick={saveClip} className="p-2 rounded-full bg-gray-800 text-gray-400 hover:bg-brand-600 hover:text-white transition-all" title="Save Last 30s Clip (C)"><Scissors size={18} /></button>
+        {captionsSupported && (
+          <button onClick={toggleCaptions} className={`p-2 rounded-full ${captionsOn ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Toggle Captions (T)"><Subtitles size={18} /></button>
+        )}
+        <button onClick={() => setShowGuestInvite((v) => !v)} className={`p-2 rounded-full ${guestConnections.length > 0 ? 'bg-green-600' : 'bg-gray-800 text-gray-400'}`} title="Invite Guest Camera">
+          <Users size={18} />
+        </button>
+        <button onClick={() => setShowScreamDemo(true)} className="p-2 rounded-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all" title="Demo Scream Alert"><Zap size={18} /></button>
+      </div>
+    </div>
+  ) : (
+    // ── Single canvas (original behavior) ──
     <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
       <CanvasCompositor
         ref={canvasRef}
@@ -485,6 +551,7 @@ const App: React.FC = () => {
         activeScene={activeScene}
         activeScream={activeScream}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
+        graphics={graphicsState}
       />
 
       {/* Auto-caption overlay */}
@@ -687,24 +754,84 @@ const App: React.FC = () => {
   const studioTabContent = (
     <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
       {!isMobile && (
-        <div className="w-64 border-r border-gray-800 p-4 overflow-y-auto">
+        <div className="w-64 border-r border-gray-800 p-4 overflow-y-auto space-y-4">
           <SceneSelector activeSceneId={activeScene?.id || null} onSceneSelect={setActiveScene} />
+          {/* Graphics panel on desktop sidebar */}
+          <div className="border-t border-gray-700 pt-3">
+            <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} />
+          </div>
         </div>
       )}
 
       <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+        {/* Resource health bar — shows device status on all devices */}
+        <ResourceHealthBar snapshot={resourceGuard} compact={isMobile} />
+
         {canvasPreview}
+
+        {/* Recording status bar when recording */}
+        {localRecording.isRecording && (
+          <div className="flex items-center gap-3 bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-2">
+            <Circle size={12} className="text-red-500 animate-pulse fill-red-500" />
+            <span className="text-xs text-red-300 font-mono">
+              REC {Math.floor(localRecording.duration / 60).toString().padStart(2, '0')}:
+              {(localRecording.duration % 60).toString().padStart(2, '0')}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {localRecording.chunkCount} chunks · {localRecording.totalSizeMB} MB · {localRecording.currentQuality}
+            </span>
+            {localRecording.isPaused && (
+              <span className="text-[10px] text-yellow-400 font-bold uppercase">PAUSED (low memory)</span>
+            )}
+            <button onClick={localRecording.togglePause} className="ml-auto p-1 rounded bg-gray-800 text-gray-400 hover:text-white">
+              <Pause size={14} />
+            </button>
+          </div>
+        )}
 
         {isMobile ? (
           // Mobile: compact single-column controls
           <div className="space-y-3">
-            <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+            <div className="flex items-center gap-2">
+              <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+              <button
+                onClick={() => {
+                  if (!multiviewEnabled && !resourceGuard.safeToEnable('multiview')) {
+                    setMobileTip('⚠️ Not enough memory for multiview. Close other apps.');
+                    return;
+                  }
+                  setMultiviewEnabled((v) => !v);
+                }}
+                className={`p-2 rounded-lg border shrink-0 ${
+                  multiviewEnabled
+                    ? 'bg-brand-500 border-brand-400 text-white'
+                    : 'border-gray-700 text-gray-400'
+                }`}
+                title="Program/Preview Multiview"
+              >
+                <SplitSquareVertical size={18} />
+              </button>
+            </div>
           </div>
         ) : (
           // Desktop: two-column grid
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-4">
-              <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+              <div className="flex items-center gap-2">
+                <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+                <button
+                  onClick={() => setMultiviewEnabled((v) => !v)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    multiviewEnabled
+                      ? 'bg-brand-500 border-brand-400 text-white'
+                      : 'border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                  title="Program/Preview Multiview"
+                >
+                  <SplitSquareVertical size={18} />
+                  <span className="text-xs font-medium">Multiview</span>
+                </button>
+              </div>
               <BackgroundSelector
                 currentBackgroundId={activeBackgroundId}
                 onSelect={(url, id) => {
@@ -826,6 +953,13 @@ const App: React.FC = () => {
             >
               <Palette size={20} />
             </button>
+            <button
+              onClick={() => setActiveTab('graphics')}
+              className={`p-3 rounded-xl ${activeTab === 'graphics' ? 'bg-brand-500' : 'text-gray-500'}`}
+              title="Graphics & Scoreboards"
+            >
+              <Trophy size={20} />
+            </button>
           </nav>
         )}
 
@@ -902,6 +1036,13 @@ const App: React.FC = () => {
               <BrandingPanel settings={branding} onChange={setBranding} />
             </div>
           )}
+
+          {activeTab === 'graphics' && (
+            <div className="p-4 overflow-y-auto max-w-4xl flex-1">
+              <h2 className="text-sm font-bold text-gray-300 mb-3">Graphics & Overlays</h2>
+              <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} compact={isMobile} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -914,6 +1055,7 @@ const App: React.FC = () => {
               { tab: 'media', icon: <Music size={20} />, label: 'Media' },
               { tab: 'destinations', icon: <Radio size={20} />, label: 'Dest.' },
               { tab: 'branding', icon: <Palette size={20} />, label: 'Brand' },
+              { tab: 'graphics', icon: <Trophy size={20} />, label: 'GFX' },
             ] as const
           ).map(({ tab, icon, label }) => (
             <button
