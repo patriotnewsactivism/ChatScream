@@ -73,7 +73,7 @@ class SentryClient {
       message: event.message,
       tags: event.tags || {},
       extra: event.extra || {},
-      user: event.user,
+      user: event.user || this.currentUser,
       sdk: {
         name: 'chatscream-sentry',
         version: '1.0.0',

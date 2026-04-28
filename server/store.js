@@ -370,6 +370,7 @@ export const getPublicProfile = (record) => ({
 export const setConnectedPlatform = async (uid, platform, value) => {
   const user = await getUserByUid(uid);
   if (user) {
+    if (!user.profile.connectedPlatforms) user.profile.connectedPlatforms = {};
     user.profile.connectedPlatforms[platform] = value;
     await putUser(user);
   }
@@ -415,7 +416,13 @@ export const addChatMessage = (msg) =>
   writeState((state) => {
     state.chatMessages.push(msg);
   });
-export const listChatMessages = () => loadState().chatMessages;
+export const listChatMessages = (streamId, limit) => {
+  const all = loadState().chatMessages || [];
+  const filtered = streamId
+    ? all.filter((m) => m.streamId === streamId)
+    : all;
+  return limit && limit > 0 ? filtered.slice(-limit) : filtered;
+};
 export const getAffiliate = (code) => loadState().affiliates[code];
 export const setAffiliate = (aff) =>
   writeState((state) => {
