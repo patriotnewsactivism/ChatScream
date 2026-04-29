@@ -536,6 +536,7 @@ export interface OAuthPublicConfig {
   youtubeClientId: string;
   facebookAppId: string;
   twitchClientId: string;
+  tiktokClientKey: string;
   redirectUriBase: string;
 }
 
@@ -547,6 +548,7 @@ export interface BackendCapabilities {
     youtube: boolean;
     facebook: boolean;
     twitch: boolean;
+    tiktok: boolean;
   };
 }
 
@@ -888,6 +890,7 @@ export const getOAuthPublicConfig = async (): Promise<OAuthPublicConfig> => {
     youtubeClientId: toStringValue(data?.youtubeClientId),
     facebookAppId: toStringValue(data?.facebookAppId),
     twitchClientId: toStringValue(data?.twitchClientId),
+    tiktokClientKey: toStringValue(data?.tiktokClientKey),
     redirectUriBase: toStringValue(data?.redirectUriBase),
   };
 };
@@ -920,6 +923,7 @@ export const getBackendCapabilities = async (): Promise<BackendCapabilities> => 
       youtube: toBooleanValue(streamKeyPlatforms.youtube),
       facebook: toBooleanValue(streamKeyPlatforms.facebook),
       twitch: toBooleanValue(streamKeyPlatforms.twitch),
+      tiktok: toBooleanValue(streamKeyPlatforms.tiktok),
     },
   };
 };
