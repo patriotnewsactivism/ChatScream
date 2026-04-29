@@ -30,6 +30,7 @@ import SceneSelector from './components/SceneSelector';
 import GraphicsOverlay, { defaultGraphicsState, GraphicsState } from './components/GraphicsOverlay';
 import ResourceHealthBar from './components/ResourceHealthBar';
 import VideoTransportBar from './components/VideoTransportBar';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { RTMPSender } from './services/RTMPSender';
 import { ClipBuffer } from './services/clipBuffer';
 import {
