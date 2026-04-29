@@ -29,6 +29,7 @@ import MusicPlayer from './components/MusicPlayer';
 import SceneSelector from './components/SceneSelector';
 import GraphicsOverlay, { defaultGraphicsState, GraphicsState } from './components/GraphicsOverlay';
 import ResourceHealthBar from './components/ResourceHealthBar';
+import VideoTransportBar from './components/VideoTransportBar';
 import { RTMPSender } from './services/RTMPSender';
 import { ClipBuffer } from './services/clipBuffer';
 import {
@@ -314,6 +315,11 @@ const App: React.FC = () => {
   };
 
   const handleMediaDelete = async (id: string) => {
+    // Clear active states if this asset is currently playing/showing
+    if (activeVideoId === id) { setActiveVideoUrl(null); setActiveVideoId(null); }
+    if (activeImageId === id) { setActiveImageUrl(null); setActiveImageId(null); }
+    if (activeAudioId === id) { setActiveAudioId(null); }
+
     // If it's a local object URL, just revoke and remove — no server call
     const localUrl = localObjectUrlsRef.current.get(id);
     if (localUrl) {
@@ -825,6 +831,17 @@ const App: React.FC = () => {
         <ResourceHealthBar snapshot={resourceGuard} compact={isMobile} />
 
         {canvasPreview}
+
+        {/* Video transport bar — seek, play/pause, volume for static video */}
+        {activeVideoUrl && (
+          <VideoTransportBar
+            videoElement={canvasRef.current?.getVideoElement() ?? null}
+            videoName={assets.find(a => a.id === activeVideoId)?.name}
+            volume={videoVolume}
+            onVolumeChange={setVideoVolume}
+            onStop={() => { setActiveVideoUrl(null); setActiveVideoId(null); }}
+          />
+        )}
 
         {/* Recording status bar when recording */}
         {localRecording.isRecording && (
