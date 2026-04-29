@@ -8,6 +8,7 @@ import { setUser as setSentryUser } from './services/sentry';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Lazy load heavy components for code splitting
 const Studio = lazy(() => import('./App'));
@@ -148,6 +149,7 @@ const App: React.FC = () => {
         <AuthProvider>
           <SentryUserProvider>
             <AppRouter />
+            <PWAInstallPrompt />
           </SentryUserProvider>
         </AuthProvider>
       </BrowserRouter>
