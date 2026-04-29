@@ -41,6 +41,7 @@ interface OAuthConfig {
   youtube?: ClientIdConfig;
   facebook?: AppIdConfig;
   twitch?: ClientIdConfig;
+  tiktok?: ClientIdConfig;
 }
 
 const DEFAULT_REDIRECT_URI =
@@ -103,6 +104,24 @@ const PLATFORM_INFO = {
       'Note: Client Secret is configured server-side',
     ],
   },
+  tiktok: {
+    name: 'TikTok',
+    icon: Globe,
+    color: 'text-pink-500',
+    bgColor: 'bg-pink-500/10',
+    borderColor: 'border-pink-500/30',
+    consoleUrl: 'https://developers.tiktok.com/apps',
+    scopes: ['user.info.basic'],
+    instructions: [
+      'Go to TikTok for Developers',
+      'Create a new app',
+      'Enable Login Kit',
+      'Add OAuth Redirect URL',
+      'Copy Client Key here',
+      'Note: Client Secret is configured server-side',
+      'For live streaming, you need TikTok LIVE Access (1000+ followers)',
+    ],
+  },
 };
 
 const OAuthSetup: React.FC = () => {
@@ -118,6 +137,7 @@ const OAuthSetup: React.FC = () => {
     youtube: true,
     facebook: true,
     twitch: true,
+    tiktok: true,
   });
 
   const isAdmin = userProfile?.role === 'admin';
@@ -144,7 +164,7 @@ const OAuthSetup: React.FC = () => {
         const capabilities = await getBackendCapabilities();
         setSupportedPlatforms(capabilities.streamKeyPlatforms);
       } catch {
-        setSupportedPlatforms({ youtube: true, facebook: true, twitch: true });
+        setSupportedPlatforms({ youtube: true, facebook: true, twitch: true, tiktok: true });
       }
     };
 
@@ -170,6 +190,11 @@ const OAuthSetup: React.FC = () => {
           redirectUri: oauth.redirectUriBase || DEFAULT_REDIRECT_URI,
           enabled: Boolean(oauth.twitchClientId),
         },
+        tiktok: {
+          clientId: oauth.tiktokClientKey || '',
+          redirectUri: oauth.redirectUriBase || DEFAULT_REDIRECT_URI,
+          enabled: Boolean(oauth.tiktokClientKey),
+        },
       });
     } catch (err) {
       console.error('Failed to load OAuth config:', err);
@@ -194,10 +219,12 @@ const OAuthSetup: React.FC = () => {
         youtubeClientId: config.youtube?.clientId || '',
         facebookAppId: config.facebook?.appId || '',
         twitchClientId: config.twitch?.clientId || '',
+        tiktokClientKey: config.tiktok?.clientId || '',
         redirectUriBase:
           config.youtube?.redirectUri ||
           config.facebook?.redirectUri ||
           config.twitch?.redirectUri ||
+          config.tiktok?.redirectUri ||
           DEFAULT_REDIRECT_URI,
       });
       setSuccess('OAuth configuration saved successfully');
@@ -274,6 +301,8 @@ const OAuthSetup: React.FC = () => {
         return `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${encodeURIComponent(scopes)}`;
       case 'twitch':
         return `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}`;
+      case 'tiktok':
+        return `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}`;
       default:
         return null;
     }
@@ -502,7 +531,9 @@ YOUTUBE_CLIENT_SECRET=
 FACEBOOK_APP_ID=
 FACEBOOK_APP_SECRET=
 TWITCH_CLIENT_ID=
-TWITCH_CLIENT_SECRET=`}
+TWITCH_CLIENT_SECRET=
+TIKTOK_CLIENT_KEY=
+TIKTOK_CLIENT_SECRET=`}
             </pre>
           </div>
         </div>
