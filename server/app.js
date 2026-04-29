@@ -90,6 +90,9 @@ const parseAllowedOrigins = () => {
     'http://127.0.0.1:5173',
     'http://localhost:8787',
     'http://127.0.0.1:8787',
+    'https://chatscream.live',
+    'https://www.chatscream.live',
+    'https://stream-mob-pro.vercel.app',
   ];
   const allOrigins = new Set();
   [...defaults, ...configuredOrigins, appBaseUrl].forEach((origin) =>
