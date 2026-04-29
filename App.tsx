@@ -66,6 +66,7 @@ import {
   Pause,
   Circle,
   FlipHorizontal2,
+  Eye,
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -582,7 +583,7 @@ const App: React.FC = () => {
     </div>
   ) : (
     // ── Single canvas (original behavior) ──
-    <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
+    <div className={`relative w-full ${isMobile ? 'shrink-0' : ''}`} style={{ aspectRatio: '16/9', maxHeight: isMobile ? '45vh' : undefined }}>
       <CanvasCompositor
         ref={canvasRef}
         layout={layout}
@@ -939,6 +940,13 @@ const App: React.FC = () => {
               {appState.isStreaming && !isMobile && (
                 <div className="text-[10px] font-bold text-brand-400 uppercase tracking-tight">
                   {appState.bitrate} kbps
+                </div>
+              )}
+              {appState.isStreaming && destinations.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-900/40 border border-red-500/40 rounded-full">
+                  <Eye size={12} className="text-red-400" />
+                  <span className="text-xs font-bold text-red-200">{destinations.length}</span>
+                  <span className="text-[9px] text-red-400/70">{destinations.length === 1 ? 'dest' : 'dests'} live</span>
                 </div>
               )}
             </div>
