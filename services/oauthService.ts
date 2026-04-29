@@ -5,7 +5,7 @@ import { buildApiUrl } from './apiClient';
 import { getCurrentSessionToken, getOAuthPublicConfig } from './backend';
 
 // Platform types
-export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch';
+export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch' | 'tiktok';
 
 // OAuth Configuration
 export interface OAuthConfig {
@@ -123,6 +123,17 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         redirectUri: baseRedirectUri,
       };
 
+    case 'tiktok':
+      return {
+        clientId: publicConfig.tiktokClientKey || import.meta.env.VITE_TIKTOK_CLIENT_KEY || '',
+        authorizationEndpoint: 'https://www.tiktok.com/v2/auth/authorize/',
+        tokenEndpoint: 'https://open.tiktokapis.com/v2/oauth/token/',
+        scopes: [
+          'user.info.basic',
+        ],
+        redirectUri: baseRedirectUri,
+      };
+
     default:
       throw new Error(`Unsupported OAuth platform: ${platform}`);
   }
@@ -194,6 +205,18 @@ export const getAuthorizationUrl = async (
 ): Promise<string> => {
   const config = await getOAuthConfig(platform);
   const state = createOAuthState(platform, userId);
+
+  // TikTok uses different parameter names
+  if (platform === 'tiktok') {
+    const params = new URLSearchParams({
+      client_key: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: 'code',
+      scope: config.scopes.join(','),
+      state,
+    });
+    return `${config.authorizationEndpoint}?${params.toString()}`;
+  }
 
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -336,6 +359,7 @@ export const getConnectedPlatforms = async (
   youtube?: ConnectedAccount;
   facebook?: ConnectedAccount;
   twitch?: ConnectedAccount;
+  tiktok?: ConnectedAccount;
 }> => {
   try {
     const authHeader = getAuthorizationHeader();
@@ -361,6 +385,7 @@ export const getConnectedPlatforms = async (
       youtube?: ConnectedAccount;
       facebook?: ConnectedAccount;
       twitch?: ConnectedAccount;
+      tiktok?: ConnectedAccount;
     } = {};
 
     if (connected.youtube) {
@@ -384,6 +409,14 @@ export const getConnectedPlatforms = async (
         platform: 'twitch',
         ...connected.twitch,
         expiresAt: new Date(connected.twitch.expiresAt || Date.now()),
+      };
+    }
+
+    if (connected.tiktok) {
+      platforms.tiktok = {
+        platform: 'tiktok',
+        ...connected.tiktok,
+        expiresAt: new Date(connected.tiktok.expiresAt || Date.now()),
       };
     }
 
