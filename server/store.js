@@ -124,7 +124,7 @@ const baseState = () => ({
   referrals: [],
   config: {
     access: {
-      admins: [],
+      admins: ['mreardon@wtpnews.org', 'don@donmatthews.live'],
       betaTesters: [],
       adminUids: [],
       betaTesterUids: [],
