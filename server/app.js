@@ -2371,7 +2371,8 @@ app.post(
         return res.json({ success: true, platform: 'youtube', account: nextYouTube });
       } catch (error) {
         console.error('YouTube OAuth failed:', error);
-        res.status(500).json({ message: 'YouTube connection failed' });
+        const detail = error?.message || error?.statusMessage || String(error);
+        res.status(error?.statusCode || 500).json({ message: `YouTube connection failed: ${detail}` });
       }
       return;
     } else if (platform === 'twitch') {
