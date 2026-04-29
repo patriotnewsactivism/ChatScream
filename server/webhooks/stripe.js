@@ -150,6 +150,40 @@ export const createStripeWebhookHandler = ({ getUserByUid, putUser }) => {
 // ── Event Handlers ────────────────────────────────────────────────────────────
 
 async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
+  // Handle ChatScream one-time donations
+  if (session.metadata?.type === 'chatscream') {
+    const { streamerUid, donorName, message, amountCents } = session.metadata;
+    const amount = Number(amountCents) / 100;
+    console.log(`[Stripe Webhook] ✅ ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`);
+
+    try {
+      const { updateLeaderboardEntry, addChatMessage, flushState } = await import('../store.js');
+      const { randomUUID } = await import('node:crypto');
+
+      // Record the scream for leaderboard
+      updateLeaderboardEntry(streamerUid, amount);
+
+      // Create chat message for the scream alert
+      addChatMessage({
+        id: randomUUID(),
+        userId: 'system',
+        username: 'ChatScream',
+        text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message || ''}"`,
+        isScream: true,
+        screamTier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'normal',
+        donorName,
+        amount,
+        createdAt: new Date().toISOString(),
+        roomId: streamerUid,
+      });
+
+      flushState();
+    } catch (error) {
+      console.error('[Stripe Webhook] Failed to process scream payment:', error);
+    }
+    return; // Don't process as subscription
+  }
+
   const uid = session.client_reference_id || session.metadata?.uid;
   if (!uid) {
     console.error('[Stripe Webhook] checkout.session.completed: no uid in client_reference_id or metadata');

@@ -65,6 +65,7 @@ import {
   Trophy,
   Pause,
   Circle,
+  FlipHorizontal2,
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ const App: React.FC = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [isMirrored, setIsMirrored] = useState(false);
 
   // sidebar / bottom-tab navigation
   const [activeTab, setActiveTab] = useState<'studio' | 'destinations' | 'branding' | 'media' | 'graphics'>(
@@ -243,7 +245,37 @@ const App: React.FC = () => {
 
   // ── media actions ──────────────────────────────────────────────────────────
 
+  // Track local object URLs so we can revoke them on cleanup
+  const localObjectUrlsRef = useRef<Map<string, string>>(new Map());
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      localObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
   const handleMediaUpload = async (file: File, type: MediaType) => {
+    // For video and audio: play locally from device — no upload needed.
+    // This avoids uploading large files during a live stream.
+    if (type === 'video' || type === 'audio') {
+      const localUrl = URL.createObjectURL(file);
+      const localAsset: MediaAsset = {
+        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: file.name,
+        url: localUrl,
+        type,
+        filename: file.name,
+        size: file.size,
+        createdAt: new Date().toISOString(),
+      };
+      localObjectUrlsRef.current.set(localAsset.id, localUrl);
+      setAssets((prev) => [...prev, localAsset]);
+      setMediaError(null);
+      return;
+    }
+
+    // Images: upload to server (small files, needed for overlays/branding)
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', type);
@@ -281,6 +313,16 @@ const App: React.FC = () => {
   };
 
   const handleMediaDelete = async (id: string) => {
+    // If it's a local object URL, just revoke and remove — no server call
+    const localUrl = localObjectUrlsRef.current.get(id);
+    if (localUrl) {
+      URL.revokeObjectURL(localUrl);
+      localObjectUrlsRef.current.delete(id);
+      setAssets((prev) => prev.filter((a) => a.id !== id));
+      setMediaError(null);
+      return;
+    }
+
     try {
       await apiRequest(`/api/media/${id}`, {
         method: 'DELETE',
@@ -510,14 +552,18 @@ const App: React.FC = () => {
         programCanvasRef={canvasRef}
         compact={isMobile}
         graphics={graphicsState}
+        mirrorCamera={isMirrored}
       />
       {/* Quick controls bar (below multiview) */}
       <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
         <button onClick={toggleCamera} className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Toggle Camera (F)">
           {cameraStream ? <Video size={18} /> : <VideoOff size={18} />}
         </button>
-        {isMobile && cameraStream && (
-          <button onClick={flipCamera} className="p-2 rounded-full bg-gray-800 text-gray-400" title="Flip Camera"><Layers size={18} /></button>
+        {cameraStream && (
+          <>
+            <button onClick={flipCamera} className="p-2 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-colors" title="Swap Camera (Front/Back)"><Layers size={18} /></button>
+            <button onClick={() => setIsMirrored((m) => !m)} className={`p-2 rounded-full transition-colors ${isMirrored ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`} title="Mirror Camera"><FlipHorizontal2 size={18} /></button>
+          </>
         )}
         <button onClick={toggleScreen} className={`p-2 rounded-full ${screenStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Share Screen"><Monitor size={18} /></button>
         <button onClick={() => setIsMicMuted((m) => !m)} className={`p-2 rounded-full ${isMicMuted ? 'bg-red-600/30 text-red-400' : 'bg-gray-800 text-gray-400'}`} title="Mute / Unmute Mic (M)">
@@ -552,6 +598,7 @@ const App: React.FC = () => {
         activeScream={activeScream}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         graphics={graphicsState}
+        mirrorCamera={isMirrored}
       />
 
       {/* Auto-caption overlay */}
@@ -573,15 +620,24 @@ const App: React.FC = () => {
           {cameraStream ? <Video size={18} /> : <VideoOff size={18} />}
         </button>
 
-        {/* Flip camera — only on mobile / touch devices */}
-        {isMobile && cameraStream && (
-          <button
-            onClick={flipCamera}
-            className="p-2 rounded-full bg-gray-800 text-gray-400"
-            title="Flip Camera"
-          >
-            <Layers size={18} />
-          </button>
+        {/* Camera swap (front/back) + mirror toggle — always visible when camera active */}
+        {cameraStream && (
+          <>
+            <button
+              onClick={flipCamera}
+              className="p-2 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-colors"
+              title="Swap Camera (Front/Back)"
+            >
+              <Layers size={18} />
+            </button>
+            <button
+              onClick={() => setIsMirrored((m) => !m)}
+              className={`p-2 rounded-full transition-colors ${isMirrored ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+              title="Mirror Camera"
+            >
+              <FlipHorizontal2 size={18} />
+            </button>
+          </>
         )}
 
         <button
