@@ -412,6 +412,77 @@ export const seedLeaderboard = () =>
       { rank: 10, username: 'TurboHostPro', screams: 156, donated: 210, weeklyGain: -3 },
     ];
   });
+// ── Leaderboard ─────────────────────────────────────────────────────────────
+
+/**
+ * Update (or create) a leaderboard entry when a scream donation is received.
+ * Tracks scream count and total donated per streamer, re-ranks after each update.
+ */
+export const updateLeaderboardEntry = (streamerUid, amount) =>
+  writeState((state) => {
+    if (!state.leaderboard) state.leaderboard = [];
+    if (!state.screamHistory) state.screamHistory = [];
+
+    // Find or create entry for this streamer
+    let entry = state.leaderboard.find(
+      (e) => e.uid === streamerUid || e.username === streamerUid,
+    );
+
+    if (entry) {
+      entry.screams = (entry.screams || 0) + 1;
+      entry.donated = (entry.donated || 0) + amount;
+    } else {
+      entry = {
+        uid: streamerUid,
+        username: streamerUid,
+        screams: 1,
+        donated: amount,
+        weeklyGain: 0,
+      };
+      state.leaderboard.push(entry);
+    }
+
+    // Re-rank by scream count (descending)
+    state.leaderboard.sort((a, b) => (b.screams || 0) - (a.screams || 0));
+    state.leaderboard.forEach((e, i) => {
+      const oldRank = e.rank || i + 1;
+      e.rank = i + 1;
+      e.weeklyGain = oldRank - e.rank; // positive = climbed
+    });
+  });
+
+/**
+ * Weekly leaderboard reset. Clears scream counts but preserves usernames.
+ * The #1 streamer gets flagged for a free Pro month.
+ */
+export const resetWeeklyLeaderboard = () =>
+  writeState((state) => {
+    if (!state.leaderboard || state.leaderboard.length === 0) return;
+
+    // Record the winner
+    const winner = state.leaderboard[0];
+    if (!state.weeklyWinners) state.weeklyWinners = [];
+    if (winner) {
+      state.weeklyWinners.push({
+        username: winner.username,
+        uid: winner.uid,
+        screams: winner.screams,
+        donated: winner.donated,
+        weekEnding: new Date().toISOString(),
+        prizeAwarded: false,
+      });
+    }
+
+    // Reset counts
+    state.leaderboard.forEach((e) => {
+      e.screams = 0;
+      e.donated = 0;
+      e.weeklyGain = 0;
+    });
+  });
+
+export const getWeeklyWinners = () => loadState().weeklyWinners || [];
+
 export const addChatMessage = (msg) =>
   writeState((state) => {
     state.chatMessages.push(msg);

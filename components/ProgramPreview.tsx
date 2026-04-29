@@ -41,6 +41,8 @@ interface ProgramPreviewProps {
   compact?: boolean;
   /* Graphics overlays */
   graphics?: GraphicsState | null;
+  /* Mirror camera feed */
+  mirrorCamera?: boolean;
 }
 
 const ProgramPreview: React.FC<ProgramPreviewProps> = ({
@@ -60,6 +62,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
   programCanvasRef,
   compact = false,
   graphics,
+  mirrorCamera = false,
 }) => {
   const previewCanvasRef = useRef<CanvasRef | null>(null);
 
@@ -120,6 +123,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
             activeScream={null}
             nowPlaying={nowPlaying}
             graphics={graphics}
+            mirrorCamera={mirrorCamera}
           />
         </div>
       </div>
@@ -186,6 +190,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
             activeScream={activeScream}
             nowPlaying={nowPlaying}
             graphics={graphics}
+            mirrorCamera={mirrorCamera}
           />
         </div>
       </div>

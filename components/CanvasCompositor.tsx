@@ -17,6 +17,7 @@ interface CanvasCompositorProps {
   activeScream?: ScreamAlert | null;
   nowPlaying?: string | null;
   graphics?: GraphicsState | null; // Scoreboard, timer, lower-third, image overlays
+  mirrorCamera?: boolean; // Horizontally flip the camera feed
 }
 
 export interface CanvasRef {
@@ -38,6 +39,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     activeScream,
     nowPlaying,
     graphics,
+    mirrorCamera = false,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -250,7 +252,16 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.beginPath();
         ctx.rect(x, y, targetW, targetH);
         ctx.clip();
-        ctx.drawImage(video, x + offsetX, y + offsetY, drawnW, drawnH);
+
+        // Mirror the camera feed if enabled (horizontal flip)
+        if (mirrorCamera && video === camVideoRef.current) {
+          ctx.translate(x + targetW, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(video, offsetX, y + offsetY, drawnW, drawnH);
+        } else {
+          ctx.drawImage(video, x + offsetX, y + offsetY, drawnW, drawnH);
+        }
+
         ctx.restore();
       };
 

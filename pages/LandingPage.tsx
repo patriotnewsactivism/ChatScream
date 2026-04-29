@@ -55,6 +55,15 @@ import {
   Settings,
 } from 'lucide-react';
 
+interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  uid?: string;
+  screams: number;
+  donated: number;
+  weeklyGain: number;
+}
+
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -62,8 +71,32 @@ const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeScreamTier, setActiveScreamTier] = useState(0);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
 
   const referralCode = searchParams.get('ref') || '';
+
+  // Fetch live leaderboard data with auto-refresh every 30 seconds
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      try {
+        const apiBase = import.meta.env.VITE_API_URL || '';
+        const res = await fetch(`${apiBase}/api/leaderboard`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.entries && data.entries.length > 0) {
+            setLeaderboardData(data.entries.slice(0, 5));
+          }
+          setLeaderboardLoaded(true);
+        }
+      } catch {
+        // Silently fail — will use fallback data
+      }
+    };
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -930,31 +963,29 @@ const LandingPage: React.FC = () => {
               </div>
 
               <div className="space-y-3">
-                {[
-                  {
-                    rank: 1,
-                    name: 'StreamerKing',
-                    screams: 247,
-                    badge: Crown,
-                    color: 'from-yellow-500 to-amber-500',
-                  },
-                  {
-                    rank: 2,
-                    name: 'GamerGirl99',
-                    screams: 189,
-                    badge: Trophy,
-                    color: 'from-gray-400 to-gray-500',
-                  },
-                  {
-                    rank: 3,
-                    name: 'ProPlayer',
-                    screams: 156,
-                    badge: Trophy,
-                    color: 'from-amber-700 to-amber-800',
-                  },
-                  { rank: 4, name: 'ContentCreator', screams: 98, badge: null, color: null },
-                  { rank: 5, name: 'LiveStreamer', screams: 67, badge: null, color: null },
-                ].map((player) => (
+                {(leaderboardLoaded && leaderboardData.length > 0
+                  ? leaderboardData.map((entry) => ({
+                      rank: entry.rank,
+                      name: entry.username,
+                      screams: entry.screams,
+                      badge: entry.rank === 1 ? Crown : entry.rank <= 3 ? Trophy : null,
+                      color:
+                        entry.rank === 1
+                          ? 'from-yellow-500 to-amber-500'
+                          : entry.rank === 2
+                            ? 'from-gray-400 to-gray-500'
+                            : entry.rank === 3
+                              ? 'from-amber-700 to-amber-800'
+                              : null,
+                    }))
+                  : [
+                      { rank: 1, name: 'StreamerKing', screams: 247, badge: Crown, color: 'from-yellow-500 to-amber-500' },
+                      { rank: 2, name: 'GamerGirl99', screams: 189, badge: Trophy, color: 'from-gray-400 to-gray-500' },
+                      { rank: 3, name: 'ProPlayer', screams: 156, badge: Trophy, color: 'from-amber-700 to-amber-800' },
+                      { rank: 4, name: 'ContentCreator', screams: 98, badge: null, color: null },
+                      { rank: 5, name: 'LiveStreamer', screams: 67, badge: null, color: null },
+                    ]
+                ).map((player) => (
                   <div
                     key={player.rank}
                     className={`flex items-center gap-4 p-4 rounded-xl transition-all ${

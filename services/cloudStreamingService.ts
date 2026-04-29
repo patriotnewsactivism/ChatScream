@@ -1,5 +1,19 @@
 // Cloud Streaming Hours Tracking Service
 // Manages cloud VM streaming time allocation per subscription tier.
+//
+// INFRASTRUCTURE STATUS:
+// ✅ Client-side service: Complete — session management, cost estimation, status tracking
+// ✅ Server API routes: Complete — /api/cloud-streaming/* endpoints in server/app.js
+// ✅ Streaming pipeline: Complete — dual-pipeline (local/cloud) with watermark for free tier
+// ⏳ EC2 Backend: NOT YET DEPLOYED — server routes return mock/seeded data
+//
+// TO COMPLETE CLOUD STREAMING:
+// 1. Provision EC2 instances (GPU-capable, e.g. g4dn.xlarge) with OBS or ffmpeg relay
+// 2. Implement /api/cloud-streaming/sessions/start to spin up EC2 instance
+// 3. Implement /api/cloud-streaming/sessions/end to tear down instance
+// 4. Wire WebRTC or RTMP ingest from browser to cloud instance
+// 5. Route cloud output to RTMP destinations (YouTube, Twitch, etc.)
+// 6. Add billing integration to track actual cloud hours consumed
 
 import { ApiRequestError, apiRequest } from './apiClient';
 import { getCurrentSessionToken } from './backend';

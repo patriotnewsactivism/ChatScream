@@ -24,6 +24,7 @@ import {
   listMediaAssets,
   listUsers,
   loadState,
+  flushState,
   putUser,
   removeMediaAsset,
   removeSession,
@@ -31,6 +32,9 @@ import {
   savePasswordResetToken,
   saveSession,
   seedLeaderboard,
+  updateLeaderboardEntry,
+  resetWeeklyLeaderboard,
+  getWeeklyWinners,
   setAffiliate,
   setCloudUsage,
   setConfig,
@@ -2659,7 +2663,16 @@ app.post(
 app.get('/api/leaderboard', (_req, res) => {
   seedLeaderboard();
   const state = loadState();
-  res.json({ entries: state.leaderboard || [] });
+  const entries = (state.leaderboard || []).slice(0, 10);
+  const winners = getWeeklyWinners().slice(-4); // last 4 weekly winners
+  res.json({ entries, weeklyWinners: winners });
+});
+
+// Admin-only: manual weekly leaderboard reset (or call from cron)
+app.post('/api/leaderboard/reset', requireAuth, requireAdmin, (_req, res) => {
+  resetWeeklyLeaderboard();
+  flushState();
+  res.json({ success: true, message: 'Weekly leaderboard reset. Winner recorded.' });
 });
 
 app.get(
@@ -2870,6 +2883,119 @@ app.post(
     });
 
     res.json({ url: session.url });
+  }),
+);
+
+// ── ChatScreamer Donation Payment ─────────────────────────────────────────────
+// One-time Stripe Checkout for viewers sending a paid ChatScream.
+// Creates a Checkout Session in "payment" mode (not subscription).
+// On completion, the webhook can trigger the scream alert + leaderboard credit.
+app.post(
+  '/api/scream/checkout',
+  asyncHandler(async (req, res) => {
+    const streamerUid = String(req.body?.streamerUid || '').trim();
+    const donorName = String(req.body?.donorName || 'Anonymous').trim().slice(0, 50);
+    const message = String(req.body?.message || '').trim().slice(0, 300);
+    const amountCents = Math.round(Number(req.body?.amount || 0) * 100);
+
+    if (!streamerUid) {
+      return res.status(400).json({ message: 'streamerUid is required.' });
+    }
+    if (amountCents < 500) {
+      return res.status(400).json({ message: 'Minimum scream amount is $5.00.' });
+    }
+    if (amountCents > 50000) {
+      return res.status(400).json({ message: 'Maximum scream amount is $500.00.' });
+    }
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      return res.status(503).json({ message: 'Payments are not configured yet.' });
+    }
+
+    const baseUrl = String(process.env.APP_BASE_URL || '').trim() || getServerBaseUrl(req);
+    const successUrl = `${baseUrl}/scream/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${baseUrl}/scream/cancel`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `ChatScream to ${streamerUid}`,
+              description: message ? `"${message}"` : 'Chat Scream Donation',
+            },
+            unit_amount: amountCents,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        type: 'chatscream',
+        streamerUid,
+        donorName,
+        message,
+        amountCents: String(amountCents),
+      },
+    });
+
+    res.json({ url: session.url, sessionId: session.id });
+  }),
+);
+
+// Endpoint for triggering a scream alert after successful payment (called from success page or webhook)
+app.post(
+  '/api/scream/trigger',
+  asyncHandler(async (req, res) => {
+    const streamerUid = String(req.body?.streamerUid || '').trim();
+    const donorName = String(req.body?.donorName || 'Anonymous').trim();
+    const amount = Number(req.body?.amount || 0);
+    const message = String(req.body?.message || '').trim();
+    const sessionId = String(req.body?.sessionId || '').trim();
+
+    if (!streamerUid || amount < 5) {
+      return res.status(400).json({ message: 'Invalid scream data.' });
+    }
+
+    // Record the scream for leaderboard tracking
+    const screamRecord = {
+      id: randomUUID(),
+      streamerUid,
+      donorName,
+      amount,
+      message,
+      stripeSessionId: sessionId,
+      createdAt: nowIso(),
+    };
+
+    // Store in state for leaderboard aggregation
+    const state = loadState();
+    if (!state.screamHistory) state.screamHistory = [];
+    state.screamHistory.push(screamRecord);
+
+    // Update leaderboard entry for this streamer
+    updateLeaderboardEntry(streamerUid, amount);
+    flushState();
+
+    // Emit real-time alert via chat messages (SSE / polling)
+    addChatMessage({
+      id: randomUUID(),
+      userId: 'system',
+      username: 'ChatScream',
+      text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message}"`,
+      isScream: true,
+      screamTier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'normal',
+      donorName,
+      amount,
+      createdAt: nowIso(),
+      roomId: streamerUid,
+    });
+
+    res.json({ success: true, screamId: screamRecord.id });
   }),
 );
 
