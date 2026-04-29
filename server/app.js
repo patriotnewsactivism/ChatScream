@@ -575,6 +575,8 @@ const getBackendCapabilities = () => {
   const facebookAppSecret = String(process.env.FACEBOOK_APP_SECRET || '').trim();
   const twitchClientId = String(process.env.TWITCH_CLIENT_ID || oauth.twitchClientId || '').trim();
   const twitchClientSecret = String(process.env.TWITCH_CLIENT_SECRET || '').trim();
+  const tiktokClientKey = String(process.env.TIKTOK_CLIENT_KEY || oauth.tiktokClientKey || '').trim();
+  const tiktokClientSecret = String(process.env.TIKTOK_CLIENT_SECRET || '').trim();
 
   return {
     authProviders: {
@@ -584,6 +586,7 @@ const getBackendCapabilities = () => {
       youtube: Boolean(youtubeClientId && youtubeClientSecret),
       facebook: Boolean(facebookAppId && facebookAppSecret),
       twitch: Boolean(twitchClientId && twitchClientSecret),
+      tiktok: Boolean(tiktokClientKey && tiktokClientSecret),
     },
   };
 };
@@ -964,7 +967,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-const OAUTH_PLATFORMS = new Set(['youtube', 'facebook', 'twitch']);
+const OAUTH_PLATFORMS = new Set(['youtube', 'facebook', 'twitch', 'tiktok']);
 const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const parseValidatedUserId = (value) => {
@@ -2280,6 +2283,37 @@ const twitchApiRequest = async (accessToken, pathName) => {
   return response.json();
 };
 
+// --- TIKTOK OAUTH ---
+const TIKTOK_TOKEN_ENDPOINT = 'https://open.tiktokapis.com/v2/oauth/token/';
+const TIKTOK_USERINFO_ENDPOINT = 'https://open.tiktokapis.com/v2/user/info/';
+
+const requestTikTokTokenExchange = async ({ code, redirectUri }) => {
+  const response = await fetch(TIKTOK_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_key: process.env.TIKTOK_CLIENT_KEY || '',
+      client_secret: process.env.TIKTOK_CLIENT_SECRET || '',
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    }),
+  });
+  return response.json();
+};
+
+const tiktokApiRequest = async (accessToken) => {
+  const response = await fetch(
+    `${TIKTOK_USERINFO_ENDPOINT}?fields=open_id,union_id,avatar_url,display_name`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return response.json();
+};
+
 // --- FACEBOOK OAUTH ---
 const FACEBOOK_TOKEN_ENDPOINT = 'https://graph.facebook.com/v18.0/oauth/access_token';
 const FACEBOOK_BASE_URL = 'https://graph.facebook.com/v18.0';
@@ -2367,6 +2401,24 @@ app.post(
       };
       await setConnectedPlatform(uid, 'facebook', nextFacebook);
       return res.json({ success: true, platform: 'facebook', account: nextFacebook });
+    } else if (platform === 'tiktok') {
+      const tokenPayload = await requestTikTokTokenExchange({ code, redirectUri });
+      const accessToken = String(tokenPayload?.access_token || '').trim();
+      if (!accessToken) {
+        return res.status(502).json({ message: 'TikTok token exchange failed.' });
+      }
+      const userPayload = await tiktokApiRequest(accessToken);
+      const userData = userPayload?.data?.user || {};
+      const nextTikTok = {
+        accessToken,
+        refreshToken: String(tokenPayload?.refresh_token || '').trim(),
+        expiresAt: getExpiryFromSeconds(tokenPayload?.expires_in, 86400),
+        accountId: userData.open_id || '',
+        accountName: userData.display_name || 'TikTok User',
+        profileImage: userData.avatar_url || '',
+      };
+      await setConnectedPlatform(uid, 'tiktok', nextTikTok);
+      return res.json({ success: true, platform: 'tiktok', account: nextTikTok });
     }
 
     res.status(400).json({ message: 'Unsupported platform' });

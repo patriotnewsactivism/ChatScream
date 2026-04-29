@@ -18,6 +18,7 @@ import {
   Zap,
   Settings,
   Loader2,
+  Music2,
 } from 'lucide-react';
 import { canAddDestination, type PlanTier } from '../services/stripe';
 import {
@@ -34,6 +35,7 @@ type ConnectedPlatformsSummary = {
   youtube?: { channelName?: string };
   facebook?: { pageName?: string; pageId?: string };
   twitch?: { channelName?: string };
+  tiktok?: { accountName?: string };
 };
 
 interface DestinationManagerProps {
@@ -85,6 +87,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     youtube: true,
     facebook: true,
     twitch: true,
+    tiktok: true,
   });
 
   const safeAlert = (message: string) => {
@@ -111,7 +114,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         const capabilities = await getBackendCapabilities();
         setOauthCapability(capabilities.streamKeyPlatforms);
       } catch {
-        setOauthCapability({ youtube: true, facebook: true, twitch: true });
+        setOauthCapability({ youtube: true, facebook: true, twitch: true, tiktok: true });
       }
     };
 
@@ -149,6 +152,13 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         label: 'Facebook',
         description: 'Go live on your personal profile or managed pages with a single click.',
         icon: <Facebook className="text-blue-500" aria-hidden />,
+      },
+      {
+        platform: Platform.TIKTOK,
+        oauthPlatform: 'tiktok' as const,
+        label: 'TikTok',
+        description: 'Connect your TikTok account for live streaming. Requires TikTok LIVE access.',
+        icon: <Music2 className="text-pink-500" aria-hidden />,
       },
     ],
     [],
