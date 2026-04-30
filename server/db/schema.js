@@ -30,3 +30,10 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   usedAt: timestamp('used_at'),
 });
+
+export const sessions = pgTable('chatscream_sessions', {
+  token: text('token').primaryKey(),
+  data: jsonb('data').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});

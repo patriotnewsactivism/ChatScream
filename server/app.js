@@ -1075,7 +1075,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/ready', (_req, res) => {
   const identityStorage = getIdentityStorageMode();
   const managedRequired = isManagedIdentityStorageRequired();
-  const ready = !managedRequired || identityStorage === 'postgres+redis';
+  const ready = !managedRequired || identityStorage === 'postgres+redis' || identityStorage === 'postgres';
   res.status(ready ? 200 : 503).json({
     ok: ready,
     service: 'chatscream-api',

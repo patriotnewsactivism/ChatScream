@@ -31,7 +31,8 @@ const identityStorageMode = String(process.env.IDENTITY_STORAGE_MODE || 'managed
   .trim()
   .toLowerCase();
 const managedIdentityRequired = identityStorageMode !== 'local';
-const managedIdentityConfigured = Boolean(postgresUrl && redisUrl);
+const managedIdentityConfigured = Boolean(postgresUrl);
+const redisConfigured = Boolean(redisUrl);
 let managedIdentityEnabled = managedIdentityConfigured && managedIdentityRequired;
 
 let identityClients = null;
@@ -42,7 +43,7 @@ const passwordResetTokenKey = (tokenHash) => `chatscream:password_reset:${tokenH
 const ensureManagedIdentityAvailable = () => {
   if (managedIdentityRequired && !managedIdentityEnabled) {
     throw new Error(
-      'Managed identity storage is required but unavailable. Configure POSTGRES_URL and REDIS_URL (or set IDENTITY_STORAGE_MODE=local for explicit local development only).',
+      'Managed identity storage is required but unavailable. Configure POSTGRES_URL (and optionally REDIS_URL) or set IDENTITY_STORAGE_MODE=local for local development.',
     );
   }
 };
@@ -62,12 +63,40 @@ const getIdentityClients = async () => {
 
     const db = drizzle(pool, { schema });
 
-    const useRedisTls = parseBoolean(process.env.REDIS_TLS);
-    const redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 2,
-      ...(useRedisTls ? { tls: { rejectUnauthorized: false } } : {}),
-    });
-    await redis.ping();
+    let redis = null;
+    if (redisConfigured) {
+      try {
+        const useRedisTls = parseBoolean(process.env.REDIS_TLS);
+        redis = new Redis(redisUrl, {
+          maxRetriesPerRequest: 2,
+          ...(useRedisTls ? { tls: { rejectUnauthorized: false } } : {}),
+        });
+        await redis.ping();
+      } catch (err) {
+        console.warn('Redis connection failed, using Postgres for sessions:', err.message);
+        redis = null;
+      }
+    }
+
+    // Ensure Postgres session tables exist when Redis is unavailable
+    if (!redis) {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS chatscream_sessions (
+          token TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS chatscream_reset_tokens (
+          token_hash TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    }
 
     identityClients = { pool, db, redis };
     return identityClients;
@@ -87,7 +116,11 @@ const getIdentityClients = async () => {
 
 export const isManagedIdentityStorageEnabled = () => managedIdentityEnabled;
 export const isManagedIdentityStorageRequired = () => managedIdentityRequired;
-export const getIdentityStorageMode = () => (managedIdentityEnabled ? 'postgres+redis' : 'local');
+export const getIdentityStorageMode = () => {
+  if (!managedIdentityEnabled) return 'local';
+  if (identityClients?.redis) return 'postgres+redis';
+  return 'postgres';
+};
 
 export const initIdentityStorage = async () => {
   if (managedIdentityRequired && !managedIdentityConfigured) {
@@ -100,7 +133,8 @@ export const initIdentityStorage = async () => {
   if (managedIdentityRequired && !clients) {
     throw new Error('Managed identity storage failed to initialize.');
   }
-  return clients ? 'postgres+redis' : 'local';
+  if (!clients) return 'local';
+  return clients.redis ? 'postgres+redis' : 'postgres';
 };
 
 export const closeIdentityStorage = async () => {
@@ -111,7 +145,7 @@ export const closeIdentityStorage = async () => {
   try {
     await pool.end();
   } finally {
-    redis.disconnect();
+    if (redis) redis.disconnect();
   }
 };
 
@@ -251,10 +285,18 @@ export const listUsers = async () => {
 
 export const saveSession = async (session) => {
   if (managedIdentityEnabled) {
-    const { redis } = await getIdentityClients();
+    const { redis, pool } = await getIdentityClients();
     const ttl = Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000);
     if (ttl > 0) {
-      await redis.set(sessionKey(session.token), JSON.stringify(session), 'EX', ttl);
+      if (redis) {
+        await redis.set(sessionKey(session.token), JSON.stringify(session), 'EX', ttl);
+      } else {
+        await pool.query(
+          `INSERT INTO chatscream_sessions (token, data, expires_at) VALUES ($1, $2, $3)
+           ON CONFLICT (token) DO UPDATE SET data = $2, expires_at = $3`,
+          [session.token, JSON.stringify(session), session.expiresAt]
+        );
+      }
     }
     return;
   }
@@ -266,9 +308,17 @@ export const saveSession = async (session) => {
 
 export const getSession = async (token) => {
   if (managedIdentityEnabled) {
-    const { redis } = await getIdentityClients();
-    const data = await redis.get(sessionKey(token));
-    return data ? JSON.parse(data) : null;
+    const { redis, pool } = await getIdentityClients();
+    if (redis) {
+      const data = await redis.get(sessionKey(token));
+      return data ? JSON.parse(data) : null;
+    } else {
+      const result = await pool.query(
+        'SELECT data FROM chatscream_sessions WHERE token = $1 AND expires_at > NOW()',
+        [token]
+      );
+      return result.rows[0]?.data || null;
+    }
   }
   ensureManagedIdentityAvailable();
   return loadState().sessions[token] || null;
@@ -276,8 +326,12 @@ export const getSession = async (token) => {
 
 export const removeSession = async (token) => {
   if (managedIdentityEnabled) {
-    const { redis } = await getIdentityClients();
-    await redis.del(sessionKey(token));
+    const { redis, pool } = await getIdentityClients();
+    if (redis) {
+      await redis.del(sessionKey(token));
+    } else {
+      await pool.query('DELETE FROM chatscream_sessions WHERE token = $1', [token]);
+    }
     return;
   }
   ensureManagedIdentityAvailable();
@@ -290,15 +344,23 @@ export const removeSession = async (token) => {
 
 export const savePasswordResetToken = async (tokenRecord) => {
   if (managedIdentityEnabled) {
-    const { redis } = await getIdentityClients();
+    const { redis, pool } = await getIdentityClients();
     const ttl = Math.floor((new Date(tokenRecord.expiresAt).getTime() - Date.now()) / 1000);
     if (ttl > 0) {
-      await redis.set(
-        passwordResetTokenKey(tokenRecord.tokenHash),
-        JSON.stringify(tokenRecord),
-        'EX',
-        ttl,
-      );
+      if (redis) {
+        await redis.set(
+          passwordResetTokenKey(tokenRecord.tokenHash),
+          JSON.stringify(tokenRecord),
+          'EX',
+          ttl,
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO chatscream_reset_tokens (token_hash, data, expires_at) VALUES ($1, $2, $3)
+           ON CONFLICT (token_hash) DO UPDATE SET data = $2, expires_at = $3`,
+          [tokenRecord.tokenHash, JSON.stringify(tokenRecord), tokenRecord.expiresAt]
+        );
+      }
     }
     return;
   }
@@ -311,12 +373,22 @@ export const savePasswordResetToken = async (tokenRecord) => {
 export const consumePasswordResetToken = async (tokenHash) => {
   if (!tokenHash) return null;
   if (managedIdentityEnabled) {
-    const { redis } = await getIdentityClients();
-    const key = passwordResetTokenKey(tokenHash);
-    const [raw] = await redis.multi().get(key).del(key).exec();
-    const data = Array.isArray(raw) && raw.length > 1 ? raw[1] : null;
-    if (!data) return null;
-    const tokenRecord = JSON.parse(data);
+    const { redis, pool } = await getIdentityClients();
+    let tokenRecord;
+    if (redis) {
+      const key = passwordResetTokenKey(tokenHash);
+      const [raw] = await redis.multi().get(key).del(key).exec();
+      const data = Array.isArray(raw) && raw.length > 1 ? raw[1] : null;
+      if (!data) return null;
+      tokenRecord = JSON.parse(data);
+    } else {
+      const result = await pool.query(
+        'DELETE FROM chatscream_reset_tokens WHERE token_hash = $1 AND expires_at > NOW() RETURNING data',
+        [tokenHash]
+      );
+      if (!result.rows[0]) return null;
+      tokenRecord = result.rows[0].data;
+    }
     const expiresAt = new Date(tokenRecord.expiresAt).getTime();
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
       return null;
