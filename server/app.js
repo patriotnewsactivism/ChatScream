@@ -1736,8 +1736,15 @@ app.post(
 );
 
 app.get('/api/config/oauth', requireAuth, (_req, res) => {
-  const oauth = getConfig('oauth');
-  res.json(oauth);
+  const oauth = getConfig('oauth') || {};
+  res.json({
+    ...oauth,
+    youtubeClientId: oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
+    facebookAppId: oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
+    twitchClientId: oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
+    tiktokClientKey: oauth.tiktokClientKey || String(process.env.TIKTOK_CLIENT_KEY || '').trim() || undefined,
+    redirectUriBase: oauth.redirectUriBase || String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim() || undefined,
+  });
 });
 
 app.get('/api/public/capabilities', (_req, res) => {
@@ -1754,8 +1761,17 @@ app.patch('/api/config/oauth', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.get('/api/oauth/config/public', requireAuth, (_req, res) => {
-  const oauth = getConfig('oauth');
-  res.json(oauth);
+  const oauth = getConfig('oauth') || {};
+  // Merge env-var-derived client IDs so the frontend can initiate OAuth flows
+  // without requiring separate admin portal configuration
+  res.json({
+    ...oauth,
+    youtubeClientId: oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
+    facebookAppId: oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
+    twitchClientId: oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
+    tiktokClientKey: oauth.tiktokClientKey || String(process.env.TIKTOK_CLIENT_KEY || '').trim() || undefined,
+    redirectUriBase: oauth.redirectUriBase || String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim() || undefined,
+  });
 });
 
 app.put('/api/oauth/config/public', requireAuth, requireAdmin, (req, res) => {
