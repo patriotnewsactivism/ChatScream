@@ -25,13 +25,8 @@ const getProviderSpecificFailureMessage = (platform: string, rawMessage?: string
   if (source.includes('state')) {
     return `${fallbackLabel} callback could not be verified. Retry from the same browser window and avoid stale OAuth tabs.`;
   }
-  if (source.includes('client') || source.includes('configured')) {
-    return `${fallbackLabel} is not configured on the server. Ask an admin to validate provider client ID/secret and callback URL settings.`;
-  }
-  if (source.includes('token')) {
-    return `${fallbackLabel} token exchange failed. Reconnect and confirm backend secrets plus redirect URI match the provider app settings.`;
-  }
-  return `${fallbackLabel} connection failed: ${rawMessage}. Retry from Studio or contact support if this persists.`;
+  // Show actual error detail for debugging
+  return `${fallbackLabel} connection failed: ${rawMessage}`;
 };
 
 const OAuthCallback: React.FC = () => {

@@ -701,10 +701,12 @@ const requestYouTubeTokenExchange = async ({ code, redirectUri }) => {
   const payload = await parseJsonResponse(response);
 
   if (!response.ok) {
-    const message =
-      payload?.error_description || payload?.error || 'Failed to exchange YouTube OAuth code.';
-    const status = String(payload?.error || '').toLowerCase() === 'invalid_grant' ? 400 : 502;
-    throw createHttpError(status, message, payload);
+    console.error('YouTube token exchange failed:', JSON.stringify(payload));
+    const googleError = payload?.error || '';
+    const googleDesc = payload?.error_description || '';
+    const message = googleDesc || googleError || 'Failed to exchange YouTube OAuth code.';
+    const status = String(googleError).toLowerCase() === 'invalid_grant' ? 400 : 502;
+    throw createHttpError(status, `${message} (${googleError})`, payload);
   }
 
   return payload;
@@ -2386,9 +2388,12 @@ app.post(
         await setConnectedPlatform(uid, 'youtube', nextYouTube);
         return res.json({ success: true, platform: 'youtube', account: nextYouTube });
       } catch (error) {
-        console.error('YouTube OAuth failed:', error);
+        console.error('YouTube OAuth failed:', error?.message || error, error?.body || '');
         const detail = error?.message || error?.statusMessage || String(error);
-        res.status(error?.statusCode || 500).json({ message: `YouTube connection failed: ${detail}` });
+        res.status(error?.statusCode || 500).json({
+          message: `YouTube connection failed: ${detail}`,
+          detail: String(detail),
+        });
       }
       return;
     } else if (platform === 'twitch') {
