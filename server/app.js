@@ -1753,6 +1753,21 @@ app.get('/api/public/capabilities', (_req, res) => {
   res.json(getBackendCapabilities());
 });
 
+// Diagnostic: non-secret OAuth config for debugging redirect_uri_mismatch
+app.get('/api/public/oauth-debug', (req, res) => {
+  const oauth = getConfig('oauth') || {};
+  const envRedirectUri = String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim();
+  const envYtClientId = String(process.env.YOUTUBE_CLIENT_ID || '').trim();
+  res.json({
+    storedRedirectUriBase: oauth.redirectUriBase || null,
+    envRedirectUri: envRedirectUri || null,
+    effectiveRedirectUri: envRedirectUri || oauth.redirectUriBase || null,
+    storedYoutubeClientId: oauth.youtubeClientId ? `${oauth.youtubeClientId.slice(0, 12)}...` : null,
+    envYoutubeClientId: envYtClientId ? `${envYtClientId.slice(0, 12)}...` : null,
+    effectiveYoutubeClientId: (envYtClientId || oauth.youtubeClientId || '').slice(0, 12) + '...',
+  });
+});
+
 app.get('/api/capabilities', requireAuth, (_req, res) => {
   res.json(getBackendCapabilities());
 });
@@ -1762,17 +1777,18 @@ app.patch('/api/config/oauth', requireAuth, requireAdmin, (req, res) => {
   res.json({ success: true, oauth: getConfig('oauth') });
 });
 
-app.get('/api/oauth/config/public', requireAuth, (_req, res) => {
+app.get('/api/oauth/config/public', requireAuth, (req, res) => {
   const oauth = getConfig('oauth') || {};
-  // Merge env-var-derived client IDs so the frontend can initiate OAuth flows
-  // without requiring separate admin portal configuration
+  // Env vars take priority over stored admin config so Vercel env updates
+  // are immediately effective without requiring an admin portal change.
+  const envRedirectUri = String(process.env.VITE_OAUTH_REDIRECT_URI || process.env.AUTH_REDIRECT_URL || '').trim();
   res.json({
     ...oauth,
-    youtubeClientId: oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
-    facebookAppId: oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
-    twitchClientId: oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
-    tiktokClientKey: oauth.tiktokClientKey || String(process.env.TIKTOK_CLIENT_KEY || '').trim() || undefined,
-    redirectUriBase: oauth.redirectUriBase || String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim() || undefined,
+    youtubeClientId: String(process.env.YOUTUBE_CLIENT_ID || '').trim() || oauth.youtubeClientId || undefined,
+    facebookAppId: String(process.env.FACEBOOK_APP_ID || '').trim() || oauth.facebookAppId || undefined,
+    twitchClientId: String(process.env.TWITCH_CLIENT_ID || '').trim() || oauth.twitchClientId || undefined,
+    tiktokClientKey: String(process.env.TIKTOK_CLIENT_KEY || '').trim() || oauth.tiktokClientKey || undefined,
+    redirectUriBase: envRedirectUri || oauth.redirectUriBase || undefined,
   });
 });
 
