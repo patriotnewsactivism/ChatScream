@@ -6,7 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 const NotFoundPage: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
-  const isMaster = (user?.email || '').trim().toLowerCase() === 'mreardon@wtpnews.org';
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const isMaster = adminEmails.includes((user?.email || '').trim().toLowerCase());
 
   return (
     <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">

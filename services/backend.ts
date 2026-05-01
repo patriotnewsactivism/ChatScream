@@ -567,17 +567,21 @@ const specialAffiliateCodes: Record<string, AffiliateCode> = {
   },
 };
 
-const fallbackProfileFromUser = (user: AuthUser): UserProfile => ({
+const fallbackProfileFromUser = (user: AuthUser): UserProfile => {
+  const email = (user.email || '').trim().toLowerCase();
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const isAdmin = adminEmails.includes(email);
+  return {
   uid: user.uid,
   email: user.email || '',
   displayName: sanitizeDisplayName(user.displayName, user.email),
   photoURL: user.photoURL || undefined,
   createdAt: new Date().toISOString(),
-  role: 'user',
+  role: isAdmin ? 'admin' : 'user',
   betaTester: false,
   subscription: {
-    plan: 'free',
-    status: 'trialing',
+    plan: isAdmin ? 'enterprise' as PlanTier : 'free',
+    status: isAdmin ? 'active' : 'trialing',
   },
   usage: {
     cloudHoursUsed: 0,
@@ -586,7 +590,8 @@ const fallbackProfileFromUser = (user: AuthUser): UserProfile => ({
     emailNotifications: true,
     marketingEmails: true,
   },
-});
+};
+};
 
 const normalizeProfile = (value: unknown): UserProfile | null => {
   if (!value || typeof value !== 'object') return null;
@@ -597,19 +602,23 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
   const email = toStringValue(raw.email).trim();
   const displayName = toStringValue(raw.displayName).trim();
 
+  // Admin email override — always grant full access
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const isAdmin = adminEmails.includes(email.toLowerCase());
+
   return {
     uid,
     email,
     displayName: displayName || email || 'User',
     photoURL: toStringValue(raw.photoURL).trim() || undefined,
     createdAt: raw.createdAt ?? new Date().toISOString(),
-    role: toStringValue(raw.role).trim() || undefined,
+    role: isAdmin ? 'admin' : (toStringValue(raw.role).trim() || undefined),
     betaTester: Boolean(raw.betaTester),
     subscription: {
-      plan: (toStringValue(raw.subscription?.plan) as PlanTier) || 'free',
-      status:
-        (toStringValue(raw.subscription?.status) as UserProfile['subscription']['status']) ||
-        'trialing',
+      plan: isAdmin ? ('enterprise' as PlanTier) : ((toStringValue(raw.subscription?.plan) as PlanTier) || 'free'),
+      status: isAdmin ? 'active' :
+        ((toStringValue(raw.subscription?.status) as UserProfile['subscription']['status']) ||
+        'trialing'),
       trialEndsAt: raw.subscription?.trialEndsAt,
       currentPeriodEnd: raw.subscription?.currentPeriodEnd,
       stripeCustomerId: toStringValue(raw.subscription?.stripeCustomerId).trim() || undefined,

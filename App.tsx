@@ -1109,6 +1109,8 @@ const App: React.FC = () => {
                 }
                 isStreaming={appState.isStreaming}
                 userId={user?.uid}
+                userPlan={userProfile?.subscription?.plan}
+                userEmail={user?.email}
               />
             </div>
           )}

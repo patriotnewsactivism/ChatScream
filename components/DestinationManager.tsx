@@ -46,6 +46,7 @@ interface DestinationManagerProps {
   onUpdateDestination?: (id: string, patch: Partial<Destination>) => void;
   isStreaming: boolean;
   userPlan?: PlanTier;
+  userEmail?: string | null;
   onUpgradeClick?: () => void;
   userId?: string;
   connectedPlatforms?: ConnectedPlatformsSummary;
@@ -67,6 +68,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   onToggleDestination,
   isStreaming,
   userPlan = 'free',
+  userEmail,
   onUpgradeClick,
   userId,
   connectedPlatforms,
@@ -105,8 +107,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   };
 
   const destinationLimit = useMemo(() => {
-    return canAddDestination(userPlan, destinations.length);
-  }, [userPlan, destinations.length]);
+    return canAddDestination(userPlan, destinations.length, userEmail);
+  }, [userPlan, destinations.length, userEmail]);
 
   useEffect(() => {
     const loadCapabilities = async () => {

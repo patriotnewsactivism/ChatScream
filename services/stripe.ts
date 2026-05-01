@@ -234,10 +234,29 @@ export const hasFeatureAccess = (
 };
 
 // Check if user can add more destinations
+// Master admin emails — full access, no plan limits
+export const ADMIN_EMAILS: string[] = [
+  'don@donmatthews.live',
+  'mreardon@wtpnews.org',
+];
+
+export const isAdminEmail = (email?: string | null): boolean =>
+  !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());
+
 export const canAddDestination = (
   userPlan: string,
-  currentDestinations: number
+  currentDestinations: number,
+  userEmail?: string | null
 ): { allowed: boolean; maxDestinations: number; message: string } => {
+  // Admins always get unlimited access
+  if (isAdminEmail(userEmail)) {
+    return {
+      allowed: true,
+      maxDestinations: -1,
+      message: 'Admin — unlimited destinations'
+    };
+  }
+
   const plan = getPlanById(userPlan);
   if (!plan) {
     return {
