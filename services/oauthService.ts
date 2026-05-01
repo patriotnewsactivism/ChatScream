@@ -72,10 +72,17 @@ const getAuthorizationHeader = (): string | null => {
 // Get OAuth configuration for each platform
 export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConfig> => {
   const publicConfig = await readOAuthPublicConfigCached();
+  // ALWAYS use current window origin so the redirect_uri matches whichever
+  // domain the user is on (chatscream.live vs www.chatscream.live).
+  // The env-var / stored config is only a last-resort fallback for non-browser
+  // contexts (should never happen in practice).
   const baseRedirectUri =
+    (typeof window !== 'undefined' && window.location?.origin
+      ? `${window.location.origin}/oauth/callback`
+      : null) ||
     publicConfig.redirectUriBase ||
     import.meta.env.VITE_OAUTH_REDIRECT_URI ||
-    `${window.location.origin}/oauth/callback`;
+    'https://chatscream.live/oauth/callback';
 
   switch (platform) {
     case 'youtube':
