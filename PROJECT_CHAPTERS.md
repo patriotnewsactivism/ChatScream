@@ -2,7 +2,7 @@
 
 > Browser-based multi-streaming studio. Stream without limits. Scream for attention.
 > **Repo:** `patriotnewsactivism/ChatScream`
-> **Stack:** React 18 + Vite + TypeScript + Tailwind CSS + Node.js API + Postgres + FFmpeg
+> **Stack:** React 18 + Vite + TypeScript + Tailwind CSS + Node.js/Express API + Postgres (Drizzle) + FFmpeg
 
 ---
 
@@ -14,38 +14,56 @@
 |------|---------|
 | `index.tsx` | App entry point, router setup |
 | `App.tsx` | Root component, route definitions, layout switching |
-| `vite.config.ts` | Vite build configuration |
-| `drizzle.config.ts` | Database ORM configuration |
 | `types.ts` | Shared TypeScript type definitions |
+
+**Configuration & Build:**
+
+| File | Purpose |
+|------|---------|
+| `index.html` | HTML shell, Vite entry |
+| `vite.config.ts` | Vite build configuration |
+| `drizzle.config.ts` | Drizzle ORM database configuration |
+| `playwright.config.ts` | Playwright E2E test config |
+| `vitest.setup.ts` | Vitest test setup |
+| `eslint.config.js` | ESLint rules |
 | `metadata.json` | App metadata |
 | `package.json` | Dependencies and scripts |
-| `.env.example` | Environment variable template |
+| `package-lock.json` | Dependency lock file |
+| `.env.example` | Dev environment variable template |
 | `.env.production.example` | Production env template |
+| `.prettierrc` | Prettier formatting config |
+| `.prettierignore` | Prettier ignore rules |
+| `.gitignore` | Git ignore rules |
+| `.gitattributes` | Git attributes |
+| `README.md` | Project documentation |
+| `AGENTS.md` | AI agent instructions |
+| `GEMINI.md` | Gemini AI instructions |
+| `TEST_COVERAGE_ANALYSIS.md` | Test coverage report |
 
 **Key Concepts:**
 - React 18 with Vite for fast HMR development
 - Drizzle ORM for type-safe database queries
-- PWA-ready with service workers and manifest
+- PWA-ready with service workers
 
 ---
 
 ## Chapter 2: Authentication & User Management
 
-**Goal:** User registration, login, OAuth flows, and session management.
+**Goal:** User registration, login, OAuth, and session management.
 
 | File | Purpose |
 |------|---------|
 | `contexts/AuthContext.tsx` | Auth state provider — login, logout, token management |
 | `pages/AuthPage.tsx` | Login/signup page |
 | `pages/OAuthCallback.tsx` | OAuth redirect handler |
-| `components/AuthStatusBanner.tsx` | Auth status indicator |
+| `components/AuthStatusBanner.tsx` | Auth status indicator banner |
 | `components/OAuthSetup.tsx` | OAuth provider configuration UI |
 | `components/ProtectedRoute.tsx` | Route guard for authenticated pages |
-| `services/oauthService.ts` | OAuth flow implementation |
+| `services/oauthService.ts` | OAuth flow implementation for streaming platforms |
 
 **Key Concepts:**
-- OAuth integration for streaming platform accounts (YouTube, Twitch, Facebook)
-- Auth context provides global auth state
+- OAuth integration for YouTube, Twitch, Facebook accounts
+- Auth context provides global auth state via React context
 - Protected routes redirect unauthenticated users
 
 ---
@@ -56,9 +74,9 @@
 
 | File | Purpose |
 |------|---------|
-| `services/streamingPipeline.ts` | Main streaming pipeline — capture → encode → relay |
+| `services/streamingPipeline.ts` | Main pipeline — capture → encode → relay |
 | `services/RTMPSender.ts` | RTMP protocol sender to streaming platforms |
-| `services/cloudStreamingService.ts` | Cloud-based encoding and relay |
+| `services/cloudStreamingService.ts` | Cloud-based encoding and relay via AWS |
 | `services/bitrateAdaptation.ts` | Adaptive bitrate based on network conditions |
 | `services/destinationRouter.ts` | Route streams to multiple platforms simultaneously |
 | `services/streamHealthMonitor.ts` | Monitor stream quality, latency, dropped frames |
@@ -146,9 +164,9 @@
 | File | Purpose |
 |------|---------|
 | `components/ChatStream.tsx` | Unified chat display from all platforms |
-| `components/ChatStreamOverlay.tsx` | Chat overlay on stream canvas |
-| `services/chatAggregator.ts` | Aggregate chat messages from YouTube, Twitch, etc. |
-| `services/realtimeChat.ts` | WebSocket-based real-time chat |
+| `components/ChatStreamOverlay.tsx` | Chat overlay composited on stream canvas |
+| `services/chatAggregator.ts` | Aggregate messages from YouTube, Twitch, etc. |
+| `services/realtimeChat.ts` | WebSocket-based real-time chat connection |
 | `hooks/useRealtimeChat.ts` | Chat state management hook |
 
 **Key Concepts:**
@@ -164,7 +182,7 @@
 
 | File | Purpose |
 |------|---------|
-| `hooks/useLocalRecording.ts` | Browser-based local recording |
+| `hooks/useLocalRecording.ts` | Browser-based local recording via MediaRecorder |
 | `services/recordingManager.ts` | Recording state, start/stop, file management |
 | `services/clipBuffer.ts` | Rolling buffer for instant clip capture |
 
@@ -181,7 +199,7 @@
 
 | File | Purpose |
 |------|---------|
-| `hooks/useAutoCaption.ts` | Real-time auto-captioning |
+| `hooks/useAutoCaption.ts` | Real-time auto-captioning on stream |
 | `hooks/useViralContent.ts` | AI-generated viral content suggestions |
 | `services/aiClient.ts` | AI API client wrapper |
 | `services/claudeService.ts` | Anthropic Claude integration |
@@ -201,7 +219,7 @@
 | File | Purpose |
 |------|---------|
 | `components/AnalyticsDashboard.tsx` | Overview analytics dashboard |
-| `components/StreamAnalyticsDashboard.tsx` | Per-stream analytics |
+| `components/StreamAnalyticsDashboard.tsx` | Per-stream analytics deep dive |
 | `pages/CreatorDashboard.tsx` | Creator home — stats, recent streams, quick actions |
 | `components/BackendStatusCard.tsx` | Server/backend health status |
 
@@ -228,7 +246,7 @@
 
 ---
 
-## Chapter 12: Admin & Platform Management
+## Chapter 12: Admin Panel
 
 **Goal:** Admin tools for platform management and moderation.
 
@@ -238,44 +256,71 @@
 
 ---
 
-## Chapter 13: Backend API
+## Chapter 13: Backend Server
 
-**Goal:** Server-side API for streaming, auth, and data.
+**Goal:** Node.js/Express API server for auth, AI, storage, and webhooks.
 
 | File | Purpose |
 |------|---------|
-| `api/index.js` | API entry point |
-| `api/all.js` | Catch-all API routes |
-| `services/backend.ts` | Backend API client |
+| `server/index.js` | Server entry point — starts Express |
+| `server/app.js` | Express app setup — middleware, routes, CORS |
+| `server/ai.js` | AI endpoint — proxies requests to AI models |
+| `server/auth/passwordReset.js` | Password reset flow |
+| `server/db/schema.js` | Database schema definition (Drizzle) |
+| `server/storage.js` | File/media storage management |
+| `server/store.js` | Session/data store |
+| `server/webhooks/stripe.js` | Stripe webhook handler |
+| `server/railway.js` | Railway deployment helper |
+| `api/index.js` | Vercel API entry point |
+| `api/all.js` | Catch-all API routes for serverless |
+| `services/backend.ts` | Frontend → backend API client |
 | `services/apiClient.ts` | HTTP client wrapper |
 | `services/env.ts` | Environment variable management |
-| `services/sanitize.ts` | Input sanitization |
-| `services/sentry.ts` | Error tracking (Sentry) |
+| `services/sanitize.ts` | Input sanitization utilities |
+| `services/sentry.ts` | Sentry error tracking integration |
+| `enable-pgvector.js` | Enable pgvector extension for Postgres |
 
 **Key Concepts:**
-- Node.js API server
+- Express API server with session auth
 - Postgres database via Drizzle ORM
-- Redis for caching and session management
+- AI endpoint proxies to Claude/Gemini
+- Stripe webhooks for payment events
+- Dual deployment: Railway (server) + Vercel (frontend)
 
 ---
 
 ## Chapter 14: Infrastructure & Deployment
 
-**Goal:** Containerization, CI/CD, and cloud deployment.
+**Goal:** Containerization, CI/CD, cloud deployment, and ops.
 
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Container build definition |
 | `.dockerignore` | Docker build exclusions |
-| `chatscream.service` | Systemd service definition |
-| `RAILWAY_DEPLOYMENT.md` | Railway deployment guide |
-| `infrastructure/` | AWS infrastructure configs |
+| `docker-compose.yml` | Multi-container local development |
+| `chatscream.service` | Systemd service definition for Linux servers |
+| `nixpacks.toml` | Nixpacks build config (Railway) |
+| `railway.json` | Railway deployment config |
+| `vercel.json` | Vercel deployment config |
 | `.vercel-trigger` | Vercel deployment trigger |
+| `RAILWAY_DEPLOYMENT.md` | Railway deployment guide |
+| `infrastructure/README.md` | Infrastructure overview |
+| `infrastructure/aws/README.md` | AWS streaming fleet docs |
+| `infrastructure/aws/.env.aws.example` | AWS env template |
+| `infrastructure/aws/deploy-stream-fleet.sh` | Deploy EC2 streaming fleet (Linux) |
+| `infrastructure/aws/deploy-stream-fleet.ps1` | Deploy EC2 streaming fleet (Windows) |
+| `infrastructure/aws/scripts/ec2-user-data.sh` | EC2 instance bootstrap script |
+| `scripts/deploy-production.sh` | Production deployment script |
+| `scripts/setup-production-env.sh` | Production env setup |
+| `scripts/setup-autostart.sh` | Auto-start service setup |
+| `scripts/generate-icons.js` | PWA icon generation |
+| `scripts/migrate-users-to-postgres.mjs` | User migration to Postgres |
 
 **Key Concepts:**
 - Docker containerization for consistent deployments
-- AWS EC2 Auto Scaling for streaming workers
-- Railway or Vercel for frontend deployment
+- AWS EC2 Auto Scaling for streaming FFmpeg workers
+- Railway for backend, Vercel for frontend
+- Systemd service for bare-metal Linux deployment
 
 ---
 
@@ -300,15 +345,58 @@
 
 ## Chapter 16: Keyboard Shortcuts & UX
 
-**Goal:** Power-user features and mobile responsiveness.
+**Goal:** Power-user features, mobile responsiveness, and error handling.
 
 | File | Purpose |
 |------|---------|
 | `hooks/useKeyboardShortcuts.ts` | Global keyboard shortcut handler |
 | `hooks/useMobileLayout.ts` | Mobile-responsive layout management |
-| `hooks/useResourceGuard.ts` | Resource usage monitoring |
+| `hooks/useResourceGuard.ts` | Resource usage monitoring (CPU, memory) |
 | `components/ChunkErrorBoundary.tsx` | Lazy-load error boundary |
 | `components/ErrorBoundary.tsx` | Global error boundary |
+
+---
+
+## Chapter 17: Test Suite
+
+**Goal:** Unit, integration, and E2E tests.
+
+**Unit & Integration Tests:**
+
+| File | Purpose |
+|------|---------|
+| `App.test.tsx` | Root app component tests |
+| `components/__tests__/AuthStatusBanner.test.tsx` | Auth banner tests |
+| `components/__tests__/DestinationManager.test.tsx` | Destination manager tests |
+| `components/__tests__/ProtectedRoute.test.tsx` | Route guard tests |
+| `pages/__tests__/AuthPage.test.tsx` | Auth page tests |
+| `pages/__tests__/CreatorDashboard.test.tsx` | Creator dashboard tests |
+| `pages/__tests__/LandingPage.test.tsx` | Landing page tests |
+| `pages/__tests__/StaticPages.test.tsx` | Static page rendering tests |
+| `contexts/__tests__/AuthContext.test.tsx` | Auth context tests |
+| `hooks/__tests__/useMobileLayout.test.tsx` | Mobile layout hook tests |
+| `hooks/__tests__/useViralContent.test.tsx` | Viral content hook tests |
+| `services/__tests__/aiClient.test.ts` | AI client tests |
+| `services/__tests__/apiClient.test.ts` | API client tests |
+| `services/__tests__/backendConfig.test.ts` | Backend config tests |
+| `services/__tests__/env.test.ts` | Env management tests |
+| `services/__tests__/sanitize.test.ts` | Input sanitization tests |
+| `services/__tests__/stripe.test.ts` | Stripe integration tests |
+| `server/__tests__/ai.test.ts` | Server AI endpoint tests |
+| `server/__tests__/auth-password-upgrade.test.ts` | Password upgrade tests |
+| `server/__tests__/auth-reset-password.test.ts` | Password reset tests |
+| `server/__tests__/cors.test.ts` | CORS policy tests |
+| `server/__tests__/identity-storage.test.ts` | Identity storage tests |
+| `server/__tests__/oauth-authorization.test.ts` | OAuth auth tests |
+| `server/__tests__/user-update-authz.test.ts` | User update authorization tests |
+
+**E2E Tests (Playwright):**
+
+| File | Purpose |
+|------|---------|
+| `tests/e2e/auth.spec.ts` | Authentication E2E flow |
+| `tests/e2e/landing.spec.ts` | Landing page E2E tests |
+| `tests/e2e/studio.spec.ts` | Studio workspace E2E tests |
 
 ---
 
@@ -325,11 +413,11 @@
 └─────────────────────┬───────────────────────────────┘
                       │
 ┌─────────────────────┼───────────────────────────────┐
-│             Backend API (Node.js)                    │
+│         Backend API (Node.js/Express)                │
 │  ┌──────────┐  ┌──────────┐  ┌─────────────────┐   │
-│  │ Auth/    │  │ Stream   │  │ Payments        │   │
-│  │ OAuth    │  │ Relay    │  │ (Stripe)        │   │
-│  │ Ch. 2    │  │ Ch. 3    │  │ Ch. 6           │   │
+│  │ Auth/    │  │ AI       │  │ Payments        │   │
+│  │ OAuth    │  │ Proxy    │  │ (Stripe)        │   │
+│  │ Ch. 2    │  │ Ch. 9,13 │  │ Ch. 6, 13       │   │
 │  └──────────┘  └──────────┘  └─────────────────┘   │
 └─────────────────────┬───────────────────────────────┘
                       │
@@ -337,8 +425,33 @@
 │         Infrastructure (AWS + Docker)                │
 │  ┌──────────────────────────────────────────────┐   │
 │  │ EC2 Auto Scaling Workers (FFmpeg + RTMP)     │   │
-│  │ Postgres + Redis                              │   │
+│  │ Postgres + pgvector                           │   │
 │  │ Ch. 14                                        │   │
 │  └──────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────┘
 ```
+
+---
+
+## File Counts by Chapter
+
+| Chapter | Files |
+|---------|-------|
+| Ch. 1: Foundation | 3 source + 20 config |
+| Ch. 2: Auth | 7 |
+| Ch. 3: Streaming Engine | 12 |
+| Ch. 4: Studio Canvas | 9 |
+| Ch. 5: Audio | 3 |
+| Ch. 6: Chat Screamer | 4 |
+| Ch. 7: Live Chat | 5 |
+| Ch. 8: Recording | 3 |
+| Ch. 9: AI Features | 5 |
+| Ch. 10: Analytics | 4 |
+| Ch. 11: WebRTC | 2 |
+| Ch. 12: Admin | 1 |
+| Ch. 13: Backend Server | 17 |
+| Ch. 14: Infrastructure | 20 |
+| Ch. 15: Public Pages | 10 |
+| Ch. 16: UX/Shortcuts | 5 |
+| Ch. 17: Tests | 27 |
+| **Total** | **~137 source + 20 config** |
