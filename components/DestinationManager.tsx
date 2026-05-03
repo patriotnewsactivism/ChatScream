@@ -29,7 +29,7 @@ import {
   type OAuthPlatform as OAuthServicePlatform,
 } from '../services/oauthService';
 import { apiRequest } from '../services/apiClient';
-import { getBackendCapabilities } from '../services/backend';
+import { getBackendCapabilities, getCurrentSessionToken } from '../services/backend';
 
 type ConnectedPlatformsSummary = {
   youtube?: { channelName?: string };
@@ -51,6 +51,7 @@ interface DestinationManagerProps {
   userId?: string;
   connectedPlatforms?: ConnectedPlatformsSummary;
   onOpenAdmin?: () => void;
+  onPlatformConnected?: (platform: OAuthServicePlatform) => void;
 }
 
 type OAuthOption = {
@@ -73,6 +74,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   userId,
   connectedPlatforms,
   onOpenAdmin,
+  onPlatformConnected,
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPlatform, setNewPlatform] = useState<Platform>(Platform.YOUTUBE);
@@ -274,6 +276,23 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       safeAlert('Please sign in again to connect this platform.');
       return;
     }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'oauth:connected' && event.data?.platform === platform) {
+        window.removeEventListener('message', onMessage);
+        if (!event.data?.error) {
+          onPlatformConnected?.(platform);
+          // Auto-open channel picker for YouTube after connecting
+          if (platform === 'youtube') {
+            setTimeout(() => openYouTubeChannelPicker(), 500);
+          }
+        }
+      }
+    };
+    window.addEventListener('message', onMessage);
+    // Clean up listener after 5 minutes if OAuth never completes
+    setTimeout(() => window.removeEventListener('message', onMessage), 5 * 60 * 1000);
+
     initiateOAuth(platform, userId);
   };
 
@@ -350,7 +369,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
             '/api/destinations/twitch/stream-key',
             {
-              headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+              headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
             },
           );
           if (data.streamKey) {
@@ -375,7 +394,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             '/api/destinations/facebook/create-live',
             {
               method: 'POST',
-              headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+              headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
               body: {},
             },
           );
