@@ -1282,10 +1282,10 @@ app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
     res.status(400).json({ message: 'Provider is required.' });
     return;
   }
-  if (provider !== 'google') {
+  if (!['google', 'facebook'].includes(provider)) {
     res
       .status(400)
-      .json({ message: `${provider} sign-in is not available yet. Use Google sign-in.` });
+      .json({ message: `${provider} sign-in is not available yet.` });
     return;
   }
   const redirectUrl = `/api/auth/oauth/${provider}${referral ? `?ref=${encodeURIComponent(referral)}` : ''}`;
@@ -1457,18 +1457,174 @@ app.get(
 );
 
 app.get(
+  '/api/auth/oauth/facebook/callback',
+  asyncHandler(async (req, res) => {
+    const queryError = String(req.query.error || '').trim();
+    if (queryError) {
+      const message = queryError === 'access_denied' ? 'Authorization was denied.' : queryError;
+      redirectToFrontendOAuth(req, res, { platform: 'facebook', error: message });
+      return;
+    }
+
+    const code = String(req.query.code || '').trim();
+    const state = String(req.query.state || '').trim();
+    if (!code || !state) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Missing authorization code or state.',
+      });
+      return;
+    }
+
+    const parsedState = parseAuthState(state);
+    if (!parsedState) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Invalid or expired sign-in state. Please try again.',
+      });
+      return;
+    }
+
+    const facebookAppId = String(process.env.FACEBOOK_APP_ID || '').trim();
+    const facebookAppSecret = String(process.env.FACEBOOK_APP_SECRET || '').trim();
+    if (!facebookAppId || !facebookAppSecret) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Facebook sign-in is not configured.',
+      });
+      return;
+    }
+
+    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/facebook/callback`;
+    const tokenRes = await fetch(
+      `https://graph.facebook.com/v18.0/oauth/access_token?` +
+        new URLSearchParams({
+          client_id: facebookAppId,
+          client_secret: facebookAppSecret,
+          redirect_uri: redirectUri,
+          code,
+        }),
+    );
+    const tokenData = await parseJsonResponse(tokenRes);
+    if (!tokenRes.ok || !tokenData.access_token) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: tokenData.error?.message || tokenData.error_description || 'Token exchange failed.',
+      });
+      return;
+    }
+
+    const meRes = await fetch(
+      `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${tokenData.access_token}`,
+    );
+    const me = await parseJsonResponse(meRes);
+    if (!meRes.ok) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Failed to fetch Facebook profile.',
+      });
+      return;
+    }
+
+    const fbEmail = String(me.email || '').trim();
+    const fbId = String(me.id || '').trim();
+    const fbName = String(me.name || 'Facebook User').trim();
+    const fbPhoto = String(me.picture?.data?.url || '').trim();
+    // Use a placeholder email for accounts with no email
+    const canonicalEmail = normalizeEmail(fbEmail || `fb_${fbId}@chatscream.facebook`);
+
+    let record = fbEmail ? await getUserByEmail(normalizeEmail(fbEmail)) : null;
+    if (!record) {
+      // Check for existing FB user by canonical placeholder email
+      record = await getUserByEmail(canonicalEmail);
+    }
+
+    if (!record) {
+      const uid = randomUUID();
+      const profile = ensureAffiliateForProfile(
+        createUserProfile({
+          uid,
+          email: canonicalEmail,
+          displayName: fbName,
+          photoURL: fbPhoto,
+          referredByCode: normalizeCode(parsedState.ref || ''),
+        }),
+      );
+      await putUser({ uid, email: canonicalEmail, profile });
+      record = await getUserByUid(uid);
+    }
+
+    if (!record) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Failed to create or load user account.',
+      });
+      return;
+    }
+
+    const payload = await buildSessionPayload(record.uid);
+    if (!payload) {
+      redirectToFrontendOAuth(req, res, {
+        platform: 'facebook',
+        error: 'Failed to build session.',
+      });
+      return;
+    }
+
+    redirectToFrontendOAuth(req, res, {
+      platform: 'facebook',
+      token: payload.session?.token,
+      expiresAt: payload.session?.expiresAt,
+      uid: payload.session?.user?.uid,
+      email: payload.session?.user?.email,
+      displayName: payload.session?.user?.displayName,
+      photoURL: payload.session?.user?.photoURL,
+      referral: normalizeCode(parsedState.ref || '') || undefined,
+    });
+  }),
+);
+
+app.get(
   '/api/auth/oauth/:provider',
   asyncHandler(async (req, res) => {
     const provider = String(req.params.provider || '')
       .trim()
       .toLowerCase();
-    if (provider !== 'google') {
+    if (!['google', 'facebook'].includes(provider)) {
       res
         .status(400)
-        .json({ message: `${provider} sign-in is not available yet. Use Google sign-in.` });
+        .json({ message: `${provider} sign-in is not available yet.` });
       return;
     }
 
+    const referral = normalizeCode(req.query.ref || '');
+    const state = createAuthState({
+      ts: Date.now(),
+      nonce: randomUUID(),
+      ref: referral,
+    });
+    if (!state) {
+      res.status(500).json({ message: 'Failed to initialize secure sign-in state.' });
+      return;
+    }
+
+    if (provider === 'facebook') {
+      const facebookAppId = String(process.env.FACEBOOK_APP_ID || '').trim();
+      if (!facebookAppId) {
+        res.status(500).json({ message: 'Facebook sign-in is not configured. Set FACEBOOK_APP_ID.' });
+        return;
+      }
+      const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/facebook/callback`;
+      const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
+      authUrl.searchParams.set('client_id', facebookAppId);
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'public_profile,email');
+      authUrl.searchParams.set('state', state);
+      return res.redirect(302, authUrl.toString());
+    }
+
+    // Google
     const { clientId, clientSecret } = getGoogleAuthCredentials();
     if (!clientId || !clientSecret) {
       res.status(500).json({
@@ -1482,17 +1638,6 @@ app.get(
         message:
           'Google sign-in state secret is missing. Set AUTH_STATE_SECRET (or GOOGLE_CLIENT_SECRET).',
       });
-      return;
-    }
-
-    const referral = normalizeCode(req.query.ref || '');
-    const state = createAuthState({
-      ts: Date.now(),
-      nonce: randomUUID(),
-      ref: referral,
-    });
-    if (!state) {
-      res.status(500).json({ message: 'Failed to initialize secure sign-in state.' });
       return;
     }
 
