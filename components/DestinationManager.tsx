@@ -681,7 +681,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           </div>
         )}
 
-        {showAddForm && destinationLimit.allowed && (
+        {showAddForm && (
           <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in">
             <h3 className="text-xs font-semibold mb-2 text-gray-300">
               ADD MANUAL RTMP DESTINATION

@@ -276,7 +276,7 @@ export const canAddDestination = (
     };
   }
 
-  if (currentDestinations > maxDest) {
+  if (currentDestinations >= maxDest) {
     return {
       allowed: false,
       maxDestinations: maxDest,
