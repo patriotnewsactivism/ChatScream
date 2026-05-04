@@ -1126,7 +1126,7 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'destinations' && (
-            <div className="p-4 overflow-y-auto flex-1">
+            <div className="p-4 overflow-y-auto flex-1 pb-24">
               <DestinationManager
                 destinations={destinations}
                 onAddDestination={(d) => setDestinations([...destinations, d])}
@@ -1149,13 +1149,13 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'branding' && (
-            <div className="p-4 overflow-y-auto max-w-4xl flex-1">
+            <div className="p-4 overflow-y-auto max-w-4xl flex-1 pb-24">
               <BrandingPanel settings={branding} onChange={setBranding} />
             </div>
           )}
 
           {activeTab === 'graphics' && (
-            <div className="p-4 overflow-y-auto max-w-4xl flex-1">
+            <div className="p-4 overflow-y-auto max-w-4xl flex-1 pb-24">
               <h2 className="text-sm font-bold text-gray-300 mb-3">Graphics & Overlays</h2>
               <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} compact={isMobile} />
             </div>
