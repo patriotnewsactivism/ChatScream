@@ -5,7 +5,7 @@
  * AI-powered articles and social media posts from the content.
  */
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   FileText,
   Share2,
@@ -39,7 +39,7 @@ interface GeneratedContent {
   content: string;
 }
 
-const PostStreamPanel: React.FC<PostStreamPanelProps> = ({
+const PostStreamPanel = ({
   transcript,
   wordCount,
   evidenceMarkers,
@@ -47,7 +47,7 @@ const PostStreamPanel: React.FC<PostStreamPanelProps> = ({
   streamDuration,
   onClose,
   authToken,
-}) => {
+}: PostStreamPanelProps) => {
   const [activeTab, setActiveTab] = useState<'transcript' | 'generate' | 'evidence'>('transcript');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);

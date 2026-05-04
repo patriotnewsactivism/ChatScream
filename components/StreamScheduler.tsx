@@ -5,7 +5,7 @@
  * Uses browser notifications to remind when it's time to go live.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, Clock, Bell, Trash2, Play, Plus, X } from 'lucide-react';
 
 export interface ScheduledStream {
@@ -22,7 +22,7 @@ interface StreamSchedulerProps {
   compact?: boolean;
 }
 
-const StreamScheduler: React.FC<StreamSchedulerProps> = ({ onGoLive, compact = false }) => {
+const StreamScheduler = ({ onGoLive, compact = false }: StreamSchedulerProps) => {
   const [streams, setStreams] = useState<ScheduledStream[]>(() => {
     try {
       const saved = localStorage.getItem('chatscream_scheduled_streams');

@@ -5,7 +5,7 @@
  * Displays marker timeline and export button.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Bookmark, Download, Trash2, Plus, Clock, AlertTriangle } from 'lucide-react';
 import type { EvidenceMarker } from '../hooks/useEvidenceMarkers';
 
@@ -30,7 +30,7 @@ const formatTime = (s: number): string => {
     : `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
-const EvidenceMarkerPanel: React.FC<EvidenceMarkerPanelProps> = ({
+const EvidenceMarkerPanel = ({
   markers,
   quickLabels,
   streamDuration,
@@ -40,7 +40,7 @@ const EvidenceMarkerPanel: React.FC<EvidenceMarkerPanelProps> = ({
   onClearMarkers,
   onExportLog,
   compact = false,
-}) => {
+}: EvidenceMarkerPanelProps) => {
   const [customLabel, setCustomLabel] = useState('');
 
   const handleCustomMarker = () => {

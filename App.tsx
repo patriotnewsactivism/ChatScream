@@ -34,7 +34,7 @@ import ResourceHealthBar from './components/ResourceHealthBar';
 import VideoTransportBar from './components/VideoTransportBar';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import EvidenceMarkerPanel from './components/EvidenceMarkerPanel';
-import LegalOverlays, { LegalCitation, LEGAL_CITATIONS } from './components/LegalOverlays';
+import LegalOverlays, { LegalCitation } from './components/LegalOverlays';
 import PostStreamPanel from './components/PostStreamPanel';
 import StreamScheduler from './components/StreamScheduler';
 import { RTMPSender } from './services/RTMPSender';

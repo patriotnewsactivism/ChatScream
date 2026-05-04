@@ -5,7 +5,7 @@
  * Each overlay shows on the stream canvas as a lower-third graphic.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Scale, Shield, Megaphone, Camera, Users, FileText, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 
 export interface LegalCitation {
@@ -155,11 +155,11 @@ interface LegalOverlaysProps {
   compact?: boolean;
 }
 
-const LegalOverlays: React.FC<LegalOverlaysProps> = ({
+const LegalOverlays = ({
   onActivateCitation,
   activeCitationId,
   compact = false,
-}) => {
+}: LegalOverlaysProps) => {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
