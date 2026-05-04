@@ -15,6 +15,8 @@ import { useAutoCaption } from './hooks/useAutoCaption';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useResourceGuard } from './hooks/useResourceGuard';
 import { useLocalRecording } from './hooks/useLocalRecording';
+import { useEvidenceMarkers } from './hooks/useEvidenceMarkers';
+import { useStreamTranscript } from './hooks/useStreamTranscript';
 import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
 import ProgramPreview from './components/ProgramPreview';
 import DestinationManager from './components/DestinationManager';
@@ -31,6 +33,10 @@ import GraphicsOverlay, { defaultGraphicsState, GraphicsState } from './componen
 import ResourceHealthBar from './components/ResourceHealthBar';
 import VideoTransportBar from './components/VideoTransportBar';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import EvidenceMarkerPanel from './components/EvidenceMarkerPanel';
+import LegalOverlays, { LegalCitation, LEGAL_CITATIONS } from './components/LegalOverlays';
+import PostStreamPanel from './components/PostStreamPanel';
+import StreamScheduler from './components/StreamScheduler';
 import { RTMPSender } from './services/RTMPSender';
 import { ClipBuffer } from './services/clipBuffer';
 import {
@@ -71,6 +77,11 @@ import {
   Eye,
   LogOut,
   ChevronDown,
+  Bookmark,
+  Scale,
+  FileText,
+  Calendar,
+  ChevronUp,
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -169,6 +180,10 @@ const App: React.FC = () => {
   const { caption, isActive: captionsOn, isSupported: captionsSupported, toggle: toggleCaptions } =
     useAutoCaption();
 
+  // evidence markers & stream transcript
+  const evidenceMarkers = useEvidenceMarkers(appState.streamDuration);
+  const streamTranscript = useStreamTranscript();
+
   // guest cameras
   const [guestRoomId] = useState(() => generateRoomId());
   const [guestConnections, setGuestConnections] = useState<GuestConnection[]>([]);
@@ -177,6 +192,10 @@ const App: React.FC = () => {
   const [showScreamDemo, setShowScreamDemo] = useState(false);
   const [screamDemoName, setScreamDemoName] = useState('');
   const [screamDemoAmount, setScreamDemoAmount] = useState('50');
+  const [showPostStream, setShowPostStream] = useState(false);
+  const [showMobileDrawer, setShowMobileDrawer] = useState(false);
+  const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
+  const [activeCitation, setActiveCitation] = useState<LegalCitation | null>(null);
   const guestServiceRef = useRef<GuestHostService | null>(null);
 
   // refs
@@ -527,6 +546,43 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [appState.isStreaming, appState.isRecording]);
 
+  // Bridge auto-captions into transcript
+  useEffect(() => {
+    if (caption && captionsOn) {
+      streamTranscript.addChunk(caption, appState.streamDuration);
+    }
+  }, [caption, captionsOn, appState.streamDuration]);
+
+  // Auto-start/stop transcript capture with streaming
+  const prevStreaming = useRef(false);
+  useEffect(() => {
+    if (appState.isStreaming && !prevStreaming.current) {
+      streamTranscript.startCapture();
+      if (captionsOn) streamTranscript.clearTranscript();
+    } else if (!appState.isStreaming && prevStreaming.current) {
+      streamTranscript.stopCapture();
+      // Show post-stream panel if we have content
+      if (streamTranscript.wordCount > 0 || evidenceMarkers.markers.length > 0) {
+        setShowPostStream(true);
+      }
+    }
+    prevStreaming.current = appState.isStreaming;
+  }, [appState.isStreaming]);
+
+  // Handle legal citation overlay activation
+  const handleActivateCitation = useCallback((citation: LegalCitation) => {
+    if (!citation.id) {
+      setActiveCitationId(null);
+      setActiveCitation(null);
+    } else if (activeCitationId === citation.id) {
+      setActiveCitationId(null);
+      setActiveCitation(null);
+    } else {
+      setActiveCitationId(citation.id);
+      setActiveCitation(citation);
+    }
+  }, [activeCitationId]);
+
   const formatTime = (s: number) => {
     const hrs = Math.floor(s / 3600);
     const mins = Math.floor((s % 3600) / 60);
@@ -626,6 +682,20 @@ const App: React.FC = () => {
         graphics={graphicsState}
         mirrorCamera={isMirrored}
       />
+
+      {/* Legal citation lower-third overlay */}
+      {activeCitation && (
+        <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none px-4 animate-fade-in">
+          <div className="bg-gradient-to-r from-blue-900/95 to-indigo-900/95 backdrop-blur-md border border-blue-400/30 text-white px-5 py-3 rounded-xl max-w-lg shadow-2xl">
+            <div className="flex items-center gap-2 mb-1">
+              <Scale size={14} className="text-blue-300" />
+              <span className="text-xs font-bold text-blue-300 uppercase tracking-wide">Know Your Rights</span>
+            </div>
+            <p className="text-sm font-bold leading-snug">{activeCitation.summary}</p>
+            <p className="text-[10px] text-blue-300/80 mt-1 italic">{activeCitation.citation}</p>
+          </div>
+        </div>
+      )}
 
       {/* Auto-caption overlay */}
       {captionsOn && caption && (
@@ -842,6 +912,30 @@ const App: React.FC = () => {
           <div className="border-t border-gray-700 pt-3">
             <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} />
           </div>
+          {/* Evidence Markers */}
+          <div className="border-t border-gray-700 pt-3">
+            <EvidenceMarkerPanel
+              markers={evidenceMarkers.markers}
+              quickLabels={evidenceMarkers.quickMarkerLabels}
+              streamDuration={appState.streamDuration}
+              isStreaming={appState.isStreaming}
+              onAddMarker={evidenceMarkers.addMarker}
+              onRemoveMarker={evidenceMarkers.removeMarker}
+              onClearMarkers={evidenceMarkers.clearMarkers}
+              onExportLog={evidenceMarkers.exportLog}
+            />
+          </div>
+          {/* Legal Citation Overlays */}
+          <div className="border-t border-gray-700 pt-3">
+            <LegalOverlays
+              onActivateCitation={handleActivateCitation}
+              activeCitationId={activeCitationId}
+            />
+          </div>
+          {/* Stream Scheduling */}
+          <div className="border-t border-gray-700 pt-3">
+            <StreamScheduler onGoLive={handleBroadcast} />
+          </div>
         </div>
       )}
 
@@ -883,28 +977,141 @@ const App: React.FC = () => {
         )}
 
         {isMobile ? (
-          // Mobile: compact single-column controls
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+          // Mobile: simplified one-thumb field studio
+          <div className="space-y-3 px-1">
+            {/* Primary action buttons — big, finger-friendly */}
+            <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => {
-                  if (!multiviewEnabled && !resourceGuard.safeToEnable('multiview')) {
-                    setMobileTip('⚠️ Not enough memory for multiview. Close other apps.');
-                    return;
-                  }
-                  setMultiviewEnabled((v) => !v);
-                }}
-                className={`p-2 rounded-lg border shrink-0 ${
-                  multiviewEnabled
-                    ? 'bg-brand-500 border-brand-400 text-white'
-                    : 'border-gray-700 text-gray-400'
-                }`}
-                title="Program/Preview Multiview"
+                onClick={toggleCamera}
+                className={`flex flex-col items-center gap-1 py-3 rounded-xl border transition-all active:scale-95 ${cameraStream ? 'bg-brand-500/20 border-brand-500 text-brand-400' : 'bg-dark-900 border-gray-700 text-gray-400'}`}
               >
-                <SplitSquareVertical size={18} />
+                {cameraStream ? <Video size={22} /> : <VideoOff size={22} />}
+                <span className="text-[10px] font-medium">Camera</span>
               </button>
+              {cameraStream && (
+                <button
+                  onClick={flipCamera}
+                  className="flex flex-col items-center gap-1 py-3 rounded-xl border border-gray-700 bg-dark-900 text-gray-400 active:scale-95 transition-all"
+                >
+                  <Layers size={22} />
+                  <span className="text-[10px] font-medium">Flip</span>
+                </button>
+              )}
+              <button
+                onClick={() => setIsMicMuted((m) => !m)}
+                className={`flex flex-col items-center gap-1 py-3 rounded-xl border transition-all active:scale-95 ${isMicMuted ? 'bg-red-600/20 border-red-500 text-red-400' : 'bg-dark-900 border-gray-700 text-gray-400'}`}
+              >
+                {isMicMuted ? <MicOff size={22} /> : <Mic size={22} />}
+                <span className="text-[10px] font-medium">{isMicMuted ? 'Unmute' : 'Mute'}</span>
+              </button>
+              <button
+                onClick={saveClip}
+                className="flex flex-col items-center gap-1 py-3 rounded-xl border border-gray-700 bg-dark-900 text-gray-400 hover:border-brand-500 hover:text-brand-400 active:scale-95 transition-all"
+              >
+                <Scissors size={22} />
+                <span className="text-[10px] font-medium">Clip</span>
+              </button>
+              <button
+                onClick={() => evidenceMarkers.addMarker()}
+                className={`flex flex-col items-center gap-1 py-3 rounded-xl border transition-all active:scale-95 ${evidenceMarkers.markers.length > 0 ? 'bg-red-600/20 border-red-500 text-red-400' : 'bg-dark-900 border-gray-700 text-gray-400'}`}
+              >
+                <Bookmark size={22} />
+                <span className="text-[10px] font-medium">Mark {evidenceMarkers.markers.length > 0 ? `(${evidenceMarkers.markers.length})` : ''}</span>
+              </button>
+              {!cameraStream && (
+                <button
+                  onClick={toggleScreen}
+                  className={`flex flex-col items-center gap-1 py-3 rounded-xl border transition-all active:scale-95 ${screenStream ? 'bg-brand-500/20 border-brand-500 text-brand-400' : 'bg-dark-900 border-gray-700 text-gray-400'}`}
+                >
+                  <Monitor size={22} />
+                  <span className="text-[10px] font-medium">Screen</span>
+                </button>
+              )}
             </div>
+
+            {/* Slide-up drawer toggle */}
+            <button
+              onClick={() => setShowMobileDrawer(!showMobileDrawer)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-dark-900 border border-gray-700 text-gray-400 text-xs"
+            >
+              {showMobileDrawer ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              {showMobileDrawer ? 'Hide advanced' : 'More controls'}
+            </button>
+
+            {/* Slide-up drawer — advanced controls */}
+            {showMobileDrawer && (
+              <div className="space-y-4 bg-dark-900 border border-gray-700 rounded-xl p-3 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <LayoutSelector currentLayout={layout} onSelect={setLayout} />
+                  <button
+                    onClick={() => {
+                      if (!multiviewEnabled && !resourceGuard.safeToEnable('multiview')) {
+                        setMobileTip('⚠️ Not enough memory for multiview. Close other apps.');
+                        return;
+                      }
+                      setMultiviewEnabled((v) => !v);
+                    }}
+                    className={`p-2 rounded-lg border shrink-0 ${
+                      multiviewEnabled
+                        ? 'bg-brand-500 border-brand-400 text-white'
+                        : 'border-gray-700 text-gray-400'
+                    }`}
+                    title="Program/Preview Multiview"
+                  >
+                    <SplitSquareVertical size={18} />
+                  </button>
+                  {captionsSupported && (
+                    <button
+                      onClick={toggleCaptions}
+                      className={`p-2 rounded-lg border shrink-0 ${captionsOn ? 'bg-brand-500 border-brand-400 text-white' : 'border-gray-700 text-gray-400'}`}
+                    >
+                      <Subtitles size={18} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Evidence Markers */}
+                <EvidenceMarkerPanel
+                  markers={evidenceMarkers.markers}
+                  quickLabels={evidenceMarkers.quickMarkerLabels}
+                  streamDuration={appState.streamDuration}
+                  isStreaming={appState.isStreaming}
+                  onAddMarker={evidenceMarkers.addMarker}
+                  onRemoveMarker={evidenceMarkers.removeMarker}
+                  onClearMarkers={evidenceMarkers.clearMarkers}
+                  onExportLog={evidenceMarkers.exportLog}
+                  compact
+                />
+
+                {/* Legal Overlays */}
+                <LegalOverlays
+                  onActivateCitation={handleActivateCitation}
+                  activeCitationId={activeCitationId}
+                  compact
+                />
+
+                {/* Stream Scheduler */}
+                <StreamScheduler onGoLive={handleBroadcast} compact />
+
+                {/* Guest Camera */}
+                <button
+                  onClick={() => setShowGuestInvite(true)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border text-xs font-semibold transition-colors ${guestConnections.length > 0 ? 'bg-green-600/20 border-green-500 text-green-400' : 'border-gray-700 text-gray-400'}`}
+                >
+                  <Users size={16} />
+                  {guestConnections.length > 0 ? `${guestConnections.length} Guest(s) Connected` : 'Invite Guest Camera'}
+                </button>
+
+                {/* Scream Demo */}
+                <button
+                  onClick={() => setShowScreamDemo(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-red-600/10 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/20"
+                >
+                  <Zap size={16} />
+                  Demo Scream Alert
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           // Desktop: two-column grid
@@ -1215,6 +1422,17 @@ const App: React.FC = () => {
       {screamDemoModal}
       {mobileTipToast}
       <PWAInstallPrompt />
+      {showPostStream && (
+        <PostStreamPanel
+          transcript={streamTranscript.exportTranscript()}
+          wordCount={streamTranscript.wordCount}
+          evidenceMarkers={evidenceMarkers.markers}
+          evidenceLog={evidenceMarkers.exportLog()}
+          streamDuration={appState.streamDuration}
+          onClose={() => setShowPostStream(false)}
+          authToken={sessionToken}
+        />
+      )}
     </div>
   );
 };
