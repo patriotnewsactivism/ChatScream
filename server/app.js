@@ -54,6 +54,7 @@ import {
 import {
   analyzeStreamContentWithAi,
   generateChatResponseWithAi,
+  generateFreeformContent,
   generateStreamMetadataWithAi,
   generateViralPackageWithAi,
   moderateMessageWithAi,
@@ -3267,6 +3268,44 @@ app.use((error, _req, res, next) => {
   console.error('API error:', error);
   res.status(500).json({ message: 'Internal server error.' });
 });
+
+
+// Generic AI generation endpoint — for PostStreamPanel article/FB post/summary generation
+app.post(
+  '/api/ai/chat',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const message = String(req.body?.message || req.body?.prompt || '').trim();
+    if (!message) {
+      res.status(400).json({ message: 'message is required.' });
+      return;
+    }
+    const { content, error } = await generateFreeformContent(message);
+    if (error) {
+      res.status(500).json({ message: error });
+      return;
+    }
+    res.json({ response: content, content });
+  }),
+);
+
+app.post(
+  '/api/ai/generate',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const prompt = String(req.body?.prompt || req.body?.message || '').trim();
+    if (!prompt) {
+      res.status(400).json({ message: 'prompt is required.' });
+      return;
+    }
+    const { content, error } = await generateFreeformContent(prompt);
+    if (error) {
+      res.status(500).json({ message: error });
+      return;
+    }
+    res.json({ response: content, content });
+  }),
+);
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ message: 'API route not found.' });

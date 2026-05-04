@@ -314,3 +314,18 @@ export const analyzeStreamContentWithAi = async (recentChat, streamTitle, stream
     return fallback;
   }
 };
+
+export const generateFreeformContent = async (prompt) => {
+  const client = createGeminiClient();
+  if (!client) return { error: 'AI not configured', content: null };
+  try {
+    const response = await client.models.generateContent({
+      model: MODEL_NAME,
+      contents: normalizeText(prompt),
+    });
+    const content = response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return { content, error: null };
+  } catch (err) {
+    return { error: err.message, content: null };
+  }
+};
