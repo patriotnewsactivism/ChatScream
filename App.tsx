@@ -93,6 +93,11 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Auto-initialize audio pipeline on studio load so combinedStream is ready
+  useEffect(() => {
+    initAudio();
+  }, [initAudio]);
+
   // camera / screen streams
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -448,13 +453,20 @@ const App: React.FC = () => {
       await rtmpSenderRef.current?.disconnect();
       setAppState((prev) => ({ ...prev, isStreaming: false }));
     } else {
-      const canvasStream = canvasRef.current?.getStream();
-      if (!canvasStream || !combinedStream) return alert('Media not ready');
+      // Ensure audio pipeline is initialized (creates AudioContext + destination)
+      initAudio();
 
-      const outputStream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...combinedStream.getAudioTracks(),
-      ]);
+      const canvasStream = canvasRef.current?.getStream();
+      if (!canvasStream) return alert('Media not ready — no video source. Enable your camera or share your screen first.');
+
+      // Build output: video always required, audio optional
+      const tracks = [...canvasStream.getVideoTracks()];
+      if (combinedStream && combinedStream.getAudioTracks().length > 0) {
+        tracks.push(...combinedStream.getAudioTracks());
+      } else {
+        console.warn('⚠️ No audio tracks available — streaming video-only');
+      }
+      const outputStream = new MediaStream(tracks);
 
       if (!rtmpSenderRef.current) {
         rtmpSenderRef.current = new RTMPSender(
@@ -488,12 +500,15 @@ const App: React.FC = () => {
         setMobileTip('⚠️ Device memory too low to record safely. Close other apps and try again.');
         return;
       }
+      // Ensure audio pipeline is initialized
+      initAudio();
       const canvasStream = canvasRef.current?.getStream();
-      if (!canvasStream || !combinedStream) return;
-      const combined = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...combinedStream.getAudioTracks(),
-      ]);
+      if (!canvasStream) return;
+      const tracks = [...canvasStream.getVideoTracks()];
+      if (combinedStream && combinedStream.getAudioTracks().length > 0) {
+        tracks.push(...combinedStream.getAudioTracks());
+      }
+      const combined = new MediaStream(tracks);
       localRecording.startRecording(combined);
       setAppState((prev) => ({ ...prev, isRecording: true }));
     }
