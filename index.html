@@ -3,6 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <!-- Force SW cache bust v3 — remove after 2026-05-11 -->
+    <script>
+    (function(){
+      var KEY='_cs_cache_bust_v3';
+      if(sessionStorage.getItem(KEY))return;
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          var p=regs.map(function(r){return r.unregister()});
+          return Promise.all(p);
+        }).then(function(){
+          return caches.keys();
+        }).then(function(names){
+          return Promise.all(names.map(function(n){return caches.delete(n)}));
+        }).then(function(){
+          sessionStorage.setItem(KEY,'1');
+          location.reload();
+        }).catch(function(){
+          sessionStorage.setItem(KEY,'1');
+        });
+      }
+    })();
+    </script>
 
     <!-- SEO Meta Tags -->
     <title>ChatScream - Unlimited Local Streaming. Scream for Attention.</title>
