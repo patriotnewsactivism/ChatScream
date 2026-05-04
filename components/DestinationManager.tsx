@@ -483,6 +483,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         </div>
       )}
 
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+
       <div className="mb-4 bg-brand-900/30 p-3 rounded border border-brand-500/25 text-xs text-gray-300 flex gap-2">
         <Info size={16} className="text-brand-300 shrink-0 mt-0.5" />
         <p>
@@ -490,6 +492,73 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           and business channels.
         </p>
       </div>
+
+      {showAddForm && (
+          <div className="bg-gray-800/95 p-3 rounded-lg border border-brand-500 mb-3 animate-fade-in">
+            <h3 className="text-xs font-semibold mb-2 text-gray-300">
+              ADD MANUAL RTMP DESTINATION
+            </h3>
+            <select
+              value={newPlatform}
+              onChange={(e) => setNewPlatform(e.target.value as Platform)}
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
+            >
+              {Object.values(Platform).map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="text"
+              placeholder={newPlatform === Platform.FACEBOOK
+                ? "RTMP Server URL (from Facebook Live Producer)"
+                : "RTMP Server URL (e.g. rtmp://my.server/app)"}
+              value={newServerUrl}
+              onChange={(e) => setNewServerUrl(e.target.value)}
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
+            />
+
+            <input
+              type="text"
+              placeholder="Account Name (e.g. Personal YT)"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
+            />
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                placeholder="Stream Key"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white pr-8 focus:border-brand-500 outline-none"
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-2 text-gray-400 hover:text-white"
+              >
+                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdd}
+                className="text-xs bg-brand-600 px-3 py-1 rounded text-white hover:bg-brand-500"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
 
       <section className="mb-4 rounded-lg border border-brand-500/20 bg-dark-900/70 p-3">
         <div className="flex items-center justify-between mb-3">
@@ -634,7 +703,6 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         )}
       </section>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {showYouTubePicker && (
           <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -678,73 +746,6 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {showAddForm && (
-          <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in">
-            <h3 className="text-xs font-semibold mb-2 text-gray-300">
-              ADD MANUAL RTMP DESTINATION
-            </h3>
-            <select
-              value={newPlatform}
-              onChange={(e) => setNewPlatform(e.target.value as Platform)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
-            >
-              {Object.values(Platform).map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="text"
-              placeholder={newPlatform === Platform.FACEBOOK
-                ? "RTMP Server URL (from Facebook Live Producer)"
-                : "RTMP Server URL (e.g. rtmp://my.server/app)"}
-              value={newServerUrl}
-              onChange={(e) => setNewServerUrl(e.target.value)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
-            />
-
-            <input
-              type="text"
-              placeholder="Account Name (e.g. Personal YT)"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
-            />
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                placeholder="Stream Key"
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white pr-8 focus:border-brand-500 outline-none"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-2 text-gray-400 hover:text-white"
-              >
-                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowAddForm(false)}
-                className="text-xs text-gray-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                className="text-xs bg-brand-600 px-3 py-1 rounded text-white hover:bg-brand-500"
-              >
-                Save
-              </button>
-            </div>
           </div>
         )}
 

@@ -1,8 +1,8 @@
 // ChatScream Service Worker
 // Provides offline support and asset caching
 
-const CACHE_NAME = 'chatscream-v2';
-const RUNTIME_CACHE = 'chatscream-runtime-v2';
+const CACHE_NAME = 'chatscream-v3';
+const RUNTIME_CACHE = 'chatscream-runtime-v3';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = ['/', '/index.html', '/manifest.json'];
