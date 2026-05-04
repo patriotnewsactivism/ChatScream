@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { BrandingSettings } from '../types';
 import { Type, LayoutTemplate, Palette, MessageSquare } from 'lucide-react';
 
@@ -7,7 +7,7 @@ interface BrandingPanelProps {
   onChange: (settings: BrandingSettings) => void;
 }
 
-const BrandingPanel: React.FC<BrandingPanelProps> = ({ settings, onChange }) => {
+const BrandingPanel: FC<BrandingPanelProps> = ({ settings, onChange }) => {
   const handleChange = (key: keyof BrandingSettings, value: any) => {
     onChange({ ...settings, [key]: value });
   };

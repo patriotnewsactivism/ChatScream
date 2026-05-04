@@ -1,6 +1,6 @@
-import React from 'react';
+import { FC } from 'react';
 
-const CookiePolicyPage: React.FC = () => {
+const CookiePolicyPage: FC = () => {
   return (
     <div className="min-h-screen bg-dark-900 text-gray-100">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { Scene, LayoutMode } from '../types';
 import { Video, Monitor, Clock, Coffee, Play, MessageSquare, LogOut, Layers } from 'lucide-react';
 
@@ -142,7 +142,7 @@ const PREBUILT_SCENES: Scene[] = [
   },
 ];
 
-const SceneSelector: React.FC<SceneSelectorProps> = ({ activeSceneId, onSceneSelect }) => {
+const SceneSelector: FC<SceneSelectorProps> = ({ activeSceneId, onSceneSelect }) => {
   const getIcon = (id: string) => {
     switch (id) {
       case 'camera-only':

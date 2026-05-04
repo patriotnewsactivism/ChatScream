@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { Image as ImageIcon, Check } from 'lucide-react';
 
 export const PRESET_BACKGROUNDS = [
@@ -14,7 +14,7 @@ interface BackgroundSelectorProps {
   onSelect: (url: string | null, id: string) => void;
 }
 
-const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({ currentBackgroundId, onSelect }) => {
+const BackgroundSelector: FC<BackgroundSelectorProps> = ({ currentBackgroundId, onSelect }) => {
   return (
     <div className="p-4 border-t border-gray-800">
        <h3 className="text-xs font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">

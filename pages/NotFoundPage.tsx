@@ -1,9 +1,9 @@
-import React from 'react';
+import { FC } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, LayoutDashboard, Radio, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const NotFoundPage: React.FC = () => {
+const NotFoundPage: FC = () => {
   const location = useLocation();
   const { user } = useAuth();
   const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];

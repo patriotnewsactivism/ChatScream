@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import { Mic, MicOff, Music, Film, Volume2, VolumeX } from 'lucide-react';
 
 interface AudioMixerProps {
@@ -18,7 +18,7 @@ interface AudioMixerProps {
 }
 
 // Level meter component that shows real-time audio level
-const LevelMeter: React.FC<{ level: number; color: string }> = ({ level, color }) => {
+const LevelMeter: FC<{ level: number; color: string }> = ({ level, color }) => {
   // Normalize level (0-1) and add some visual scaling
   const normalizedLevel = Math.min(Math.max(level, 0), 1);
   const displayWidth = Math.pow(normalizedLevel, 0.7) * 100; // Apply curve for better visual response
@@ -33,7 +33,7 @@ const LevelMeter: React.FC<{ level: number; color: string }> = ({ level, color }
   );
 };
 
-const AudioMixer: React.FC<AudioMixerProps> = ({
+const AudioMixer: FC<AudioMixerProps> = ({
   micVolume,
   musicVolume,
   videoVolume,
@@ -49,8 +49,8 @@ const AudioMixer: React.FC<AudioMixerProps> = ({
 
   const renderSlider = (
     label: string,
-    icon: React.ReactNode,
-    mutedIcon: React.ReactNode | null,
+    icon: ReactNode,
+    mutedIcon: ReactNode | null,
     value: number,
     onChange: (val: number) => void,
     colorClass: string,

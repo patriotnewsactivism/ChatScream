@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { LayoutMode } from '../types';
 import { Layout, Maximize, Square, Columns, User } from 'lucide-react';
 
@@ -7,7 +7,7 @@ interface LayoutSelectorProps {
   onSelect: (mode: LayoutMode) => void;
 }
 
-const LayoutSelector: React.FC<LayoutSelectorProps> = ({ currentLayout, onSelect }) => {
+const LayoutSelector: FC<LayoutSelectorProps> = ({ currentLayout, onSelect }) => {
   const layouts = [
     { mode: LayoutMode.FULL_CAM, label: 'Solo', icon: <User size={20} /> },
     { mode: LayoutMode.FULL_SCREEN, label: 'Screen', icon: <Maximize size={20} /> },
