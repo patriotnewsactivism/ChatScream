@@ -27,6 +27,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
   const videoGainRef = useRef<GainNode | null>(null);
 
   const [levels, setLevels] = useState({ mic: 0, music: 0, video: 0 });
+  const [combinedStreamState, setCombinedStreamState] = useState<MediaStream | null>(null);
 
   // Initialize Context
   const initAudio = useCallback(() => {
@@ -49,6 +50,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
     videoGainRef.current = ctx.createGain();
     videoGainRef.current.connect(dest);
 
+    setCombinedStreamState(dest.stream);
     console.log('🔈 Audio Pipeline Initialized');
   }, []);
 
@@ -118,7 +120,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
 
   return {
     initAudio,
-    combinedStream: audioDestRef.current?.stream || null,
+    combinedStream: combinedStreamState,
     levels,
   };
 };

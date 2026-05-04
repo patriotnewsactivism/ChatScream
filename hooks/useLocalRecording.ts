@@ -38,7 +38,13 @@ const QUALITY_BITRATES: Record<Exclude<RecordingQuality, 'auto'>, number> = {
 
 const pickMimeType = (): string => {
   const preferred = [
+    // Prefer MP4 (H.264+AAC) for broad device compatibility
+    'video/mp4;codecs=h264,aac',
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
+    // Fall back to WebM (VP9/VP8 + Opus)
     'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=h264,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
@@ -216,7 +222,8 @@ export const useLocalRecording = (
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `chatscream-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.webm`;
+      const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+      a.download = `chatscream-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

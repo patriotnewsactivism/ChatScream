@@ -1,4 +1,5 @@
 import { Destination, Platform } from '../types';
+import { getApiBaseUrl } from './apiClient';
 
 export type RouterStatus = 'idle' | 'routing' | 'error';
 export type DestinationStatus = 'offline' | 'connecting' | 'live' | 'error';
@@ -55,10 +56,20 @@ export class DestinationRouter {
     this.stream = stream;
     this.state.totalDestinations = enabled.length;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
+    // Connect to the backend API server (Railway), not the frontend (Vercel)
+    const apiBase = getApiBaseUrl();
+    let wsUrl: string;
+    if (apiBase) {
+      // Convert https://...  to wss://...
+      wsUrl = apiBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+    } else {
+      // Fallback to same origin
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}`;
+    }
+    console.log('🔌 Connecting WebSocket to:', wsUrl);
 
-    this.ws = new WebSocket(`${protocol}//${host}`);
+    this.ws = new WebSocket(wsUrl);
 
     return new Promise((resolve, reject) => {
       if (!this.ws) return reject(new Error('WebSocket not initialized'));
