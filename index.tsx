@@ -35,35 +35,6 @@ const PageLoader: React.FC = () => (
   </div>
 );
 
-// Register service worker
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        console.log('SW registered:', registration.scope);
-
-        // Check for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content available, prompt user to refresh
-                if (window.confirm('New version available! Reload to update?')) {
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  window.location.reload();
-                }
-              }
-            });
-          }
-        });
-      })
-      .catch((error) => {
-        console.warn('SW registration failed:', error);
-      });
-  });
-}
 
 // Sentry User Context Provider
 const SentryUserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

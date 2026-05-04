@@ -3,24 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <!-- Force SW cache bust v3 — remove after 2026-05-11 -->
+
+    <!-- Kill any lingering service workers and caches on every load -->
     <script>
     (function(){
-      var KEY='_cs_cache_bust_v6';
-      if(sessionStorage.getItem(KEY))return;
       if('serviceWorker' in navigator){
         navigator.serviceWorker.getRegistrations().then(function(regs){
-          var p=regs.map(function(r){return r.unregister()});
-          return Promise.all(p);
-        }).then(function(){
-          return caches.keys();
-        }).then(function(names){
-          return Promise.all(names.map(function(n){return caches.delete(n)}));
-        }).then(function(){
-          sessionStorage.setItem(KEY,'1');
-          location.reload();
-        }).catch(function(){
-          sessionStorage.setItem(KEY,'1');
+          regs.forEach(function(r){ r.unregister(); });
+        });
+      }
+      if('caches' in window){
+        caches.keys().then(function(names){
+          names.forEach(function(n){ caches.delete(n); });
         });
       }
     })();
@@ -76,148 +70,11 @@
         "priceCurrency": "USD",
         "description": "Free tier available - Unlimited local device streaming"
       },
-      "description": "Unlimited local device streaming with optional cloud streaming and donation-triggered Chat Screamer alerts",
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "ratingCount": "3500"
-      }
+      "description": "Unlimited local device streaming from phone, tablet, or desktop. Donation-triggered Screams that take over the screen."
     }
     </script>
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                50: '#fff7ed',
-                100: '#ffedd5',
-                400: '#fb923c',
-                500: '#f97316',
-                600: '#ea580c',
-                700: '#c2410c',
-                800: '#9a3412',
-                900: '#7c2d12',
-              },
-              scream: {
-                pink: '#ec4899',
-                purple: '#a855f7',
-                cyan: '#06b6d4',
-                yellow: '#eab308',
-              },
-              dark: {
-                700: '#2a2a2a',
-                800: '#1e1e1e',
-                900: '#121212',
-              }
-            },
-            keyframes: {
-              slideUp: {
-                '0%': { transform: 'translateY(100%)', opacity: '0' },
-                '100%': { transform: 'translateY(0)', opacity: '1' },
-              },
-              fadeIn: {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              fadeOut: {
-                '0%': { opacity: '1' },
-                '100%': { opacity: '0' },
-              },
-              pulse: {
-                '0%, 100%': { opacity: '1' },
-                '50%': { opacity: '0.5' },
-              },
-              bounce: {
-                '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-25%)' },
-              },
-              shake: {
-                '0%, 100%': { transform: 'translateX(0)' },
-                '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-4px)' },
-                '20%, 40%, 60%, 80%': { transform: 'translateX(4px)' },
-              },
-              scream: {
-                '0%': { transform: 'scale(0.5)', opacity: '0' },
-                '50%': { transform: 'scale(1.2)' },
-                '100%': { transform: 'scale(1)', opacity: '1' },
-              },
-              glow: {
-                '0%, 100%': { boxShadow: '0 0 20px rgba(249, 115, 22, 0.5)' },
-                '50%': { boxShadow: '0 0 40px rgba(249, 115, 22, 0.8)' },
-              }
-            },
-            animation: {
-              'slide-up': 'slideUp 0.3s ease-out',
-              'fade-in': 'fadeIn 0.2s ease-out',
-              'fade-out': 'fadeOut 0.2s ease-out',
-              'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'bounce': 'bounce 1s infinite',
-              'shake': 'shake 0.5s ease-in-out',
-              'scream': 'scream 0.5s ease-out',
-              'glow': 'glow 2s ease-in-out infinite',
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      /* Custom scrollbar for a cleaner studio look */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #121212;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #374151;
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #4b5563;
-      }
-      /* Hide scrollbar for cleaner mobile horizontal scrolling */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      /* Safe area padding for notched phones */
-      .pb-safe {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-      /* Smooth scrolling */
-      html {
-        scroll-behavior: smooth;
-      }
-      /* Better font rendering */
-      body {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      /* Selection color */
-      ::selection {
-        background-color: rgba(249, 115, 22, 0.3);
-        color: white;
-      }
-      /* Scream animation keyframes */
-      @keyframes screenTakeover {
-        0% { opacity: 0; transform: scale(0.8); }
-        20% { opacity: 1; transform: scale(1.1); }
-        40% { transform: scale(0.95); }
-        60% { transform: scale(1.05); }
-        80% { transform: scale(0.98); }
-        100% { transform: scale(1); }
-      }
-    </style>
-</head>
-  <body class="bg-dark-900 text-white overflow-x-hidden">
+  </head>
+  <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
