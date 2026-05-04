@@ -69,6 +69,8 @@ import {
   Circle,
   FlipHorizontal2,
   Eye,
+  LogOut,
+  ChevronDown,
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ const App: React.FC = () => {
   const [isMirrored, setIsMirrored] = useState(false);
 
   // sidebar / bottom-tab navigation
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'studio' | 'destinations' | 'branding' | 'media' | 'graphics'>(
     'studio',
   );
@@ -991,12 +994,42 @@ const App: React.FC = () => {
             )}
             {appState.isStreaming ? 'STOP' : 'GO LIVE'}
           </button>
-          <button
-            onClick={logout}
-            className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white"
-          >
-            <Settings size={16} />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowSettingsMenu((v) => !v)}
+              className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white"
+            >
+              <Settings size={16} />
+            </button>
+            {showSettingsMenu && (
+              <div className="absolute right-0 top-10 w-52 bg-dark-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1 animate-fade-in">
+                <div className="px-3 py-2 border-b border-gray-700">
+                  <p className="text-xs text-gray-400">Signed in as</p>
+                  <p className="text-sm text-white truncate">{user?.email || 'User'}</p>
+                </div>
+                <button
+                  onClick={() => { setActiveTab('destinations'); setShowSettingsMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
+                >
+                  <Radio size={14} /> Destinations
+                </button>
+                <button
+                  onClick={() => { setActiveTab('branding'); setShowSettingsMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
+                >
+                  <Palette size={14} /> Branding
+                </button>
+                <div className="border-t border-gray-700 mt-1 pt-1">
+                  <button
+                    onClick={() => { setShowSettingsMenu(false); logout(); }}
+                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2"
+                  >
+                    <LogOut size={14} /> Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

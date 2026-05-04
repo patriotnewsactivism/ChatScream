@@ -198,7 +198,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   };
 
   const handleAdd = () => {
-    if (!newName || !newKey || (newPlatform === Platform.CUSTOM_RTMP && !newServerUrl)) return;
+    if (!newName || !newKey) return;
     if (!destinationLimit.allowed) return;
 
     const newDest: Destination = {
@@ -206,7 +206,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       platform: newPlatform,
       name: newName,
       streamKey: newKey,
-      serverUrl: newPlatform === Platform.CUSTOM_RTMP ? newServerUrl : undefined,
+      serverUrl: newServerUrl || undefined,
       authType: 'manual',
       isEnabled: true,
       status: 'offline',
@@ -698,15 +698,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               ))}
             </select>
 
-            {newPlatform === Platform.CUSTOM_RTMP && (
-              <input
-                type="text"
-                placeholder="RTMP Server URL (e.g. rtmp://my.server/app)"
-                value={newServerUrl}
-                onChange={(e) => setNewServerUrl(e.target.value)}
-                className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
-              />
-            )}
+            <input
+              type="text"
+              placeholder={newPlatform === Platform.FACEBOOK
+                ? "RTMP Server URL (from Facebook Live Producer)"
+                : "RTMP Server URL (e.g. rtmp://my.server/app)"}
+              value={newServerUrl}
+              onChange={(e) => setNewServerUrl(e.target.value)}
+              className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
+            />
 
             <input
               type="text"
