@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Destination,
@@ -34,7 +34,8 @@ import ResourceHealthBar from './components/ResourceHealthBar';
 import VideoTransportBar from './components/VideoTransportBar';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import EvidenceMarkerPanel from './components/EvidenceMarkerPanel';
-import LegalOverlays, { LegalCitation } from './components/LegalOverlays';
+import LegalOverlays from './components/LegalOverlays';
+import type { LegalCitation } from './components/LegalOverlays';
 import PostStreamPanel from './components/PostStreamPanel';
 import StreamScheduler from './components/StreamScheduler';
 import { RTMPSender } from './services/RTMPSender';
@@ -90,7 +91,7 @@ const isMobileViewport = () => window.innerWidth < 768;
 
 // ─── component ──────────────────────────────────────────────────────────────
 
-const App: React.FC = () => {
+const App: FC = () => {
   const navigate = useNavigate();
   const { user, userProfile, sessionToken, logout } = useAuth();
 
