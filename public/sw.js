@@ -1,8 +1,8 @@
 // ChatScream Service Worker
 // Provides offline support and asset caching
 
-const CACHE_NAME = 'chatscream-v1';
-const RUNTIME_CACHE = 'chatscream-runtime-v1';
+const CACHE_NAME = 'chatscream-v2';
+const RUNTIME_CACHE = 'chatscream-runtime-v2';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = ['/', '/index.html', '/manifest.json'];
@@ -89,28 +89,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets, try cache first, then network
+  // For static assets with content hashes (Vite builds), use network-first
+  // to avoid serving stale code after deployments
   if (url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?)$/)) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) {
-          // Return cached version and update in background
-          event.waitUntil(
-            fetch(request)
-              .then((response) => {
-                if (response.ok) {
-                  caches.open(RUNTIME_CACHE).then((cache) => {
-                    cache.put(request, response);
-                  });
-                }
-              })
-              .catch(() => {}),
-          );
-          return cached;
-        }
-
-        // Not in cache, fetch and cache
-        return fetch(request).then((response) => {
+      fetch(request)
+        .then((response) => {
           if (response.ok) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
@@ -118,8 +102,12 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
-        });
-      }),
+        })
+        .catch(() => {
+          return caches.match(request).then((cached) => {
+            return cached || new Response('', { status: 503 });
+          });
+        }),
     );
     return;
   }
