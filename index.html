@@ -4,18 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
 
-    <!-- Kill any lingering service workers and caches on every load -->
+    <!-- Cache busting + stale chunk prevention — runs before React mounts -->
     <script>
     (function(){
+      // Unregister all service workers immediately (they cause stale chunk issues)
       if('serviceWorker' in navigator){
         navigator.serviceWorker.getRegistrations().then(function(regs){
           regs.forEach(function(r){ r.unregister(); });
         });
       }
+      // Clear all caches
       if('caches' in window){
         caches.keys().then(function(names){
           names.forEach(function(n){ caches.delete(n); });
         });
+      }
+      // Detect if we're stuck in a reload loop (shouldn't happen, but safety net)
+      var LOOP_KEY = 'cs_reload_loop';
+      var loopCount = parseInt(sessionStorage.getItem(LOOP_KEY) || '0', 10);
+      if(loopCount > 3){
+        // Too many reloads — clear the counter and stop
+        sessionStorage.removeItem(LOOP_KEY);
+        sessionStorage.removeItem('chunk_error_reload_ts');
       }
     })();
     </script>

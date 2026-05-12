@@ -17,13 +17,19 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     build: {
+      // Content hash in ALL chunk filenames — guarantees no stale chunk collisions
       rollupOptions: {
         output: {
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]',
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
             if (id.includes('react-dom') || id.includes('react-router') || id.includes('react'))
               return 'react';
             if (id.includes('lucide-react')) return 'icons';
+            if (id.includes('firebase')) return 'firebase';
+            if (id.includes('stripe')) return 'stripe';
             return 'vendor';
           },
         },
