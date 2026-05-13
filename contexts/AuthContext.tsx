@@ -138,29 +138,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.warn('[AuthContext] Firebase auth timed out — forcing loading=false');
         setLoading(false);
       }
-    }, 8000);
+    }, 3000);
 
     const unsubscribe = onIdTokenChange(async (backendUser) => {
       window.clearTimeout(loadingGuard);
-      setLoading(true);
       setUser(backendUser);
       setSessionToken(null);
       clearScheduledRefresh();
 
       if (backendUser) {
-        try {
-          try {
-            await syncAccess();
-          } catch (err) {
-            console.warn('Access sync skipped:', err);
-          }
+        // syncAccess is fire-and-forget — never block studio loading on a server call
+        syncAccess().catch((err) => console.warn('Access sync skipped:', err));
 
+        try {
           const tokenResult = await backendUser.getIdTokenResult(false);
           if (!isMounted) return;
           setSessionToken(tokenResult.token);
 
-          const profile = await getUserProfile(backendUser.uid);
-          setUserProfile(applyLocalAccessOverrides(profile));
+          // Profile loads in background — does not block studio rendering
+          getUserProfile(backendUser.uid)
+            .then((profile) => { if (isMounted) setUserProfile(applyLocalAccessOverrides(profile)); })
+            .catch(() => {});
           ensureAffiliateForSignedInUser().catch(() => {});
           scheduleTokenRefresh(tokenResult, backendUser);
         } catch (err: any) {
@@ -175,9 +173,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserProfile(null);
       }
 
-      if (isMounted) {
-        setLoading(false);
-      }
+      // Always resolve — never leave the user on the loading screen
+      if (isMounted) setLoading(false);
     });
 
     return () => {
@@ -446,3 +443,4 @@ function getErrorMessage(error?: unknown): string {
 }
 
 export default AuthProvider;
+
