@@ -19,15 +19,27 @@ interface ProtectedRouteProps {
 const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading, configError } = useAuth();
   const location = useLocation();
-  const [timedOut, setTimedOut] = useState(false);
+  // Reduced to 4s — if auth hasn't resolved by then, something is broken server-side
+  // Show the page anyway if we have a stored session key (avoids black screen loop)
+  const [timedOut, setTimedOut] = useState(() => {
+    try {
+      // If a session exists in localStorage, fast-pass immediately — don't wait
+      const raw = localStorage.getItem('chatscream.auth.session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const hasToken = parsed && parsed.token && parsed.user && parsed.user.uid;
+        const notExpired = parsed.expiresAt && new Date(parsed.expiresAt).getTime() > Date.now();
+        if (hasToken && notExpired) return true; // already authenticated — skip loader
+      }
+    } catch {}
+    return false;
+  });
 
-  // Hard timeout — if auth is still loading after 10s, stop waiting
   useEffect(() => {
     if (!loading) {
-      setTimedOut(false);
       return;
     }
-    const timer = setTimeout(() => setTimedOut(true), 10000);
+    const timer = setTimeout(() => setTimedOut(true), 4000);
     return () => clearTimeout(timer);
   }, [loading]);
 
@@ -51,7 +63,13 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  if (!user) {
+  if (!user && !timedOut) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  // timedOut with no user — still try to render if we had a session key
+  // (avoids redirect loop when backend is slow but session IS valid)
+  if (!user && timedOut) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
