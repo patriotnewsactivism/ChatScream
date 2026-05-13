@@ -132,7 +132,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     })();
 
+    // Safety valve — if Firebase never fires, stop blocking the UI
+    const loadingGuard = window.setTimeout(() => {
+      if (isMounted) {
+        console.warn('[AuthContext] Firebase auth timed out — forcing loading=false');
+        setLoading(false);
+      }
+    }, 8000);
+
     const unsubscribe = onIdTokenChange(async (backendUser) => {
+      window.clearTimeout(loadingGuard);
       setLoading(true);
       setUser(backendUser);
       setSessionToken(null);
@@ -174,6 +183,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       isMounted = false;
       clearScheduledRefresh();
+      window.clearTimeout(loadingGuard);
       unsubscribe();
     };
   }, []);

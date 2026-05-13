@@ -1,4 +1,4 @@
-import { FC, ReactNode } from 'react';
+import { FC, ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AuthStatusBanner from './AuthStatusBanner';
@@ -19,8 +19,19 @@ interface ProtectedRouteProps {
 const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading, configError } = useAuth();
   const location = useLocation();
+  const [timedOut, setTimedOut] = useState(false);
 
-  if (loading) {
+  // Hard timeout — if auth is still loading after 10s, stop waiting
+  useEffect(() => {
+    if (!loading) {
+      setTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setTimedOut(true), 10000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  if (loading && !timedOut) {
     return <AuthLoader />;
   }
 

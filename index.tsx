@@ -27,14 +27,37 @@ const CareersPage = lazy(() => import('./pages/CareersPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 
 // Loading component for Suspense fallback
-const PageLoader: React.FC = () => (
-  <div className="min-h-screen bg-dark-900 flex items-center justify-center">
-    <div className="text-center">
-      <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-      <p className="text-gray-400">Loading...</p>
+const PageLoader: React.FC = () => {
+  const [slow, setSlow] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="min-h-screen bg-dark-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-lg font-bold text-white mb-1">
+          Chat<span className="text-brand-400">Scream</span>
+        </p>
+        {slow ? (
+          <p className="text-sm text-gray-500 max-w-xs mx-auto">
+            Taking a moment... If this persists,{' '}
+            <button
+              className="underline text-brand-400"
+              onClick={() => window.location.reload()}
+            >
+              refresh the page
+            </button>
+            .
+          </p>
+        ) : (
+          <p className="text-gray-500 text-sm">Loading studio...</p>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 
 // Sentry User Context Provider

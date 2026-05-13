@@ -548,8 +548,13 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
         return;
       }
 
-      // Popup was blocked; continue OAuth in the same tab.
-      window.location.assign(authUrl);
+      // Popup was blocked — try a new tab instead of hijacking the main window.
+      // Same-tab navigation would kick the user out of the studio.
+      const newTab = window.open(authUrl, '_blank');
+      if (!newTab) {
+        // Last resort: same tab (unlikely — at least we tried)
+        window.location.assign(authUrl);
+      }
     } catch (error) {
       console.error(`Failed to start ${platform} OAuth:`, error);
       if (popup && !popup.closed) {

@@ -619,16 +619,22 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                       disabled={
                         isStreaming ||
                         !destinationLimit.allowed ||
+                        connectingPlatform === option.oauthPlatform ||
                         (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
                       }
-                      className="text-[11px] px-2 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50"
+                      className="text-[11px] px-2 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50 flex items-center gap-1"
                       aria-label={`Connect ${option.label}`}
                     >
-                      {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
-                        ? youtubeChannelsLoading
-                          ? 'Loading...'
-                          : 'Select channel'
-                        : `Connect ${option.label}`}
+                      {connectingPlatform === option.oauthPlatform ? (
+                        <>
+                          <Loader2 size={10} className="animate-spin" />
+                          Opening...
+                        </>
+                      ) : option.oauthPlatform === 'youtube' && isPlatformConnected('youtube') ? (
+                        youtubeChannelsLoading ? 'Loading...' : 'Select channel'
+                      ) : (
+                        `Connect ${option.label}`
+                      )}
                     </button>
                   </div>
                 </div>

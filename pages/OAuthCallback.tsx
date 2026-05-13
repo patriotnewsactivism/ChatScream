@@ -35,9 +35,26 @@ const OAuthCallback: React.FC = () => {
   const { user, loading, refreshProfile } = useAuth();
   const attemptedSessionRestore = useRef(false);
   const exitScheduled = useRef(false);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState<string>('Completing connection...');
+
+  // Hard timeout — never spin forever if auth hangs
+  useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (status === 'loading') {
+        setStatus('error');
+        setMessage(
+          'Connection timed out. The authentication service may be unreachable. Try again or go back to Studio.'
+        );
+      }
+    }, 12000);
+    return () => {
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const platformLabel = useMemo(() => {
     const platform = searchParams.get('platform') || '';
