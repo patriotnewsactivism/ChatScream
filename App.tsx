@@ -493,9 +493,10 @@ const App: FC = () => {
           (id, status) =>
             setDestinations((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d))),
           {
-            userPlan: 'free',
+            userPlan: (userProfile?.subscription?.plan as any) || 'free',
             userId: user?.uid || 'guest',
-            cloudHoursUsed: 0,
+            userEmail: user?.email || null,
+            cloudHoursUsed: userProfile?.subscription?.cloudHoursUsed || 0,
             streamingMode: 'local',
           },
           (stats) => setAppState((prev) => ({ ...prev, bitrate: stats.bitrate })),

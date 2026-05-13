@@ -22,6 +22,7 @@ type StatusUpdate = (id: string, status: Destination['status']) => void;
 export interface RTMPSenderConfig {
   userPlan: PlanTier;
   userId: string;
+  userEmail?: string | null;
   cloudHoursUsed: number;
   streamingMode: StreamingMode;
 }
@@ -84,6 +85,7 @@ export class RTMPSender {
       const enforcementResult = streamEnforcement.validateStreamRequest({
         userId: this.config.userId,
         userPlan: this.config.userPlan,
+        userEmail: this.config.userEmail,
         currentDestinations: 0,
         cloudHoursUsed: this.config.cloudHoursUsed,
         requestedDestinations: this.destinations.length,
@@ -101,6 +103,7 @@ export class RTMPSender {
       const split = streamEnforcement.splitDestinationsByEnforcement(
         this.config.userPlan,
         this.destinations,
+        this.config.userEmail,
       );
 
       if (split.rejected.length > 0) {

@@ -68,7 +68,7 @@ export class StreamEnforcementService {
     let destinationsRejected = 0;
 
     // 1. Validate destination count
-    const destCheck = canAddDestination(context.userPlan, context.requestedDestinations);
+    const destCheck = canAddDestination(context.userPlan, context.requestedDestinations, context.userEmail);
     if (!destCheck.allowed) {
       violations.push(destCheck.message);
       destinationsAllowed =
@@ -357,14 +357,18 @@ export class StreamEnforcementService {
   public splitDestinationsByEnforcement(
     userPlan: PlanTier,
     destinations: Destination[],
+    userEmail?: string | null,
   ): {
     allowed: Destination[];
     rejected: Destination[];
     enforcement: EnforcementResult;
   } {
     const enabled = destinations.filter((d) => d.isEnabled);
-    const destCheck = canAddDestination(userPlan, enabled.length);
 
+    // Check the plan max by passing 0 as current count (we want the ceiling, not a "can I add one more" check)
+    const destCheck = canAddDestination(userPlan, 0, userEmail);
+
+    // -1 = unlimited; otherwise cap to plan max
     const maxAllowed =
       destCheck.maxDestinations === -1 ? enabled.length : destCheck.maxDestinations;
 
@@ -372,11 +376,13 @@ export class StreamEnforcementService {
       allowed: enabled.slice(0, maxAllowed),
       rejected: enabled.slice(maxAllowed),
       enforcement: {
-        allowed: destCheck.allowed,
-        reason: destCheck.message,
+        allowed: maxAllowed > 0,
+        reason: maxAllowed >= enabled.length
+          ? `All ${enabled.length} destination(s) allowed`
+          : `Plan allows ${maxAllowed} destination(s); ${enabled.length - maxAllowed} rejected`,
         enforcement: {
           destinationsAllowed: maxAllowed,
-          destinationsRejected: enabled.length - maxAllowed,
+          destinationsRejected: Math.max(0, enabled.length - maxAllowed),
           watermarkRequired: planHasWatermark(userPlan),
           cloudStreamingAllowed: true,
           remainingCloudHours: 0,
