@@ -129,31 +129,39 @@ const ensureActiveSession = (): StoredSession | null => {
   return null;
 };
 
+// Wraps a promise with a timeout — prevents Railway cold-start hangs from blocking the UI
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+};
+
 const buildAuthUser = (session: StoredSession): AuthUser => ({
   uid: session.user.uid,
   email: session.user.email,
   displayName: session.user.displayName,
   photoURL: session.user.photoURL,
   getIdToken: async (forceRefresh = false) => {
+    // Only hit the network if explicitly asked or session is truly expired
     if (forceRefresh) {
-      await hydrateSessionFromServer();
+      await withTimeout(hydrateSessionFromServer(), 5000, null);
+    } else if (!ensureActiveSession()) {
+      await withTimeout(hydrateSessionFromServer(), 5000, null);
     }
-    if (!ensureActiveSession()) {
-      await hydrateSessionFromServer();
-    }
-    return ensureActiveSession()?.token || '';
+    return ensureActiveSession()?.token || session.token || '';
   },
   getIdTokenResult: async (forceRefresh = false) => {
+    // Only hit the network if explicitly asked or session is truly expired
     if (forceRefresh) {
-      await hydrateSessionFromServer();
-    }
-    if (!ensureActiveSession()) {
-      await hydrateSessionFromServer();
+      await withTimeout(hydrateSessionFromServer(), 5000, null);
+    } else if (!ensureActiveSession()) {
+      await withTimeout(hydrateSessionFromServer(), 5000, null);
     }
     const activeSession = ensureActiveSession();
     return {
-      token: activeSession?.token || '',
-      expirationTime: activeSession?.expiresAt || defaultExpirationTime(),
+      token: activeSession?.token || session.token || '',
+      expirationTime: activeSession?.expiresAt || session.expiresAt || defaultExpirationTime(),
     };
   },
 });
@@ -1114,7 +1122,9 @@ export const applyLocalAccessOverrides = (
 
 export const onAuthChange = (callback: AuthListener) => {
   authListeners.add(callback);
-  callback(getCurrentAuthUser());
+  // Defer initial call — avoids firing before React mounts AuthContext
+  const currentUser = getCurrentAuthUser();
+  Promise.resolve().then(() => callback(currentUser));
   return () => {
     authListeners.delete(callback);
   };
@@ -1123,3 +1133,4 @@ export const onAuthChange = (callback: AuthListener) => {
 export const onIdTokenChange = onAuthChange;
 
 export const getCurrentSessionToken = (): string | null => getSessionToken();
+
