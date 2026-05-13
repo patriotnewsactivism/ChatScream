@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useState } from 'react';
+import { FC, ReactNode, useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AuthStatusBanner from './AuthStatusBanner';
@@ -7,7 +7,7 @@ const AuthLoader: FC = () => (
   <div className="min-h-screen bg-dark-900 flex items-center justify-center">
     <div className="text-center">
       <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-      <p className="text-gray-400">Checking your session...</p>
+      <p className="text-gray-400 text-sm">Loading studio...</p>
     </div>
   </div>
 );
@@ -16,37 +16,39 @@ interface ProtectedRouteProps {
   children: ReactNode;
 }
 
+// Check localStorage for a stored session — if one exists and isn't expired,
+// we treat the user as authenticated immediately without waiting for the auth hook.
+const hasStoredSession = (): boolean => {
+  try {
+    const raw = localStorage.getItem('chatscream.auth.session');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.token || !parsed?.user?.uid) return false;
+    if (!parsed.expiresAt) return true; // no expiry = treat as valid
+    return new Date(parsed.expiresAt).getTime() > Date.now();
+  } catch {
+    return false;
+  }
+};
+
 const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading, configError } = useAuth();
   const location = useLocation();
-  // Reduced to 4s — if auth hasn't resolved by then, something is broken server-side
-  // Show the page anyway if we have a stored session key (avoids black screen loop)
-  const [timedOut, setTimedOut] = useState(() => {
-    try {
-      // If a session exists in localStorage, fast-pass immediately — don't wait
-      const raw = localStorage.getItem('chatscream.auth.session');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const hasToken = parsed && parsed.token && parsed.user && parsed.user.uid;
-        const notExpired = parsed.expiresAt && new Date(parsed.expiresAt).getTime() > Date.now();
-        if (hasToken && notExpired) return true; // already authenticated — skip loader
-      }
-    } catch {}
-    return false;
-  });
+
+  // If we have a stored session, render immediately — do not wait for auth hook
+  const [sessionExists] = useState(() => hasStoredSession());
+
+  // Hard fallback: after 3s, stop blocking no matter what
+  const [timedOut, setTimedOut] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!loading) {
-      return;
-    }
-    const timer = setTimeout(() => setTimedOut(true), 4000);
-    return () => clearTimeout(timer);
-  }, [loading]);
+    if (!loading || user || sessionExists) return;
+    timerRef.current = setTimeout(() => setTimedOut(true), 3000);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [loading, user, sessionExists]);
 
-  if (loading && !timedOut) {
-    return <AuthLoader />;
-  }
-
+  // Config error — show banner
   if (configError) {
     return (
       <div className="min-h-screen bg-dark-900 text-white flex flex-col">
@@ -63,17 +65,17 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  if (!user && !timedOut) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
+  // User is confirmed authenticated — render immediately
+  if (user) return <>{children}</>;
 
-  // timedOut with no user — still try to render if we had a session key
-  // (avoids redirect loop when backend is slow but session IS valid)
-  if (!user && timedOut) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
+  // We have a stored session — render immediately, auth context will catch up
+  if (sessionExists) return <>{children}</>;
 
-  return <>{children}</>;
+  // Still loading and haven't timed out — show spinner briefly
+  if (loading && !timedOut) return <AuthLoader />;
+
+  // No user, no stored session, not loading or timed out — redirect to login
+  return <Navigate to="/login" replace state={{ from: location }} />;
 };
 
 export default ProtectedRoute;
