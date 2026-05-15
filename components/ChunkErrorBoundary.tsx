@@ -7,11 +7,13 @@ type Props = {
 type State = {
   hasError: boolean;
   message: string;
-  reloadAttempted: boolean;
+  giveUp: boolean;
 };
 
-const RELOAD_KEY = 'chunk_error_reload_ts';
-const RELOAD_COOLDOWN_MS = 10_000; // 10 seconds between auto-reloads
+const RELOAD_COUNT_KEY = 'chunk_error_reload_count';
+const RELOAD_TS_KEY = 'chunk_error_reload_ts';
+const MAX_AUTO_RELOADS = 2;
+const RELOAD_WINDOW_MS = 30_000; // reset count after 30s of no errors
 
 const isChunkLoadError = (error: unknown): boolean => {
   const msg = error instanceof Error ? error.message : String(error || '');
@@ -20,33 +22,55 @@ const isChunkLoadError = (error: unknown): boolean => {
     msg.includes('Importing a module script failed') ||
     msg.includes('Loading chunk') ||
     msg.includes('ChunkLoadError') ||
-    msg.includes('Failed to fetch') ||
     msg.includes('Load failed') ||
     msg.includes('error loading dynamically imported module')
   );
 };
 
 const clearCachesAndReload = async (): Promise<void> => {
-  // Clear all caches
   if ('caches' in window) {
     try {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     } catch { /* ignore */ }
   }
-  // Unregister service workers
   if ('serviceWorker' in navigator) {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));
     } catch { /* ignore */ }
   }
-  // Hard reload — bypass browser cache
   window.location.reload();
 };
 
+const getReloadCount = (): number => {
+  try {
+    const ts = parseInt(localStorage.getItem(RELOAD_TS_KEY) || '0', 10);
+    // If last reload was more than 30s ago, reset the counter
+    if (Date.now() - ts > RELOAD_WINDOW_MS) {
+      localStorage.removeItem(RELOAD_COUNT_KEY);
+      localStorage.removeItem(RELOAD_TS_KEY);
+      return 0;
+    }
+    return parseInt(localStorage.getItem(RELOAD_COUNT_KEY) || '0', 10);
+  } catch {
+    return 0;
+  }
+};
+
+const incrementReloadCount = (): number => {
+  try {
+    const count = getReloadCount() + 1;
+    localStorage.setItem(RELOAD_COUNT_KEY, String(count));
+    localStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
+    return count;
+  } catch {
+    return 99; // fail-safe: treat as exceeded
+  }
+};
+
 export default class ChunkErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, message: '', reloadAttempted: false };
+  state: State = { hasError: false, message: '', giveUp: false };
 
   static getDerivedStateFromError(error: unknown): Partial<State> {
     const message = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -56,50 +80,48 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: unknown): void {
     if (!isChunkLoadError(error)) return;
 
-    try {
-      const lastReload = parseInt(sessionStorage.getItem(RELOAD_KEY) || '0', 10);
-      const now = Date.now();
-
-      if (now - lastReload > RELOAD_COOLDOWN_MS) {
-        // First time hitting this error — auto-reload silently
-        sessionStorage.setItem(RELOAD_KEY, String(now));
-        clearCachesAndReload();
-      } else {
-        // Already tried reloading — show the manual button
-        this.setState({ reloadAttempted: true });
-      }
-    } catch {
-      this.setState({ reloadAttempted: true });
+    const count = getReloadCount();
+    if (count >= MAX_AUTO_RELOADS) {
+      // Already tried — stop looping, show manual button
+      this.setState({ giveUp: true });
+      return;
     }
+
+    // First or second attempt — increment and reload
+    incrementReloadCount();
+    clearCachesAndReload();
   }
 
   handleManualReload = (): void => {
-    try { sessionStorage.removeItem(RELOAD_KEY); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(RELOAD_COUNT_KEY);
+      localStorage.removeItem(RELOAD_TS_KEY);
+    } catch { /* ignore */ }
     clearCachesAndReload();
   };
 
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    // If auto-reload is in progress, show a minimal spinner (not the banner)
-    if (!this.state.reloadAttempted) {
+    // Auto-reload in progress
+    if (!this.state.giveUp) {
       return (
         <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center">
           <div className="text-center space-y-3">
             <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm text-gray-400">Refreshing app...</p>
+            <p className="text-sm text-gray-400">Loading update...</p>
           </div>
         </div>
       );
     }
 
-    // Auto-reload was tried and failed — show the manual button
+    // Gave up — show manual button
     return (
       <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-dark-800 border border-gray-800 rounded-2xl p-6 space-y-4">
           <h1 className="text-xl font-bold">Update required</h1>
           <p className="text-sm text-gray-400">
-            A new version of ChatScream was deployed. Click below to load the latest version.
+            A new version of ChatScream is available. Tap below to load it.
           </p>
           <button
             onClick={this.handleManualReload}
