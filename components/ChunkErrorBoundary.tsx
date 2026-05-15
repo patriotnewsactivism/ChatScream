@@ -10,100 +10,109 @@ type State = {
   giveUp: boolean;
 };
 
-const RELOAD_COUNT_KEY = 'chunk_error_reload_count';
-const RELOAD_TS_KEY = 'chunk_error_reload_ts';
+// ── Keys must match index.html inline script ──────────────────────────────────
+const RELOAD_COUNT_KEY = 'cs_loop_count';
+const RELOAD_TS_KEY    = 'cs_loop_ts';
 const MAX_AUTO_RELOADS = 2;
-const RELOAD_WINDOW_MS = 30_000; // reset count after 30s of no errors
+const RELOAD_WINDOW_MS = 20_000;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const isChunkLoadError = (error: unknown): boolean => {
-  const msg = error instanceof Error ? error.message : String(error || '');
+  const msg = error instanceof Error ? error.message : String(error ?? '');
   return (
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Importing a module script failed') ||
-    msg.includes('Loading chunk') ||
-    msg.includes('ChunkLoadError') ||
-    msg.includes('Load failed') ||
-    msg.includes('error loading dynamically imported module')
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg) ||
+    /Loading chunk/i.test(msg) ||
+    /ChunkLoadError/i.test(msg) ||
+    /Load failed/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg) ||
+    /Unable to preload CSS/i.test(msg)
   );
 };
 
-const clearCachesAndReload = async (): Promise<void> => {
+const clearEverythingAndReload = async (): Promise<void> => {
+  // Clear all SW caches
   if ('caches' in window) {
     try {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     } catch { /* ignore */ }
   }
+  // Unregister all service workers
   if ('serviceWorker' in navigator) {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));
     } catch { /* ignore */ }
   }
+  // Hard reload — force browser to fetch fresh index.html from server
   window.location.reload();
 };
 
 const getReloadCount = (): number => {
   try {
-    const ts = parseInt(localStorage.getItem(RELOAD_TS_KEY) || '0', 10);
-    // If last reload was more than 30s ago, reset the counter
+    const ts = parseInt(localStorage.getItem(RELOAD_TS_KEY) ?? '0', 10);
     if (Date.now() - ts > RELOAD_WINDOW_MS) {
       localStorage.removeItem(RELOAD_COUNT_KEY);
       localStorage.removeItem(RELOAD_TS_KEY);
       return 0;
     }
-    return parseInt(localStorage.getItem(RELOAD_COUNT_KEY) || '0', 10);
+    return parseInt(localStorage.getItem(RELOAD_COUNT_KEY) ?? '0', 10);
   } catch {
     return 0;
   }
 };
 
-const incrementReloadCount = (): number => {
+const bumpReloadCount = (): number => {
   try {
-    const count = getReloadCount() + 1;
-    localStorage.setItem(RELOAD_COUNT_KEY, String(count));
+    const next = getReloadCount() + 1;
+    localStorage.setItem(RELOAD_COUNT_KEY, String(next));
     localStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
-    return count;
+    return next;
   } catch {
-    return 99; // fail-safe: treat as exceeded
+    return 99;
   }
 };
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export default class ChunkErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, message: '', giveUp: false };
 
   static getDerivedStateFromError(error: unknown): Partial<State> {
-    const message = error instanceof Error ? error.message : String(error || 'Unknown error');
-    return { hasError: true, message };
+    return {
+      hasError: true,
+      message: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    };
   }
 
   componentDidCatch(error: unknown): void {
-    if (!isChunkLoadError(error)) return;
+    if (!isChunkLoadError(error)) return; // Let non-chunk errors bubble to ErrorBoundary
 
     const count = getReloadCount();
+
     if (count >= MAX_AUTO_RELOADS) {
-      // Already tried — stop looping, show manual button
+      // Tried enough times — show manual button, stop looping
       this.setState({ giveUp: true });
       return;
     }
 
-    // First or second attempt — increment and reload
-    incrementReloadCount();
-    clearCachesAndReload();
+    bumpReloadCount();
+    clearEverythingAndReload();
   }
 
   handleManualReload = (): void => {
     try {
-      localStorage.removeItem(RELOAD_COUNT_KEY);
-      localStorage.removeItem(RELOAD_TS_KEY);
+      // Full reset — clear both our keys and any legacy keys
+      ['cs_loop_count','cs_loop_ts','chunk_error_reload_count','chunk_error_reload_ts','cs_sw_reload_ts']
+        .forEach((k) => localStorage.removeItem(k));
     } catch { /* ignore */ }
-    clearCachesAndReload();
+    clearEverythingAndReload();
   };
 
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    // Auto-reload in progress
+    // Attempting auto-recovery
     if (!this.state.giveUp) {
       return (
         <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center">
@@ -115,13 +124,13 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Gave up — show manual button
+    // Auto-recovery failed — manual action required
     return (
       <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-dark-800 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h1 className="text-xl font-bold">Update required</h1>
+          <h1 className="text-xl font-bold">Update available</h1>
           <p className="text-sm text-gray-400">
-            A new version of ChatScream is available. Tap below to load it.
+            A new version of ChatScream was deployed. Tap below to load it fresh.
           </p>
           <button
             onClick={this.handleManualReload}
@@ -131,7 +140,7 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
           </button>
           {this.state.message && (
             <details className="text-xs text-gray-600">
-              <summary className="cursor-pointer">Technical details</summary>
+              <summary className="cursor-pointer">Details</summary>
               <p className="mt-1 break-words">{this.state.message}</p>
             </details>
           )}
