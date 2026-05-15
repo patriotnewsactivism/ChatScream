@@ -7,26 +7,89 @@
     <!-- Cache busting + stale chunk prevention — runs before React mounts -->
     <script>
     (function(){
-      // Unregister all service workers immediately (they cause stale chunk issues)
-      if('serviceWorker' in navigator){
-        navigator.serviceWorker.getRegistrations().then(function(regs){
-          regs.forEach(function(r){ r.unregister(); });
+      'use strict';
+
+      var LS_SW_RELOAD  = 'cs_sw_reload_ts';
+      var LS_LOOP_COUNT = 'cs_loop_count';
+      var LS_LOOP_TS    = 'cs_loop_ts';
+      var LOOP_WINDOW   = 20000;
+      var MAX_LOOPS     = 3;
+
+      // ── Loop-break: if we've reloaded too many times, show a recovery UI ──
+      function getLoopCount() {
+        try {
+          var ts = parseInt(localStorage.getItem(LS_LOOP_TS) || '0', 10);
+          if (Date.now() - ts > LOOP_WINDOW) {
+            localStorage.removeItem(LS_LOOP_COUNT);
+            localStorage.removeItem(LS_LOOP_TS);
+            return 0;
+          }
+          return parseInt(localStorage.getItem(LS_LOOP_COUNT) || '0', 10);
+        } catch(e) { return 0; }
+      }
+
+      function clearLoopCount() {
+        try {
+          ['cs_loop_count','cs_loop_ts','cs_sw_reload_ts',
+           'chunk_error_reload_count','chunk_error_reload_ts'].forEach(function(k){
+            localStorage.removeItem(k);
+          });
+        } catch(e) {}
+      }
+
+      var loopCount = getLoopCount();
+      if (loopCount >= MAX_LOOPS) {
+        clearLoopCount();
+        document.addEventListener('DOMContentLoaded', function() {
+          var root = document.getElementById('root');
+          if (!root) return;
+          root.innerHTML =
+            '<div style="min-height:100vh;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif">'
+            +'<div style="max-width:380px;width:100%;background:#111;border:1px solid #2a2a2a;border-radius:16px;padding:28px;text-align:center">'
+            +'<div style="font-size:40px;margin-bottom:12px">&#128481;</div>'
+            +'<h1 style="font-size:18px;font-weight:700;margin:0 0 8px">Stuck in a loop?</h1>'
+            +'<p style="color:#999;font-size:13px;line-height:1.5;margin:0 0 20px">ChatScream hit a snag loading. Tap below to wipe the cache and start fresh.</p>'
+            +'<button onclick="(function(){'
+            +'try{['cs_loop_count','cs_loop_ts','cs_sw_reload_ts','chunk_error_reload_count','chunk_error_reload_ts'].forEach(function(k){localStorage.removeItem(k);});}catch(e){}'
+            +'try{if(caches&&caches.keys)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})});}catch(e){}'
+            +'try{if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister()})});}catch(e){}'
+            +'setTimeout(function(){location.reload();},300);})()" '
+            +'style="width:100%;padding:13px;background:#f97316;color:#fff;font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:15px;letter-spacing:.02em">'
+            +'&#128260; Clear Cache &amp; Reload</button>'
+            +'</div></div>';
+        });
+        return;
+      }
+
+      // ── Unregister any old service workers silently ────────────────────
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(r) { r.unregister(); });
+        });
+
+        // Listen for our SW's "I activated, please reload" message
+        navigator.serviceWorker.addEventListener('message', function(evt) {
+          if (!evt.data || evt.data.type !== 'SW_ACTIVATED_RELOAD') return;
+          try {
+            var last = parseInt(localStorage.getItem(LS_SW_RELOAD) || '0', 10);
+            if (Date.now() - last < 10000) return; // debounce 10s
+            localStorage.setItem(LS_SW_RELOAD, String(Date.now()));
+            // Increment loop counter so we catch runaway SW reloads
+            var c = parseInt(localStorage.getItem(LS_LOOP_COUNT)||'0',10)+1;
+            localStorage.setItem(LS_LOOP_COUNT, String(c));
+            localStorage.setItem(LS_LOOP_TS, String(Date.now()));
+            window.location.reload();
+          } catch(e) {}
         });
       }
-      // Clear all caches
-      if('caches' in window){
-        caches.keys().then(function(names){
-          names.forEach(function(n){ caches.delete(n); });
+
+      // ── Clear any stale caches ─────────────────────────────────────────
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          names.forEach(function(n) { caches.delete(n); });
         });
       }
-      // Detect if we're stuck in a reload loop (shouldn't happen, but safety net)
-      var LOOP_KEY = 'cs_reload_loop';
-      var loopCount = parseInt(sessionStorage.getItem(LOOP_KEY) || '0', 10);
-      if(loopCount > 3){
-        // Too many reloads — clear the counter and stop
-        sessionStorage.removeItem(LOOP_KEY);
-        sessionStorage.removeItem('chunk_error_reload_ts');
-      }
+
     })();
     </script>
 
@@ -89,3 +152,4 @@
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
+
