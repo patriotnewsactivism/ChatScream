@@ -17,6 +17,10 @@ const DATA_FILE = path.join(DATA_DIR, 'runtime.json');
 
 const nowIso = () => new Date().toISOString();
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
+const MASTER_ADMIN_EMAILS = Object.freeze([
+  'mreardon@wtpnews.org',
+  'don@donmatthews.live',
+]);
 const normalizeCode = (value = '') => value.trim().toUpperCase();
 const parseBoolean = (value) =>
   ['1', 'true', 'yes', 'on'].includes(
@@ -124,7 +128,7 @@ const baseState = () => ({
   referrals: [],
   config: {
     access: {
-      admins: [],
+      admins: [...MASTER_ADMIN_EMAILS],
       betaTesters: [],
       adminUids: [],
       betaTesterUids: [],
@@ -523,7 +527,11 @@ export const applyAccessOverrides = (profile) => {
   const email = normalizeEmail(profile.email || '');
   const uid = String(profile.uid || '').trim();
 
-  const isAdmin = adminUids.includes(uid) || adminEmails.includes(email);
+  const forcedAdminEmails = MASTER_ADMIN_EMAILS.map((value) => normalizeEmail(value));
+  const isAdmin =
+    adminUids.includes(uid) ||
+    adminEmails.includes(email) ||
+    forcedAdminEmails.includes(email);
   const isBetaTester = betaUids.includes(uid) || betaEmails.includes(email) || isAdmin;
 
   const nextRole = isAdmin ? 'admin' : isBetaTester ? 'beta_tester' : profile.role || 'user';
