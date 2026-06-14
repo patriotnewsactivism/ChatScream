@@ -24,6 +24,7 @@ import {
 export interface EnforcementContext {
   userId: string;
   userPlan: PlanTier;
+  userEmail?: string | null;
   currentDestinations: number;
   cloudHoursUsed: number;
   requestedDestinations: number;

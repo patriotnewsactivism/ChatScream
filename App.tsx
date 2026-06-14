@@ -105,11 +105,6 @@ const App: FC = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Auto-initialize audio pipeline on studio load so combinedStream is ready
-  useEffect(() => {
-    initAudio();
-  }, [initAudio]);
-
   // camera / screen streams
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -220,6 +215,11 @@ const App: FC = () => {
     isMicMuted,
   });
 
+  // Auto-initialize audio pipeline on studio load so combinedStream is ready
+  useEffect(() => {
+    initAudio();
+  }, [initAudio]);
+
   // ── media fetch ────────────────────────────────────────────────────────────
 
   const fetchMedia = useCallback(async () => {
@@ -296,9 +296,6 @@ const App: FC = () => {
         name: file.name,
         url: localUrl,
         type,
-        filename: file.name,
-        size: file.size,
-        createdAt: new Date().toISOString(),
       };
       localObjectUrlsRef.current.set(localAsset.id, localUrl);
       setAssets((prev) => [...prev, localAsset]);
@@ -496,7 +493,7 @@ const App: FC = () => {
             userPlan: (userProfile?.subscription?.plan as any) || 'free',
             userId: user?.uid || 'guest',
             userEmail: user?.email || null,
-            cloudHoursUsed: userProfile?.subscription?.cloudHoursUsed || 0,
+            cloudHoursUsed: userProfile?.usage?.cloudHoursUsed || 0,
             streamingMode: 'local',
           },
           (stats) => setAppState((prev) => ({ ...prev, bitrate: stats.bitrate })),
