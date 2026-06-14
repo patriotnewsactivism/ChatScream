@@ -32,7 +32,7 @@ describe('ProtectedRoute', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Checking your session...')).toBeInTheDocument();
+    expect(screen.getByText('Loading studio...')).toBeInTheDocument();
   });
 
   it('renders config error state', () => {

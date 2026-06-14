@@ -1266,6 +1266,7 @@ app.post(
       consumePasswordResetToken,
       getUserByUid,
       putUser,
+      hashPassword,
     });
     if (!outcome.ok && outcome.status === 429 && outcome.retryAfterSeconds > 0) {
       res.setHeader('Retry-After', String(outcome.retryAfterSeconds));

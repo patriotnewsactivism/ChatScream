@@ -172,6 +172,7 @@ export const confirmPasswordReset = async ({
   consumePasswordResetToken,
   getUserByUid,
   putUser,
+  hashPassword,
 }) => {
   const rate = takeConfirmRateLimit(ip || 'unknown');
   if (!rate.allowed) {
@@ -199,9 +200,10 @@ export const confirmPasswordReset = async ({
     return { ok: false, status: 400, body: { message: 'Invalid or expired token.' } };
   }
 
+  const hasher = hashPassword ?? ((v) => createHash('sha256').update(v).digest('hex'));
   await putUser({
     ...userRecord,
-    passwordHash: hashPassword(password),
+    passwordHash: await hasher(password),
   });
   return { ok: true, status: 200, body: { success: true } };
 };
