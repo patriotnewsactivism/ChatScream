@@ -87,6 +87,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [youtubeChannelsLoading, setYouTubeChannelsLoading] = useState(false);
   const [youtubeSelectionPending, setYouTubeSelectionPending] = useState<string | null>(null);
   const [youtubePickerError, setYouTubePickerError] = useState<string | null>(null);
+  const [connectingPlatform, setConnectingPlatform] = useState<OAuthServicePlatform | null>(null);
   const [oauthCapability, setOauthCapability] = useState({
     youtube: true,
     facebook: true,
@@ -360,59 +361,64 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const handleOAuthPrimaryAction = async (option: OAuthOption) => {
     if (!userId) return safeAlert('Please sign in');
 
-    if (option.oauthPlatform === 'youtube') {
-      if (isPlatformConnected('youtube')) await openYouTubeChannelPicker();
-      else handleConnectOAuth('youtube');
-    } else if (option.oauthPlatform === 'twitch') {
-      if (isPlatformConnected('twitch')) {
-        try {
-          const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
-            '/api/destinations/twitch/stream-key',
-            {
-              headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
-            },
-          );
-          if (data.streamKey) {
-            onAddDestination(
-              createOAuthDestination(Platform.TWITCH, {
-                name: 'Twitch Channel',
-                streamKey: data.streamKey,
-                serverUrl: data.serverUrl,
-              }),
+    setConnectingPlatform(option.oauthPlatform);
+    try {
+      if (option.oauthPlatform === 'youtube') {
+        if (isPlatformConnected('youtube')) await openYouTubeChannelPicker();
+        else handleConnectOAuth('youtube');
+      } else if (option.oauthPlatform === 'twitch') {
+        if (isPlatformConnected('twitch')) {
+          try {
+            const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
+              '/api/destinations/twitch/stream-key',
+              {
+                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
+              },
+            );
+            if (data.streamKey) {
+              onAddDestination(
+                createOAuthDestination(Platform.TWITCH, {
+                  name: 'Twitch Channel',
+                  streamKey: data.streamKey,
+                  serverUrl: data.serverUrl,
+                }),
+              );
+            }
+          } catch {
+            safeAlert(
+              'Twitch stream key retrieval failed. Confirm Twitch OAuth is connected and TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are configured server-side.',
             );
           }
-        } catch {
-          safeAlert(
-            'Twitch stream key retrieval failed. Confirm Twitch OAuth is connected and TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are configured server-side.',
-          );
-        }
-      } else handleConnectOAuth('twitch');
-    } else if (option.oauthPlatform === 'facebook') {
-      if (isPlatformConnected('facebook')) {
-        try {
-          const data = await apiRequest<{ streamUrl?: string }>(
-            '/api/destinations/facebook/create-live',
-            {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
-              body: {},
-            },
-          );
-          if (data.streamUrl) {
-            onAddDestination(
-              createOAuthDestination(Platform.FACEBOOK, {
-                name: 'Facebook Live',
-                serverUrl: data.streamUrl,
-                streamKey: '',
-              }),
+        } else handleConnectOAuth('twitch');
+      } else if (option.oauthPlatform === 'facebook') {
+        if (isPlatformConnected('facebook')) {
+          try {
+            const data = await apiRequest<{ streamUrl?: string }>(
+              '/api/destinations/facebook/create-live',
+              {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
+                body: {},
+              },
+            );
+            if (data.streamUrl) {
+              onAddDestination(
+                createOAuthDestination(Platform.FACEBOOK, {
+                  name: 'Facebook Live',
+                  serverUrl: data.streamUrl,
+                  streamKey: '',
+                }),
+              );
+            }
+          } catch {
+            safeAlert(
+              'Facebook live creation failed. Confirm your account can go live and FACEBOOK_APP_ID/FACEBOOK_APP_SECRET are configured server-side.',
             );
           }
-        } catch {
-          safeAlert(
-            'Facebook live creation failed. Confirm your account can go live and FACEBOOK_APP_ID/FACEBOOK_APP_SECRET are configured server-side.',
-          );
-        }
-      } else handleConnectOAuth('facebook');
+        } else handleConnectOAuth('facebook');
+      }
+    } finally {
+      setConnectingPlatform(null);
     }
   };
 
