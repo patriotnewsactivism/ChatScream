@@ -87,6 +87,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [youtubeChannelsLoading, setYouTubeChannelsLoading] = useState(false);
   const [youtubeSelectionPending, setYouTubeSelectionPending] = useState<string | null>(null);
   const [youtubePickerError, setYouTubePickerError] = useState<string | null>(null);
+  // Facebook Page picker
+  const [showFacebookPicker, setShowFacebookPicker] = useState(false);
+  const [facebookPages, setFacebookPages] = useState<{ id: string; name: string; fanCount: number; pictureUrl: string | null }[]>([]);
+  const [facebookPagesLoading, setFacebookPagesLoading] = useState(false);
+  const [facebookPageSelectionPending, setFacebookPageSelectionPending] = useState<string | null>(null);
+  const [facebookPickerError, setFacebookPickerError] = useState<string | null>(null);
+  // TikTok manual RTMP key entry
+  const [showTikTokManualEntry, setShowTikTokManualEntry] = useState(false);
+  const [tiktokManualKey, setTikTokManualKey] = useState('');
   const [connectingPlatform, setConnectingPlatform] = useState<OAuthServicePlatform | null>(null);
   const [oauthCapability, setOauthCapability] = useState({
     youtube: true,
@@ -323,6 +332,91 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     setYouTubeChannelsLoading(false);
   };
 
+  const openFacebookPagePicker = async () => {
+    if (!userId) {
+      safeAlert('Please sign in again to manage Facebook destinations.');
+      return;
+    }
+    setShowFacebookPicker(true);
+    setFacebookPagesLoading(true);
+    setFacebookPickerError(null);
+
+    try {
+      const data = await apiRequest<{ pages: { id: string; name: string; fanCount: number; pictureUrl: string | null }[] }>(
+        '/api/destinations/facebook/pages',
+        { headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` } },
+      );
+      setFacebookPages(data.pages || []);
+      if (!data.pages?.length) {
+        setFacebookPickerError('No Facebook Pages found. You can still stream to your personal profile by selecting "Personal Profile" below.');
+      }
+    } catch {
+      setFacebookPickerError('Could not load Facebook Pages. Reconnect your account or stream to your personal profile.');
+      setFacebookPages([]);
+    }
+    setFacebookPagesLoading(false);
+  };
+
+  const handleAddFacebookPage = async (pageId: string | null, pageName: string) => {
+    if (!destinationLimit.allowed) {
+      safeAlert(destinationLimit.message);
+      return;
+    }
+    setFacebookPageSelectionPending(pageId ?? 'personal');
+    try {
+      const data = await apiRequest<{ streamUrl?: string; streamKey?: string }>(
+        '/api/destinations/facebook/create-live',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
+          body: pageId ? { pageId } : {},
+        },
+      );
+      if (!data.streamUrl) {
+        safeAlert('Facebook did not return a stream URL. Ensure your account has live streaming permissions.');
+        return;
+      }
+      // Facebook live_videos returns stream_url as "rtmp://live-api-s.facebook.com:80/rtmp/<key>"
+      // Split into serverUrl + streamKey
+      const urlParts = data.streamUrl.match(/^(rtmp:\/\/[^/]+\/[^/]+)\/(.+)$/);
+      const serverUrl = urlParts ? urlParts[1] : data.streamUrl;
+      const streamKey = urlParts ? urlParts[2] : (data.streamKey || '');
+
+      handleAddWithLimitCheck(
+        createOAuthDestination(Platform.FACEBOOK, {
+          name: `Facebook Live - ${pageName}`,
+          serverUrl,
+          streamKey,
+        }),
+      );
+      setShowFacebookPicker(false);
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : null) || 'Facebook live creation failed. Confirm your account has live streaming permissions.';
+      safeAlert(msg);
+    }
+    setFacebookPageSelectionPending(null);
+  };
+
+  const handleAddTikTokManual = () => {
+    if (!tiktokManualKey.trim()) {
+      safeAlert('Please enter your TikTok RTMP stream key.');
+      return;
+    }
+    if (!destinationLimit.allowed) {
+      safeAlert(destinationLimit.message);
+      return;
+    }
+    handleAddWithLimitCheck(
+      createOAuthDestination(Platform.TIKTOK, {
+        name: 'TikTok LIVE',
+        serverUrl: 'rtmp://push.tiktokv.com/live/',
+        streamKey: tiktokManualKey.trim(),
+      }),
+    );
+    setTikTokManualKey('');
+    setShowTikTokManualEntry(false);
+  };
+
   const handleAddYouTubeChannel = async (channel: AccountChannel) => {
     if (!destinationLimit.allowed) {
       safeAlert(destinationLimit.message);
@@ -392,30 +486,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         } else handleConnectOAuth('twitch');
       } else if (option.oauthPlatform === 'facebook') {
         if (isPlatformConnected('facebook')) {
-          try {
-            const data = await apiRequest<{ streamUrl?: string }>(
-              '/api/destinations/facebook/create-live',
-              {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
-                body: {},
-              },
-            );
-            if (data.streamUrl) {
-              onAddDestination(
-                createOAuthDestination(Platform.FACEBOOK, {
-                  name: 'Facebook Live',
-                  serverUrl: data.streamUrl,
-                  streamKey: '',
-                }),
-              );
-            }
-          } catch {
-            safeAlert(
-              'Facebook live creation failed. Confirm your account can go live and FACEBOOK_APP_ID/FACEBOOK_APP_SECRET are configured server-side.',
-            );
-          }
+          await openFacebookPagePicker();
         } else handleConnectOAuth('facebook');
+      } else if (option.oauthPlatform === 'tiktok') {
+        if (isPlatformConnected('tiktok')) {
+          setShowTikTokManualEntry(true);
+        } else handleConnectOAuth('tiktok');
       }
     } finally {
       setConnectingPlatform(null);
@@ -758,6 +834,105 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {showFacebookPicker && (
+          <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-gray-200">SELECT FACEBOOK DESTINATION</h3>
+              <button
+                type="button"
+                onClick={() => setShowFacebookPicker(false)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            {facebookPagesLoading && <p className="text-xs text-gray-300">Loading pages...</p>}
+
+            {!facebookPagesLoading && facebookPickerError && (
+              <p className="text-xs text-amber-300">{facebookPickerError}</p>
+            )}
+
+            {!facebookPagesLoading && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { void handleAddFacebookPage(null, 'Personal Profile'); }}
+                  disabled={Boolean(facebookPageSelectionPending)}
+                  className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
+                >
+                  <span className="text-sm truncate">Personal Profile</span>
+                  <span className="text-[11px] text-brand-300 shrink-0">
+                    {facebookPageSelectionPending === 'personal' ? 'Adding...' : 'Use profile'}
+                  </span>
+                </button>
+                {facebookPages.map((page) => (
+                  <button
+                    key={page.id}
+                    type="button"
+                    onClick={() => { void handleAddFacebookPage(page.id, page.name); }}
+                    disabled={Boolean(facebookPageSelectionPending)}
+                    className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {page.pictureUrl && <img src={page.pictureUrl} alt="" className="w-6 h-6 rounded-full shrink-0" />}
+                      <span className="text-sm truncate">{page.name}</span>
+                    </div>
+                    <span className="text-[11px] text-brand-300 shrink-0">
+                      {facebookPageSelectionPending === page.id ? 'Adding...' : 'Use page'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showTikTokManualEntry && (
+          <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-gray-200">TIKTOK LIVE — RTMP KEY</h3>
+              <button
+                type="button"
+                onClick={() => setShowTikTokManualEntry(false)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">
+              TikTok Live requires 10,000+ followers and partner access. Get your RTMP key from{' '}
+              <a
+                href="https://www.tiktok.com/studio/livestream"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-400 underline"
+              >
+                TikTok Studio → Go LIVE
+              </a>
+              {' '}→ RTMP.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder="Paste your TikTok stream key..."
+                value={tiktokManualKey}
+                onChange={(e) => setTikTokManualKey(e.target.value)}
+                className="flex-1 text-xs bg-dark-900 border border-gray-700 rounded px-2 py-1.5 text-white placeholder-gray-500 focus:border-brand-500 outline-none"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddTikTokManual(); }}
+              />
+              <button
+                type="button"
+                onClick={handleAddTikTokManual}
+                disabled={!tiktokManualKey.trim()}
+                className="text-xs bg-brand-600 hover:bg-brand-500 disabled:opacity-50 px-3 py-1.5 rounded"
+              >
+                Add
+              </button>
+            </div>
           </div>
         )}
 
