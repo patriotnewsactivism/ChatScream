@@ -2624,25 +2624,148 @@ app.post(
   }),
 );
 
+
+app.get(
+  '/api/destinations/twitch/stream-key',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    const twitch = record.profile?.connectedPlatforms?.twitch;
+    if (!twitch?.accessToken) {
+      return res.status(400).json({ message: 'Twitch not connected. Please reconnect your Twitch account.' });
+    }
+
+    // Refresh Twitch token if needed (Twitch tokens can expire)
+    let accessToken = twitch.accessToken;
+    const expiresAt = twitch.expiresAt ? new Date(twitch.expiresAt) : null;
+    const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
+    if (expiresAt && expiresAt <= fiveMinutesFromNow && twitch.refreshToken) {
+      try {
+        const refreshRes = await fetch(TWITCH_TOKEN_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: process.env.TWITCH_CLIENT_ID || '',
+            client_secret: process.env.TWITCH_CLIENT_SECRET || '',
+            grant_type: 'refresh_token',
+            refresh_token: twitch.refreshToken,
+          }),
+        });
+        const refreshData = await refreshRes.json();
+        if (refreshData.access_token) {
+          accessToken = refreshData.access_token;
+          await setConnectedPlatform(req.auth.profile.uid, 'twitch', {
+            ...twitch,
+            accessToken,
+            refreshToken: refreshData.refresh_token || twitch.refreshToken,
+            expiresAt: getExpiryFromSeconds(refreshData.expires_in, 3600),
+          });
+        }
+      } catch (err) {
+        console.warn('Twitch token refresh failed, attempting with existing token:', err);
+      }
+    }
+
+    // Fetch stream key from Twitch Helix API
+    const streamKeyRes = await fetch(`${TWITCH_API_BASE_URL}/streams/key?broadcaster_id=${encodeURIComponent(twitch.accountId || '')}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+      },
+    });
+
+    if (!streamKeyRes.ok) {
+      const errData = await streamKeyRes.json().catch(() => ({}));
+      const msg = errData?.message || 'Failed to retrieve Twitch stream key.';
+      return res.status(streamKeyRes.status).json({ message: msg });
+    }
+
+    const streamKeyData = await streamKeyRes.json();
+    const streamKey = streamKeyData?.data?.[0]?.stream_key;
+    if (!streamKey) {
+      return res.status(400).json({ message: 'Twitch returned no stream key. Ensure your Twitch account has streaming enabled.' });
+    }
+
+    res.json({
+      streamKey,
+      serverUrl: 'rtmp://live.twitch.tv/app',
+    });
+  }),
+);
+
 app.post(
   '/api/destinations/facebook/create-live',
   requireAuth,
   asyncHandler(async (req, res) => {
     const record = await getUserByUid(req.auth.profile.uid);
     const fb = record.profile?.connectedPlatforms?.facebook;
-    if (!fb) return res.status(400).json({ message: 'Facebook not connected' });
+    if (!fb?.accessToken) return res.status(400).json({ message: 'Facebook not connected. Please reconnect your Facebook account.' });
+
+    // Use page token if a page is selected, otherwise fall back to user token
+    const pageId = String(req.body?.pageId || fb.pageId || '').trim();
+    let streamToken = fb.accessToken;
+    let liveEndpoint = `${FACEBOOK_BASE_URL}/me/live_videos`;
+
+    if (pageId) {
+      // Fetch page access token
+      const pagesRes = await fetch(
+        `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,access_token`,
+      );
+      const pagesData = await pagesRes.json();
+      const page = Array.isArray(pagesData?.data) ? pagesData.data.find((p) => p.id === pageId) : null;
+      if (page?.access_token) {
+        streamToken = page.access_token;
+        liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
+      }
+    }
 
     const fbRes = await fetch(
-      `${FACEBOOK_BASE_URL}/me/live_videos?access_token=${fb.accessToken}`,
+      `${liveEndpoint}?access_token=${streamToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'LIVE_NOW', title: 'ChatScream Live' }),
+        body: JSON.stringify({ status: 'LIVE_NOW', title: req.body?.title || 'ChatScream Live' }),
       },
     );
     const fbData = await fbRes.json();
-    if (!fbData.stream_url) throw new Error('Failed to create Facebook live video');
-    res.json({ streamUrl: fbData.stream_url });
+    if (fbData?.error) {
+      const errMsg = fbData.error?.message || 'Facebook live creation failed.';
+      return res.status(400).json({ message: errMsg });
+    }
+    if (!fbData.stream_url) {
+      return res.status(502).json({ message: 'Failed to create Facebook live video. Ensure your account has live streaming permissions.' });
+    }
+    res.json({ streamUrl: fbData.stream_url, streamKey: fbData.secure_stream_url || null });
+  }),
+);
+
+
+app.get(
+  '/api/destinations/facebook/pages',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    const fb = record.profile?.connectedPlatforms?.facebook;
+    if (!fb?.accessToken) {
+      return res.status(400).json({ message: 'Facebook not connected.' });
+    }
+
+    const pagesRes = await fetch(
+      `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,picture,fan_count`,
+    );
+    const pagesData = await pagesRes.json();
+    if (pagesData?.error) {
+      return res.status(400).json({ message: pagesData.error?.message || 'Failed to fetch Facebook pages.' });
+    }
+
+    const pages = Array.isArray(pagesData?.data) ? pagesData.data.map((p) => ({
+      id: p.id,
+      name: p.name,
+      fanCount: p.fan_count || 0,
+      pictureUrl: p.picture?.data?.url || null,
+    })) : [];
+
+    res.json({ pages });
   }),
 );
 
@@ -2656,6 +2779,67 @@ app.post(
     if (!platform) {
       res.status(400).json({ message: 'platform is required.' });
       return;
+    }
+
+    if (platform === 'twitch') {
+      const record = await getUserByUid(req.auth.profile.uid);
+      const twitch = record.profile?.connectedPlatforms?.twitch;
+      if (!twitch?.refreshToken) {
+        return res.status(400).json({ message: 'Twitch refresh token not available. Please reconnect.' });
+      }
+      try {
+        const refreshRes = await fetch(TWITCH_TOKEN_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: process.env.TWITCH_CLIENT_ID || '',
+            client_secret: process.env.TWITCH_CLIENT_SECRET || '',
+            grant_type: 'refresh_token',
+            refresh_token: twitch.refreshToken,
+          }),
+        });
+        const refreshData = await refreshRes.json();
+        if (!refreshData.access_token) throw new Error(refreshData.message || 'Twitch refresh failed');
+        await setConnectedPlatform(req.auth.profile.uid, 'twitch', {
+          ...twitch,
+          accessToken: refreshData.access_token,
+          refreshToken: refreshData.refresh_token || twitch.refreshToken,
+          expiresAt: getExpiryFromSeconds(refreshData.expires_in, 3600),
+        });
+        return res.json({ success: true });
+      } catch (error) {
+        return res.status(502).json({ message: error instanceof Error ? error.message : 'Twitch token refresh failed.' });
+      }
+    }
+
+    if (platform === 'facebook') {
+      // Facebook long-lived tokens don't have a refresh_token; extend by exchanging short-lived for long-lived
+      const record = await getUserByUid(req.auth.profile.uid);
+      const fb = record.profile?.connectedPlatforms?.facebook;
+      if (!fb?.accessToken) {
+        return res.status(400).json({ message: 'Facebook not connected. Please reconnect.' });
+      }
+      try {
+        const extendRes = await fetch(
+          `${FACEBOOK_BASE_URL}/oauth/access_token?` +
+            new URLSearchParams({
+              grant_type: 'fb_exchange_token',
+              client_id: process.env.FACEBOOK_APP_ID || '',
+              client_secret: process.env.FACEBOOK_APP_SECRET || '',
+              fb_exchange_token: fb.accessToken,
+            }),
+        );
+        const extendData = await extendRes.json();
+        if (!extendData.access_token) throw new Error(extendData?.error?.message || 'Facebook token extension failed');
+        await setConnectedPlatform(req.auth.profile.uid, 'facebook', {
+          ...fb,
+          accessToken: extendData.access_token,
+          expiresAt: getExpiryFromSeconds(extendData.expires_in, 60 * 24 * 60 * 60), // ~60 days
+        });
+        return res.json({ success: true });
+      } catch (error) {
+        return res.status(502).json({ message: error instanceof Error ? error.message : 'Facebook token refresh failed.' });
+      }
     }
 
     if (platform !== 'youtube') {
