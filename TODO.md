@@ -32,27 +32,27 @@ The #1 promised feature. OAuth connects, but the "Go Live" button doesn't reliab
 
 ### Fixes
 
-- [ ] 🔴 **Add FFmpeg to Docker/deployment** — Include `ffmpeg` in the Dockerfile and Railway nixpacks config
-- [ ] 🔴 **Validate FFmpeg availability on server startup** — Check `which ffmpeg` at boot and log a clear error if missing
-- [ ] 🔴 **Fix FFmpeg args for WebSocket ingest** — Remove `-re` flag (causes timing drift on pipe input), add `-fflags +nobuffer -flags low_delay` for low-latency live ingest
-- [ ] 🔴 **Default RTMP server URLs per platform** — If `serverUrl` is empty, auto-fill the standard RTMP ingest URL for each platform (YouTube, Facebook, Twitch, etc.)
-- [ ] 🔴 **Show user-facing error when FFmpeg spawn fails** — Catch `proc.on('error')` and send actionable WebSocket error message back to client
-- [ ] 🟡 **WebSocket URL resolution** — Ensure `destinationRouter.ts` always connects to the API server (Railway/Cloud Run), never to the Vercel frontend origin
+- [x] 🔴 **Add FFmpeg to Docker/deployment** — Include `ffmpeg` in the Dockerfile and Railway nixpacks config
+- [x] 🔴 **Validate FFmpeg availability on server startup** — Check `which ffmpeg` at boot and log a clear error if missing
+- [x] 🔴 **Fix FFmpeg args for WebSocket ingest** — Remove `-re` flag (causes timing drift on pipe input), add `-fflags +nobuffer -flags low_delay` for low-latency live ingest
+- [x] 🔴 **Default RTMP server URLs per platform** — If `serverUrl` is empty, auto-fill the standard RTMP ingest URL for each platform (YouTube, Facebook, Twitch, etc.)
+- [x] 🔴 **Show user-facing error when FFmpeg spawn fails** — Catch `proc.on('error')` and send actionable WebSocket error message back to client
+- [x] 🟡 **WebSocket URL resolution** — Ensure `destinationRouter.ts` always connects to the API server (Railway/Cloud Run), never to the Vercel frontend origin
 
 ---
 
 ## 2. 🔴 STREAMING TO FACEBOOK — Missing Flow
 
-- [ ] 🔴 **Facebook "Create Live" returns `streamUrl` but no `streamKey`** — The `/api/destinations/facebook/create-live` endpoint creates a live video and returns `stream_url`. But the DestinationManager sets `streamKey: ''` and `serverUrl: data.streamUrl`. The FFmpeg pipeline expects `serverUrl + streamKey` for RTMP push, so this fails silently.
+- [x] 🔴 **Facebook "Create Live" returns `streamUrl` but no `streamKey`** — (Verified: `DestinationManager.tsx` already parses this into `serverUrl` and `streamKey`).
 - [ ] 🔴 **Facebook tokens expire quickly** — No auto-refresh for Facebook tokens. YouTube has `refreshStoredYouTubeAccessToken`, but Facebook has nothing equivalent.
-- [ ] 🟡 **Facebook Page selection** — When user has multiple Pages, there's no picker UI. It always goes to the personal profile.
+- [x] 🟡 **Facebook Page selection** — (Verified: Picker UI already exists and prompts user for Pages vs Personal Profile).
 
 ---
 
 ## 3. 🔴 STREAMING TO TWITCH — Missing Backend Endpoint
 
-- [ ] 🔴 **`/api/destinations/twitch/stream-key` does not exist** — `DestinationManager.tsx` line ~372 calls this endpoint to fetch the Twitch stream key after OAuth. The server has no such route. Only `/api/oauth/stream-key` exists, and it returns 501 for non-YouTube platforms.
-- [ ] 🔴 **Implement Twitch stream key retrieval** — Use the stored Twitch OAuth token + Twitch Helix API `GET /channels` to fetch the stream key, then add a server route for it
+- [x] 🔴 **`/api/destinations/twitch/stream-key` does not exist** — (Verified: It does exist and works properly).
+- [x] 🔴 **Implement Twitch stream key retrieval** — (Verified: Uses Twitch Helix API).
 - [ ] 🟡 **Twitch ingest URL auto-detection** — Use Twitch Ingests API to find the nearest RTMP server rather than requiring manual entry
 
 ---
@@ -61,8 +61,8 @@ The #1 promised feature. OAuth connects, but the "Go Live" button doesn't reliab
 
 The promised "simple button click initiates connections" doesn't work because the pipeline is fragmented.
 
-- [ ] 🔴 **Wire one-click flow: OAuth → Stream Key → Destination → Go Live** — When user clicks "Go Live" with an OAuth-connected platform, automatically: (1) refresh token if expired, (2) fetch/create stream key, (3) populate destination with correct `serverUrl` + `streamKey`, (4) start RTMP via WebSocket→FFmpeg pipeline
-- [ ] 🔴 **Pre-flight validation before Go Live** — Check all enabled destinations have valid `streamKey` + `serverUrl` before starting. Show specific errors per destination (e.g. "YouTube: No stream key — click to set up")
+- [x] 🔴 **Wire one-click flow: OAuth → Stream Key → Destination → Go Live** — (Verified: DestinationManager fetches keys when adding destination, and handleBroadcast uses them automatically).
+- [x] 🔴 **Pre-flight validation before Go Live** — Added destination checks and error reporting before starting `RTMPSender`.
 - [ ] 🟡 **Destination status indicators** — Currently destinations show 'offline'/'connecting'/'live'/'error' but the status is set optimistically with a `setTimeout(1500)` — no real confirmation from FFmpeg/RTMP that the connection succeeded
 - [ ] 🟡 **Error recovery** — If one destination fails, the entire FFmpeg process dies. Implement per-destination FFmpeg processes or use tee muxer for independent streams
 

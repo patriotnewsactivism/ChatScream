@@ -113,9 +113,9 @@ const App: FC = () => {
 
   // sidebar / bottom-tab navigation
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'studio' | 'destinations' | 'branding' | 'media' | 'graphics'>(
-    'studio',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'studio' | 'destinations' | 'branding' | 'media' | 'graphics'
+  >('studio');
 
   // Switcher: program/preview multiview
   const [multiviewEnabled, setMultiviewEnabled] = useState(false);
@@ -173,8 +173,12 @@ const App: FC = () => {
   const [activeScene, setActiveScene] = useState<Scene | null>(null);
 
   // auto-captions
-  const { caption, isActive: captionsOn, isSupported: captionsSupported, toggle: toggleCaptions } =
-    useAutoCaption();
+  const {
+    caption,
+    isActive: captionsOn,
+    isSupported: captionsSupported,
+    toggle: toggleCaptions,
+  } = useAutoCaption();
 
   // evidence markers & stream transcript
   const evidenceMarkers = useEvidenceMarkers(appState.streamDuration);
@@ -232,9 +236,7 @@ const App: FC = () => {
     } catch (e) {
       console.error(e);
       const message =
-        e instanceof ApiRequestError
-          ? e.message
-          : 'Failed to load media assets. Please try again.';
+        e instanceof ApiRequestError ? e.message : 'Failed to load media assets. Please try again.';
       setMediaError(message);
     }
   }, [sessionToken]);
@@ -319,9 +321,10 @@ const App: FC = () => {
         headers,
       });
       if (!res.ok) {
-        const errorData = (await res.json().catch(() => null)) as
-          | { message?: string; error?: string }
-          | null;
+        const errorData = (await res.json().catch(() => null)) as {
+          message?: string;
+          error?: string;
+        } | null;
         const message =
           errorData?.message || errorData?.error || `Failed to upload media (${res.status}).`;
         throw new Error(message);
@@ -342,9 +345,17 @@ const App: FC = () => {
 
   const handleMediaDelete = async (id: string) => {
     // Clear active states if this asset is currently playing/showing
-    if (activeVideoId === id) { setActiveVideoUrl(null); setActiveVideoId(null); }
-    if (activeImageId === id) { setActiveImageUrl(null); setActiveImageId(null); }
-    if (activeAudioId === id) { setActiveAudioId(null); }
+    if (activeVideoId === id) {
+      setActiveVideoUrl(null);
+      setActiveVideoId(null);
+    }
+    if (activeImageId === id) {
+      setActiveImageUrl(null);
+      setActiveImageId(null);
+    }
+    if (activeAudioId === id) {
+      setActiveAudioId(null);
+    }
 
     // If it's a local object URL, just revoke and remove — no server call
     const localUrl = localObjectUrlsRef.current.get(id);
@@ -366,9 +377,7 @@ const App: FC = () => {
     } catch (e) {
       console.error(e);
       const message =
-        e instanceof ApiRequestError
-          ? e.message
-          : 'Failed to delete media. Please try again.';
+        e instanceof ApiRequestError ? e.message : 'Failed to delete media. Please try again.';
       setMediaError(message);
     }
   };
@@ -430,7 +439,10 @@ const App: FC = () => {
       setScreenStream(null);
     } else {
       try {
-        const s = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: true });
+        const s = await (navigator.mediaDevices as any).getDisplayMedia({
+          video: true,
+          audio: true,
+        });
         setScreenStream(s);
         initAudio();
       } catch (err) {
@@ -452,7 +464,6 @@ const App: FC = () => {
       clipBufferRef.current?.stop();
       clipBufferRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraStream, screenStream]);
 
   const saveClip = () => {
@@ -468,13 +479,42 @@ const App: FC = () => {
   const handleBroadcast = async () => {
     if (appState.isStreaming) {
       await rtmpSenderRef.current?.disconnect();
-      setAppState((prev) => ({ ...prev, isStreaming: false }));
+      setAppState((prev) => ({ ...prev, isStreaming: false, streamDuration: 0 }));
     } else {
+      // ── Pre-flight checks ──────────────────────────────────────────────
+      const enabledDests = destinations.filter((d) => d.isEnabled);
+      if (enabledDests.length === 0) {
+        return alert(
+          'No destinations enabled. Add at least one streaming destination (YouTube, Twitch, Facebook, etc.) and toggle it on.',
+        );
+      }
+
+      // Validate each destination has the minimum required config
+      const issues: string[] = [];
+      for (const d of enabledDests) {
+        if (!d.streamKey && d.authType !== 'oauth') {
+          issues.push(`${d.name}: Missing stream key`);
+        }
+        if (d.streamKey === 'oauth-linked') {
+          issues.push(
+            `${d.name}: OAuth connected but stream key not yet fetched. Re-select this destination to fetch your stream key.`,
+          );
+        }
+      }
+      if (issues.length > 0) {
+        return alert(
+          `Some destinations are not ready:\n\n${issues.join('\n')}\n\nFix these issues, then try again.`,
+        );
+      }
+
       // Ensure audio pipeline is initialized (creates AudioContext + destination)
       initAudio();
 
       const canvasStream = canvasRef.current?.getStream();
-      if (!canvasStream) return alert('Media not ready — no video source. Enable your camera or share your screen first.');
+      if (!canvasStream)
+        return alert(
+          'Media not ready — no video source. Enable your camera or share your screen first.',
+        );
 
       // Build output: video always required, audio optional
       const tracks = [...canvasStream.getVideoTracks()];
@@ -504,6 +544,10 @@ const App: FC = () => {
         setAppState((prev) => ({ ...prev, isStreaming: true }));
       } catch (err) {
         console.error(err);
+        const message = err instanceof Error ? err.message : 'Failed to start streaming';
+        alert(`Streaming failed: ${message}`);
+        // Reset destination statuses
+        setDestinations((prev) => prev.map((d) => ({ ...d, status: 'offline' as const })));
       }
     }
   };
@@ -569,18 +613,21 @@ const App: FC = () => {
   }, [appState.isStreaming]);
 
   // Handle legal citation overlay activation
-  const handleActivateCitation = useCallback((citation: LegalCitation) => {
-    if (!citation.id) {
-      setActiveCitationId(null);
-      setActiveCitation(null);
-    } else if (activeCitationId === citation.id) {
-      setActiveCitationId(null);
-      setActiveCitation(null);
-    } else {
-      setActiveCitationId(citation.id);
-      setActiveCitation(citation);
-    }
-  }, [activeCitationId]);
+  const handleActivateCitation = useCallback(
+    (citation: LegalCitation) => {
+      if (!citation.id) {
+        setActiveCitationId(null);
+        setActiveCitation(null);
+      } else if (activeCitationId === citation.id) {
+        setActiveCitationId(null);
+        setActiveCitation(null);
+      } else {
+        setActiveCitationId(citation.id);
+        setActiveCitation(citation);
+      }
+    },
+    [activeCitationId],
+  );
 
   const formatTime = (s: number) => {
     const hrs = Math.floor(s / 3600);
@@ -605,13 +652,10 @@ const App: FC = () => {
   // ── shared canvas preview + overlay ───────────────────────────────────────
 
   // Multiview TAKE handler — pushes preview layout → program (live)
-  const handleMultiviewTake = useCallback(
-    (newLayout: LayoutMode, newScene: Scene | null) => {
-      setLayout(newLayout);
-      setActiveScene(newScene);
-    },
-    [],
-  );
+  const handleMultiviewTake = useCallback((newLayout: LayoutMode, newScene: Scene | null) => {
+    setLayout(newLayout);
+    setActiveScene(newScene);
+  }, []);
 
   const canvasPreview = multiviewEnabled ? (
     // ── Switcher-style Program / Preview split ──
@@ -637,33 +681,84 @@ const App: FC = () => {
       />
       {/* Quick controls bar (below multiview) */}
       <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
-        <button onClick={toggleCamera} className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Toggle Camera (F)">
+        <button
+          onClick={toggleCamera}
+          className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
+          title="Toggle Camera (F)"
+        >
           {cameraStream ? <Video size={18} /> : <VideoOff size={18} />}
         </button>
         {cameraStream && (
           <>
-            <button onClick={flipCamera} className="p-2 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-colors" title="Swap Camera (Front/Back)"><Layers size={18} /></button>
-            <button onClick={() => setIsMirrored((m) => !m)} className={`p-2 rounded-full transition-colors ${isMirrored ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`} title="Mirror Camera"><FlipHorizontal2 size={18} /></button>
+            <button
+              onClick={flipCamera}
+              className="p-2 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-colors"
+              title="Swap Camera (Front/Back)"
+            >
+              <Layers size={18} />
+            </button>
+            <button
+              onClick={() => setIsMirrored((m) => !m)}
+              className={`p-2 rounded-full transition-colors ${isMirrored ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+              title="Mirror Camera"
+            >
+              <FlipHorizontal2 size={18} />
+            </button>
           </>
         )}
-        <button onClick={toggleScreen} className={`p-2 rounded-full ${screenStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Share Screen"><Monitor size={18} /></button>
-        <button onClick={() => setIsMicMuted((m) => !m)} className={`p-2 rounded-full ${isMicMuted ? 'bg-red-600/30 text-red-400' : 'bg-gray-800 text-gray-400'}`} title="Mute / Unmute Mic (M)">
+        <button
+          onClick={toggleScreen}
+          className={`p-2 rounded-full ${screenStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
+          title="Share Screen"
+        >
+          <Monitor size={18} />
+        </button>
+        <button
+          onClick={() => setIsMicMuted((m) => !m)}
+          className={`p-2 rounded-full ${isMicMuted ? 'bg-red-600/30 text-red-400' : 'bg-gray-800 text-gray-400'}`}
+          title="Mute / Unmute Mic (M)"
+        >
           {isMicMuted ? <MicOff size={18} /> : <Mic size={18} />}
         </button>
         <div className="h-4 w-[1px] bg-gray-700 mx-1" />
-        <button onClick={saveClip} className="p-2 rounded-full bg-gray-800 text-gray-400 hover:bg-brand-600 hover:text-white transition-all" title="Save Last 30s Clip (C)"><Scissors size={18} /></button>
+        <button
+          onClick={saveClip}
+          className="p-2 rounded-full bg-gray-800 text-gray-400 hover:bg-brand-600 hover:text-white transition-all"
+          title="Save Last 30s Clip (C)"
+        >
+          <Scissors size={18} />
+        </button>
         {captionsSupported && (
-          <button onClick={toggleCaptions} className={`p-2 rounded-full ${captionsOn ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`} title="Toggle Captions (T)"><Subtitles size={18} /></button>
+          <button
+            onClick={toggleCaptions}
+            className={`p-2 rounded-full ${captionsOn ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
+            title="Toggle Captions (T)"
+          >
+            <Subtitles size={18} />
+          </button>
         )}
-        <button onClick={() => setShowGuestInvite((v) => !v)} className={`p-2 rounded-full ${guestConnections.length > 0 ? 'bg-green-600' : 'bg-gray-800 text-gray-400'}`} title="Invite Guest Camera">
+        <button
+          onClick={() => setShowGuestInvite((v) => !v)}
+          className={`p-2 rounded-full ${guestConnections.length > 0 ? 'bg-green-600' : 'bg-gray-800 text-gray-400'}`}
+          title="Invite Guest Camera"
+        >
           <Users size={18} />
         </button>
-        <button onClick={() => setShowScreamDemo(true)} className="p-2 rounded-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all" title="Demo Scream Alert"><Zap size={18} /></button>
+        <button
+          onClick={() => setShowScreamDemo(true)}
+          className="p-2 rounded-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all"
+          title="Demo Scream Alert"
+        >
+          <Zap size={18} />
+        </button>
       </div>
     </div>
   ) : (
     // ── Single canvas (original behavior) ──
-    <div className={`relative w-full ${isMobile ? 'shrink-0' : ''}`} style={{ aspectRatio: '16/9', maxHeight: isMobile ? '45vh' : undefined }}>
+    <div
+      className={`relative w-full ${isMobile ? 'shrink-0' : ''}`}
+      style={{ aspectRatio: '16/9', maxHeight: isMobile ? '45vh' : undefined }}
+    >
       <CanvasCompositor
         ref={canvasRef}
         layout={layout}
@@ -688,7 +783,9 @@ const App: FC = () => {
           <div className="bg-gradient-to-r from-blue-900/95 to-indigo-900/95 backdrop-blur-md border border-blue-400/30 text-white px-5 py-3 rounded-xl max-w-lg shadow-2xl">
             <div className="flex items-center gap-2 mb-1">
               <Scale size={14} className="text-blue-300" />
-              <span className="text-xs font-bold text-blue-300 uppercase tracking-wide">Know Your Rights</span>
+              <span className="text-xs font-bold text-blue-300 uppercase tracking-wide">
+                Know Your Rights
+              </span>
             </div>
             <p className="text-sm font-bold leading-snug">{activeCitation.summary}</p>
             <p className="text-[10px] text-blue-300/80 mt-1 italic">{activeCitation.citation}</p>
@@ -804,7 +901,10 @@ const App: FC = () => {
       <div className="bg-dark-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">Invite Guest Camera</h3>
-          <button onClick={() => setShowGuestInvite(false)} className="text-gray-400 hover:text-white">
+          <button
+            onClick={() => setShowGuestInvite(false)}
+            className="text-gray-400 hover:text-white"
+          >
             <X size={20} />
           </button>
         </div>
@@ -848,7 +948,10 @@ const App: FC = () => {
           <h3 className="font-bold text-lg flex items-center gap-2">
             <Zap size={18} className="text-red-400" /> Demo Scream Alert
           </h3>
-          <button onClick={() => setShowScreamDemo(false)} className="text-gray-400 hover:text-white">
+          <button
+            onClick={() => setShowScreamDemo(false)}
+            className="text-gray-400 hover:text-white"
+          >
             <X size={20} />
           </button>
         </div>
@@ -880,7 +983,12 @@ const App: FC = () => {
           onClick={() => {
             const name = screamDemoName.trim() || 'Anonymous';
             const amount = Math.max(1, Number(screamDemoAmount) || 50);
-            const msg = amount >= 50 ? 'THIS IS A MAXIMUM SCREAM!!!' : amount >= 20 ? 'LOUD SCREAM!!!' : 'Scream!';
+            const msg =
+              amount >= 50
+                ? 'THIS IS A MAXIMUM SCREAM!!!'
+                : amount >= 20
+                  ? 'LOUD SCREAM!!!'
+                  : 'Scream!';
             triggerScream(name, amount, msg);
             setShowScreamDemo(false);
           }}
@@ -948,10 +1056,13 @@ const App: FC = () => {
         {activeVideoUrl && (
           <VideoTransportBar
             videoElement={canvasRef.current?.getVideoElement() ?? null}
-            videoName={assets.find(a => a.id === activeVideoId)?.name}
+            videoName={assets.find((a) => a.id === activeVideoId)?.name}
             volume={videoVolume}
             onVolumeChange={setVideoVolume}
-            onStop={() => { setActiveVideoUrl(null); setActiveVideoId(null); }}
+            onStop={() => {
+              setActiveVideoUrl(null);
+              setActiveVideoId(null);
+            }}
           />
         )}
 
@@ -960,16 +1071,25 @@ const App: FC = () => {
           <div className="flex items-center gap-3 bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-2">
             <Circle size={12} className="text-red-500 animate-pulse fill-red-500" />
             <span className="text-xs text-red-300 font-mono">
-              REC {Math.floor(localRecording.duration / 60).toString().padStart(2, '0')}:
-              {(localRecording.duration % 60).toString().padStart(2, '0')}
+              REC{' '}
+              {Math.floor(localRecording.duration / 60)
+                .toString()
+                .padStart(2, '0')}
+              :{(localRecording.duration % 60).toString().padStart(2, '0')}
             </span>
             <span className="text-[10px] text-gray-500">
-              {localRecording.chunkCount} chunks · {localRecording.totalSizeMB} MB · {localRecording.currentQuality}
+              {localRecording.chunkCount} chunks · {localRecording.totalSizeMB} MB ·{' '}
+              {localRecording.currentQuality}
             </span>
             {localRecording.isPaused && (
-              <span className="text-[10px] text-yellow-400 font-bold uppercase">PAUSED (low memory)</span>
+              <span className="text-[10px] text-yellow-400 font-bold uppercase">
+                PAUSED (low memory)
+              </span>
             )}
-            <button onClick={localRecording.togglePause} className="ml-auto p-1 rounded bg-gray-800 text-gray-400 hover:text-white">
+            <button
+              onClick={localRecording.togglePause}
+              className="ml-auto p-1 rounded bg-gray-800 text-gray-400 hover:text-white"
+            >
               <Pause size={14} />
             </button>
           </div>
@@ -1015,7 +1135,10 @@ const App: FC = () => {
                 className={`flex flex-col items-center gap-1 py-3 rounded-xl border transition-all active:scale-95 ${evidenceMarkers.markers.length > 0 ? 'bg-red-600/20 border-red-500 text-red-400' : 'bg-dark-900 border-gray-700 text-gray-400'}`}
               >
                 <Bookmark size={22} />
-                <span className="text-[10px] font-medium">Mark {evidenceMarkers.markers.length > 0 ? `(${evidenceMarkers.markers.length})` : ''}</span>
+                <span className="text-[10px] font-medium">
+                  Mark{' '}
+                  {evidenceMarkers.markers.length > 0 ? `(${evidenceMarkers.markers.length})` : ''}
+                </span>
               </button>
               {!cameraStream && (
                 <button
@@ -1098,7 +1221,9 @@ const App: FC = () => {
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border text-xs font-semibold transition-colors ${guestConnections.length > 0 ? 'bg-green-600/20 border-green-500 text-green-400' : 'border-gray-700 text-gray-400'}`}
                 >
                   <Users size={16} />
-                  {guestConnections.length > 0 ? `${guestConnections.length} Guest(s) Connected` : 'Invite Guest Camera'}
+                  {guestConnections.length > 0
+                    ? `${guestConnections.length} Guest(s) Connected`
+                    : 'Invite Guest Camera'}
                 </button>
 
                 {/* Scream Demo */}
@@ -1188,7 +1313,9 @@ const App: FC = () => {
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-900/40 border border-red-500/40 rounded-full">
                   <Eye size={12} className="text-red-400" />
                   <span className="text-xs font-bold text-red-200">{destinations.length}</span>
-                  <span className="text-[9px] text-red-400/70">{destinations.length === 1 ? 'dest' : 'dests'} live</span>
+                  <span className="text-[9px] text-red-400/70">
+                    {destinations.length === 1 ? 'dest' : 'dests'} live
+                  </span>
                 </div>
               )}
             </div>
@@ -1201,7 +1328,10 @@ const App: FC = () => {
             className={`p-2 rounded-full border ${appState.isRecording ? 'bg-gray-800 border-red-500 text-red-500' : 'border-gray-600 text-gray-400'}`}
             title="Record (R)"
           >
-            <Disc size={isMobile ? 18 : 20} className={appState.isRecording ? 'animate-pulse' : ''} />
+            <Disc
+              size={isMobile ? 18 : 20}
+              className={appState.isRecording ? 'animate-pulse' : ''}
+            />
           </button>
           <button
             onClick={handleBroadcast}
@@ -1229,20 +1359,29 @@ const App: FC = () => {
                   <p className="text-sm text-white truncate">{user?.email || 'User'}</p>
                 </div>
                 <button
-                  onClick={() => { setActiveTab('destinations'); setShowSettingsMenu(false); }}
+                  onClick={() => {
+                    setActiveTab('destinations');
+                    setShowSettingsMenu(false);
+                  }}
                   className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
                 >
                   <Radio size={14} /> Destinations
                 </button>
                 <button
-                  onClick={() => { setActiveTab('branding'); setShowSettingsMenu(false); }}
+                  onClick={() => {
+                    setActiveTab('branding');
+                    setShowSettingsMenu(false);
+                  }}
                   className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
                 >
                   <Palette size={14} /> Branding
                 </button>
                 <div className="border-t border-gray-700 mt-1 pt-1">
                   <button
-                    onClick={() => { setShowSettingsMenu(false); logout(); }}
+                    onClick={() => {
+                      setShowSettingsMenu(false);
+                      logout();
+                    }}
                     className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2"
                   >
                     <LogOut size={14} /> Sign Out
@@ -1326,7 +1465,11 @@ const App: FC = () => {
                 )}
                 <MediaBin
                   assets={assets}
-                  activeAssets={{ image: activeImageId, video: activeVideoId, audio: activeAudioId }}
+                  activeAssets={{
+                    image: activeImageId,
+                    video: activeVideoId,
+                    audio: activeAudioId,
+                  }}
                   onUpload={handleMediaUpload}
                   onDelete={handleMediaDelete}
                   onToggleAsset={handleToggleMedia}
@@ -1378,7 +1521,11 @@ const App: FC = () => {
           {activeTab === 'graphics' && (
             <div className="p-4 overflow-y-auto max-w-4xl flex-1 pb-24">
               <h2 className="text-sm font-bold text-gray-300 mb-3">Graphics & Overlays</h2>
-              <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} compact={isMobile} />
+              <GraphicsOverlay
+                state={graphicsState}
+                onChange={setGraphicsState}
+                compact={isMobile}
+              />
             </div>
           )}
         </main>
