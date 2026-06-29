@@ -349,6 +349,10 @@ export const canUseCloudStreaming = (
 export interface ScreamTier {
   id: string;
   name: string;
+  label: string;
+  emoji: string;
+  color: string;
+  glowColor: string;
   minAmount: number;
   maxAmount: number | null;
   effects: {
@@ -365,6 +369,10 @@ export const SCREAM_TIERS: ScreamTier[] = [
   {
     id: 'standard',
     name: 'Standard Scream',
+    label: 'Scream',
+    emoji: '📢',
+    color: '#3b82f6',
+    glowColor: '#06b6d4',
     minAmount: 5,
     maxAmount: 9.99,
     effects: {
@@ -379,6 +387,10 @@ export const SCREAM_TIERS: ScreamTier[] = [
   {
     id: 'loud',
     name: 'Loud Scream',
+    label: 'Loud Scream',
+    emoji: '🔊',
+    color: '#f97316',
+    glowColor: '#fbbf24',
     minAmount: 10,
     maxAmount: 49.99,
     effects: {
@@ -393,6 +405,10 @@ export const SCREAM_TIERS: ScreamTier[] = [
   {
     id: 'maximum',
     name: 'MAXIMUM SCREAM',
+    label: 'MAXIMUM SCREAM',
+    emoji: '🔥',
+    color: '#ef4444',
+    glowColor: '#f97316',
     minAmount: 50,
     maxAmount: null,
     effects: {

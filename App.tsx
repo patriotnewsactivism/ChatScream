@@ -4,6 +4,7 @@ import {
   Destination,
   LayoutMode,
   AppState,
+  Platform,
   MediaAsset,
   MediaType,
   BrandingSettings,
@@ -48,6 +49,7 @@ import {
 } from './services/webrtcGuestService';
 import { useAuth } from './contexts/AuthContext';
 import { createScreamAlert, ScreamAlert, calculateScreamDuration } from './services/chatScreamer';
+import ScreamOverlay from './components/ScreamOverlay';
 import { apiRequest, ApiRequestError, buildApiUrl } from './services/apiClient';
 import { chatAggregator, AggregatedMessage } from './services/chatAggregator';
 import { getCurrentSessionToken } from './services/backend';
@@ -192,9 +194,70 @@ const App: FC = () => {
   const [guestConnections, setGuestConnections] = useState<GuestConnection[]>([]);
   const [showGuestInvite, setShowGuestInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [showRecordingStopConfirm, setShowRecordingStopConfirm] = useState(false);
   const [showScreamDemo, setShowScreamDemo] = useState(false);
   const [screamDemoName, setScreamDemoName] = useState('');
   const [screamDemoAmount, setScreamDemoAmount] = useState('50');
+
+  // ── WebSocket scream room: listen for real donation alerts ────────────────
+  const screamWsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    // Connect to the scream WebSocket room for this streamer
+    const apiBase = buildApiUrl('').replace(/\/$/, '');
+    const wsBase = apiBase.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:');
+    const screamWsUrl = `${wsBase}/ws/scream/${user.uid}`;
+
+    try {
+      const ws = new WebSocket(screamWsUrl);
+      screamWsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'scream_alert' && msg.alert) {
+            const alert = createScreamAlert(
+              msg.alert.donorName || 'Anonymous',
+              Number(msg.alert.amount) || 5,
+              msg.alert.message || '',
+              user.uid,
+            );
+            if (alert) {
+              setActiveScream(alert);
+              // Play sound effect
+              import('./services/chatScreamer').then(({ playScreamSound }) => {
+                playScreamSound(alert.tier);
+              });
+            }
+          }
+        } catch {
+          // Bad message — ignore
+        }
+      };
+
+      ws.onclose = () => {
+        // Reconnect after 5 seconds if still streaming
+        setTimeout(() => {
+          if (screamWsRef.current === ws && user?.uid) {
+            try {
+              screamWsRef.current = new WebSocket(screamWsUrl);
+            } catch {
+              // Give up silently
+            }
+          }
+        }, 5000);
+      };
+
+      return () => {
+        ws.close();
+        screamWsRef.current = null;
+      };
+    } catch {
+      // WebSocket not available
+    }
+  }, [user?.uid]);
   const [showPostStream, setShowPostStream] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
@@ -563,8 +626,7 @@ const App: FC = () => {
 
   const toggleRecording = () => {
     if (localRecording.isRecording) {
-      localRecording.stopRecording();
-      setAppState((prev) => ({ ...prev, isRecording: false }));
+      setShowRecordingStopConfirm(true);
     } else {
       // Safety check for low-memory devices
       if (!resourceGuard.safeToEnable('recording')) {
@@ -613,7 +675,7 @@ const App: FC = () => {
       if (captionsOn) streamTranscript.clearTranscript();
 
       // Start live chat aggregation — fetch credentials from server
-      const facebookDest = destinations.find((d) => d.platform === 'facebook' && d.isEnabled);
+      const facebookDest = destinations.find((d) => d.platform === Platform.FACEBOOK && d.isEnabled);
       const facebookLiveVideoId = facebookDest?.liveVideoId || '';
       const params = facebookLiveVideoId
         ? `?facebookLiveVideoId=${encodeURIComponent(facebookLiveVideoId)}`
@@ -703,7 +765,13 @@ const App: FC = () => {
     onToggleRecord: toggleRecording,
     onSaveClip: saveClip,
     onToggleCaptions: captionsSupported ? toggleCaptions : undefined,
-    onToggleFullscreen: toggleCamera,
+    onToggleFullscreen: () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    },
   });
 
   // ── shared canvas preview + overlay ───────────────────────────────────────
@@ -728,13 +796,18 @@ const App: FC = () => {
         videoVolume={videoVolume}
         branding={branding}
         showWatermark={userProfile?.subscription?.plan === 'free'}
-        activeScream={activeScream || null}
+        activeScream={null}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         onTake={handleMultiviewTake}
         programCanvasRef={canvasRef}
         compact={isMobile}
         graphics={graphicsState}
         mirrorCamera={isMirrored}
+      />
+      {/* HTML/CSS Scream Overlay over multiview */}
+      <ScreamOverlay
+        alert={activeScream}
+        onDismiss={() => setActiveScream(null)}
       />
       {/* Quick controls bar (below multiview) */}
       <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
@@ -835,11 +908,17 @@ const App: FC = () => {
         branding={branding}
         showWatermark={userProfile?.subscription?.plan === 'free'}
         activeScene={activeScene}
-        activeScream={activeScream}
+        activeScream={null}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         graphics={graphicsState}
         mirrorCamera={isMirrored}
         resolution={canvasResolution}
+      />
+
+      {/* HTML/CSS Scream Overlay (replaces canvas-based rendering) */}
+      <ScreamOverlay
+        alert={activeScream}
+        onDismiss={() => setActiveScream(null)}
       />
 
       {/* Legal citation lower-third overlay */}
@@ -1008,6 +1087,45 @@ const App: FC = () => {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+
+  // ── recording stop confirmation ──────────────────────────────────────────
+  const recordingStopModal = showRecordingStopConfirm && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-dark-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm mx-4">
+        <div className="flex items-center gap-3 mb-4">
+          <Disc size={20} className="text-red-500" />
+          <h3 className="text-lg font-bold">Stop Recording?</h3>
+        </div>
+        <div className="text-sm text-gray-400 mb-4 space-y-1">
+          <p>Duration: <span className="text-white font-mono">
+            {Math.floor(localRecording.duration / 60).toString().padStart(2, '0')}:
+            {(localRecording.duration % 60).toString().padStart(2, '0')}
+          </span></p>
+          <p>File size: <span className="text-white">{localRecording.totalSizeMB} MB</span></p>
+          <p>Quality: <span className="text-white uppercase">{localRecording.currentQuality}</span></p>
+          <p className="pt-2 text-yellow-400">The recording will download to your device.</p>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => setShowRecordingStopConfirm(false)}
+            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Continue Recording
+          </button>
+          <button
+            onClick={() => {
+              localRecording.stopRecording();
+              setAppState((prev) => ({ ...prev, isRecording: false }));
+              setShowRecordingStopConfirm(false);
+            }}
+            className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold transition-colors"
+          >
+            Stop & Download
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1383,12 +1501,35 @@ const App: FC = () => {
                 </div>
               )}
               {appState.isStreaming && destinations.length > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-900/40 border border-red-500/40 rounded-full">
-                  <Eye size={12} className="text-red-400" />
-                  <span className="text-xs font-bold text-red-200">{destinations.length}</span>
-                  <span className="text-[9px] text-red-400/70">
-                    {destinations.length === 1 ? 'dest' : 'dests'} live
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  {destinations.filter((d) => d.isEnabled).map((d) => (
+                    <div
+                      key={d.id}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[9px] font-bold ${
+                        d.status === 'live'
+                          ? 'bg-green-900/40 border-green-500/40 text-green-300'
+                          : d.status === 'connecting'
+                          ? 'bg-yellow-900/40 border-yellow-500/40 text-yellow-300'
+                          : d.status === 'error'
+                          ? 'bg-red-900/40 border-red-500/40 text-red-300'
+                          : 'bg-gray-800 border-gray-700 text-gray-500'
+                      }`}
+                      title={`${d.platform}${d.name ? ` — ${d.name}` : ''}: ${d.status}`}
+                    >
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          d.status === 'live'
+                            ? 'bg-green-400'
+                            : d.status === 'connecting'
+                            ? 'bg-yellow-400 animate-pulse'
+                            : d.status === 'error'
+                            ? 'bg-red-400'
+                            : 'bg-gray-600'
+                        }`}
+                      />
+                      {d.platform}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1658,6 +1799,7 @@ const App: FC = () => {
       />
 
       {guestInviteModal}
+      {recordingStopModal}
       {screamDemoModal}
       {mobileTipToast}
       <PWAInstallPrompt />

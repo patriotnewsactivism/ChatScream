@@ -44,6 +44,10 @@ import {
   getSchedule,
   putSchedule,
   deleteSchedule,
+  listScenes,
+  getScene,
+  putScene,
+  deleteScene,
 } from './store.js';
 import {
   confirmPasswordReset,
@@ -3591,6 +3595,88 @@ app.delete(
     }
 
     deleteSchedule(req.params.id);
+    res.json({ success: true });
+  }),
+);
+
+// ── Scene Persistence ──────────────────────────────────────────────────────
+
+// GET /api/scenes — list user's saved scenes
+app.get(
+  '/api/scenes',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const scenes = listScenes(req.auth.profile.uid);
+    res.json({ scenes });
+  }),
+);
+
+// POST /api/scenes — save a new scene
+app.post(
+  '/api/scenes',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { name, sources, layout } = req.body || {};
+    if (!name || !Array.isArray(sources)) {
+      res.status(400).json({ message: 'name and sources array are required.' });
+      return;
+    }
+    const scene = {
+      id: randomUUID(),
+      userId: req.auth.profile.uid,
+      name: String(name).slice(0, 100),
+      sources: sources.slice(0, 50),
+      layout: layout || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    putScene(scene);
+    res.status(201).json({ scene });
+  }),
+);
+
+// PUT /api/scenes/:id — update an existing scene
+app.put(
+  '/api/scenes/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const existing = getScene(req.params.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Scene not found.' });
+      return;
+    }
+    if (existing.userId !== req.auth.profile.uid) {
+      res.status(403).json({ message: 'Not authorized to modify this scene.' });
+      return;
+    }
+    const { name, sources, layout } = req.body || {};
+    const updated = {
+      ...existing,
+      ...(name !== undefined && { name: String(name).slice(0, 100) }),
+      ...(Array.isArray(sources) && { sources: sources.slice(0, 50) }),
+      ...(layout !== undefined && { layout }),
+      updatedAt: new Date().toISOString(),
+    };
+    putScene(updated);
+    res.json({ scene: updated });
+  }),
+);
+
+// DELETE /api/scenes/:id — delete a scene
+app.delete(
+  '/api/scenes/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const existing = getScene(req.params.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Scene not found.' });
+      return;
+    }
+    if (existing.userId !== req.auth.profile.uid) {
+      res.status(403).json({ message: 'Not authorized to delete this scene.' });
+      return;
+    }
+    deleteScene(req.params.id);
     res.json({ success: true });
   }),
 );

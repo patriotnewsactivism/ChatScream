@@ -10,6 +10,8 @@ export interface DestinationConnection {
   connectedAt: number | null;
   bytesSent: number;
   error: string | null;
+  retryCount: number;
+  maxRetries: number;
 }
 
 export interface RouterState {
@@ -101,6 +103,8 @@ export class DestinationRouter {
             connectedAt: null,
             bytesSent: 0,
             error: null,
+            retryCount: 0,
+            maxRetries: 3,
           });
           this.updateDestinationStatus(d.id, 'connecting');
         });
@@ -131,9 +135,29 @@ export class DestinationRouter {
             if (conn) {
               conn.status = 'error';
               conn.error = msg.message || 'Connection failed';
+              // Auto-retry with exponential backoff (up to maxRetries)
+              if (conn.retryCount < conn.maxRetries && this.ws?.readyState === WebSocket.OPEN) {
+                conn.retryCount++;
+                const delay = Math.min(2000 * Math.pow(2, conn.retryCount - 1), 15000);
+                console.log(`🔄 Auto-retrying [${msg.destId}] attempt ${conn.retryCount}/${conn.maxRetries} in ${delay}ms`);
+                this.updateDestinationStatus(msg.destId, 'connecting');
+                setTimeout(() => {
+                  if (this.ws?.readyState === WebSocket.OPEN && conn.status !== 'live') {
+                    this.ws.send(JSON.stringify({
+                      type: 'retry_destination',
+                      destId: msg.destId,
+                    }));
+                    console.log(`🔄 Retry sent for [${msg.destId}]`);
+                  }
+                }, delay);
+              } else {
+                this.updateDestinationStatus(msg.destId, 'error');
+                console.error(`❌ Destination error [${msg.destId}]: ${msg.message} (max retries exhausted)`);
+              }
+            } else {
+              this.updateDestinationStatus(msg.destId, 'error');
+              console.error(`❌ Destination error [${msg.destId}]: ${msg.message}`);
             }
-            this.updateDestinationStatus(msg.destId, 'error');
-            console.error(`❌ Destination error [${msg.destId}]: ${msg.message}`);
           } else if (msg.type === 'error') {
             console.error('Server streaming error:', msg.message);
             this.state.error = msg.message;
@@ -215,6 +239,8 @@ export class DestinationRouter {
       connectedAt: null,
       bytesSent: 0,
       error: null,
+      retryCount: 0,
+      maxRetries: 3,
     });
     this.state.totalDestinations++;
 

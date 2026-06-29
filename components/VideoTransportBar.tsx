@@ -18,6 +18,7 @@ const VideoTransportBar: React.FC<VideoTransportBarProps> = ({
 }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isLive, setIsLive] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seeking, setSeeking] = useState(false);
   const rafRef = useRef<number>(0);
@@ -26,9 +27,13 @@ const VideoTransportBar: React.FC<VideoTransportBarProps> = ({
   const sync = useCallback(() => {
     if (videoElement && !seeking) {
       setCurrentTime(videoElement.currentTime);
-      const d = videoElement.duration || 0;
+      const rawDuration = videoElement.duration;
+      // Handle NaN (metadata not loaded), Infinity (live stream), and normal values
+      const d = isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
+      const isLive = !isFinite(rawDuration);
       setDuration(d);
-      if (d > 0) metadataLoadedRef.current = true;
+      setIsLive(isLive);
+      if (d > 0 || isLive) metadataLoadedRef.current = true;
       setPaused(videoElement.paused);
     }
     rafRef.current = requestAnimationFrame(sync);
@@ -76,7 +81,7 @@ const VideoTransportBar: React.FC<VideoTransportBarProps> = ({
       </div>
     );
   }
-  if (!duration) return null;
+  if (!duration && !isLive) return null;
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 

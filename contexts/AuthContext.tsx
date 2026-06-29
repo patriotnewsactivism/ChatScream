@@ -339,6 +339,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Auto-refresh profile when tab regains focus — handles mobile OAuth new-tab flow
+  useEffect(() => {
+    if (!user) return;
+    let lastVisibility = document.visibilityState;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && lastVisibility === 'hidden') {
+        refreshProfile();
+      }
+      lastVisibility = document.visibilityState;
+    };
+    const handleWindowFocus = () => {
+      refreshProfile();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const refreshSession = async (): Promise<string | null> => {
     guardConfig();
     if (!user) return null;

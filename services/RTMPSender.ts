@@ -165,9 +165,11 @@ export class RTMPSender {
         plan: this.config.userPlan,
       });
 
-      // Update all destinations to error
+      // Only mark destinations that haven't already been confirmed live as error
+      // This preserves the state of destinations that are already streaming successfully
       this.destinations.forEach((dest) => {
-        this.statusUpdater(dest.id, 'error');
+        // Don't clobber 'live' destinations — the pipeline error may be for a different destination
+        this.statusUpdater(dest.id, dest.status === 'live' ? 'live' : 'error');
       });
 
       throw error;

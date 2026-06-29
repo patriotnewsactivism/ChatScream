@@ -179,6 +179,7 @@ const baseState = () => ({
   media: {},
   leaderboard: [],
   schedules: {},
+  scenes: {},
   passwordResetTokens: {},
 });
 
@@ -470,6 +471,25 @@ export const putSchedule = (schedule) =>
 export const deleteSchedule = (id) =>
   writeState((state) => {
     if (state.schedules) delete state.schedules[id];
+  });
+
+// --- SCENE OPERATIONS ---
+export const listScenes = (userId) => {
+  const all = loadState().scenes || {};
+  return Object.values(all).filter((s) => s.userId === userId);
+};
+
+export const getScene = (id) => (loadState().scenes || {})[id] || null;
+
+export const putScene = (scene) =>
+  writeState((state) => {
+    if (!state.scenes) state.scenes = {};
+    state.scenes[scene.id] = scene;
+  });
+
+export const deleteScene = (id) =>
+  writeState((state) => {
+    if (state.scenes) delete state.scenes[id];
   });
 
 export const seedLeaderboard = () =>

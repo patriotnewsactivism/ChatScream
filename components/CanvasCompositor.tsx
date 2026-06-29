@@ -58,6 +58,35 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
 
   // Asset Cache for Scene Mode
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+
+  // Scene transition cross-fade
+  const transitionAlphaRef = useRef(1);
+  const lastSceneIdRef = useRef<string | null>(null);
+  const transitionRafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const sceneId = activeScene?.id || null;
+    if (lastSceneIdRef.current !== null && lastSceneIdRef.current !== sceneId) {
+      // Scene changed — start cross-fade
+      transitionAlphaRef.current = 0;
+      let progress = 0;
+      const transitionDuration = 400; // ms
+      const startTime = performance.now();
+
+      const animate = (now: number) => {
+        progress = Math.min((now - startTime) / transitionDuration, 1);
+        // Ease out cubic
+        transitionAlphaRef.current = 1 - Math.pow(1 - progress, 3);
+        if (progress < 1) {
+          transitionRafRef.current = requestAnimationFrame(animate);
+        }
+      };
+      cancelAnimationFrame(transitionRafRef.current);
+      transitionRafRef.current = requestAnimationFrame(animate);
+    }
+    lastSceneIdRef.current = sceneId;
+    return () => cancelAnimationFrame(transitionRafRef.current);
+  }, [activeScene?.id]);
   const videoCacheRef = useRef<Map<string, HTMLVideoElement>>(new Map());
 
   // Legacy Assets Refs
@@ -278,12 +307,14 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
 
       // 2. Draw Content (Scene vs Legacy Layout)
       if (scene) {
+        // Apply cross-fade transition alpha
+        const fadeAlpha = transitionAlphaRef.current;
         // Scene Mode: Draw sources by z-index
         const sortedSources = [...scene.sources].sort((a, b) => a.zIndex - b.zIndex);
         sortedSources.forEach((source) => {
           if (!source.isVisible) return;
           ctx.save();
-          ctx.globalAlpha = source.opacity;
+          ctx.globalAlpha = source.opacity * fadeAlpha;
 
           if (source.type === 'camera') {
             drawCover(camVideoRef.current, source.x, source.y, source.width, source.height);

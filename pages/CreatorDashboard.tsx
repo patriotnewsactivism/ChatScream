@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowUpRight,
   Calendar,
@@ -14,6 +14,8 @@ import {
   Sparkles,
   Wallet2,
   Wand2,
+  CheckCircle2,
+  X,
   Loader2,
   Trophy,
   Users,
@@ -41,6 +43,10 @@ const planMinutes: Record<string, number> = {
 
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(
+    searchParams.get('checkout') === 'success',
+  );
   const { userProfile, logout, sessionToken } = useAuth();
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState('');
@@ -143,6 +149,28 @@ const CreatorDashboard: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
         <AuthStatusBanner />
+        {showCheckoutSuccess && (
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-emerald-600/40 bg-emerald-600/10">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-emerald-300">Upgrade complete!</p>
+                <p className="text-xs text-emerald-400/70">
+                  Your plan is now active. Cloud streaming and premium features are unlocked.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowCheckoutSuccess(false);
+                setSearchParams({}, { replace: true });
+              }}
+              className="text-emerald-400/60 hover:text-emerald-300"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-end gap-2 flex-wrap">
           {canAccessAdmin && (
             <button
