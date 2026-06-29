@@ -16,10 +16,34 @@ interface ScreamDonationProps {
 }
 
 const SCREAM_TIERS = [
-  { amount: 5, label: 'Scream', emoji: '📢', color: 'from-blue-500 to-cyan-500', description: 'Basic alert' },
-  { amount: 10, label: 'Loud Scream', emoji: '🔊', color: 'from-orange-500 to-yellow-500', description: 'Louder + effects' },
-  { amount: 25, label: 'Mega Scream', emoji: '🎺', color: 'from-red-500 to-pink-500', description: 'Full screen takeover' },
-  { amount: 50, label: 'MAXIMUM SCREAM', emoji: '🔥', color: 'from-red-600 to-orange-500', description: 'Legendary + TTS + screen shake' },
+  {
+    amount: 5,
+    label: 'Scream',
+    emoji: '📢',
+    color: 'from-blue-500 to-cyan-500',
+    description: 'Basic alert',
+  },
+  {
+    amount: 10,
+    label: 'Loud Scream',
+    emoji: '🔊',
+    color: 'from-orange-500 to-yellow-500',
+    description: 'Louder + effects',
+  },
+  {
+    amount: 25,
+    label: 'Mega Scream',
+    emoji: '🎺',
+    color: 'from-red-500 to-pink-500',
+    description: 'Full screen takeover',
+  },
+  {
+    amount: 50,
+    label: 'MAXIMUM SCREAM',
+    emoji: '🔥',
+    color: 'from-red-600 to-orange-500',
+    description: 'Legendary + TTS + screen shake',
+  },
 ];
 
 const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerName }) => {
@@ -42,14 +66,19 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
     setError(null);
 
     try {
-      const res = await fetch(buildApiUrl('/api/scream/checkout'), {
+      const successUrl = `${window.location.origin}/thank-you?streamer=${encodeURIComponent(streamerUid)}`;
+      const cancelUrl = window.location.href;
+
+      const res = await fetch(buildApiUrl('/api/billing/chatscream'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           streamerUid,
           donorName: donorName.trim() || 'Anonymous',
           message: message.trim(),
-          amount: effectiveAmount,
+          amountCents: Math.round(effectiveAmount * 100),
+          successUrl,
+          cancelUrl,
         }),
       });
 
@@ -90,7 +119,10 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
         {SCREAM_TIERS.map((tier) => (
           <button
             key={tier.amount}
-            onClick={() => { setSelectedAmount(tier.amount); setCustomAmount(''); }}
+            onClick={() => {
+              setSelectedAmount(tier.amount);
+              setCustomAmount('');
+            }}
             className={`p-3 rounded-xl border text-left transition-all ${
               !customAmount && selectedAmount === tier.amount
                 ? `bg-gradient-to-r ${tier.color} border-transparent text-white shadow-lg`
@@ -110,7 +142,10 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
       <div className="mb-4">
         <label className="block text-xs text-gray-400 mb-1">Custom Amount</label>
         <div className="relative">
-          <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <DollarSign
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+          />
           <input
             type="number"
             min="5"

@@ -17,7 +17,7 @@ import { useResourceGuard } from './hooks/useResourceGuard';
 import { useLocalRecording } from './hooks/useLocalRecording';
 import { useEvidenceMarkers } from './hooks/useEvidenceMarkers';
 import { useStreamTranscript } from './hooks/useStreamTranscript';
-import CanvasCompositor, { CanvasRef } from './components/CanvasCompositor';
+import CanvasCompositor, { CanvasRef, CanvasResolution } from './components/CanvasCompositor';
 import ProgramPreview from './components/ProgramPreview';
 import DestinationManager from './components/DestinationManager';
 import LayoutSelector from './components/LayoutSelector';
@@ -49,6 +49,8 @@ import {
 import { useAuth } from './contexts/AuthContext';
 import { createScreamAlert, ScreamAlert, calculateScreamDuration } from './services/chatScreamer';
 import { apiRequest, ApiRequestError, buildApiUrl } from './services/apiClient';
+import { chatAggregator, AggregatedMessage } from './services/chatAggregator';
+import { getCurrentSessionToken } from './services/backend';
 import {
   Settings,
   Layers,
@@ -114,7 +116,7 @@ const App: FC = () => {
   // sidebar / bottom-tab navigation
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'studio' | 'destinations' | 'branding' | 'media' | 'graphics'
+    'studio' | 'destinations' | 'branding' | 'media' | 'graphics' | 'chat'
   >('studio');
 
   // Switcher: program/preview multiview
@@ -171,6 +173,7 @@ const App: FC = () => {
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [activeScene, setActiveScene] = useState<Scene | null>(null);
+  const [liveMessages, setLiveMessages] = useState<AggregatedMessage[]>([]);
 
   // auto-captions
   const {
@@ -204,8 +207,14 @@ const App: FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
 
+  // Canvas output resolution
+  const [canvasResolution, setCanvasResolution] = useState<CanvasResolution>('720p');
+
   // Safe local recording (chunked, memory-aware)
-  const localRecording = useLocalRecording({ quality: 'auto' }, resourceGuard.level);
+  const [recordingQuality, setRecordingQuality] = useState<'auto' | 'high' | 'medium' | 'low'>(
+    'auto',
+  );
+  const localRecording = useLocalRecording({ quality: recordingQuality }, resourceGuard.level);
   const clipBufferRef = useRef<ClipBuffer | null>(null);
 
   // audio pipeline
@@ -602,8 +611,56 @@ const App: FC = () => {
     if (appState.isStreaming && !prevStreaming.current) {
       streamTranscript.startCapture();
       if (captionsOn) streamTranscript.clearTranscript();
+
+      // Start live chat aggregation — fetch credentials from server
+      const facebookDest = destinations.find((d) => d.platform === 'facebook' && d.isEnabled);
+      const facebookLiveVideoId = facebookDest?.liveVideoId || '';
+      const params = facebookLiveVideoId
+        ? `?facebookLiveVideoId=${encodeURIComponent(facebookLiveVideoId)}`
+        : '';
+      const token = getCurrentSessionToken();
+      if (token) {
+        fetch(buildApiUrl(`/api/streaming/chat-config${params}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => r.json())
+          .then(({ config }) => {
+            chatAggregator.clearHistory();
+            chatAggregator.start({
+              youtube: config?.youtube?.liveChatId
+                ? { accessToken: config.youtube.accessToken, liveChatId: config.youtube.liveChatId }
+                : undefined,
+              twitch: config?.twitch?.channel
+                ? {
+                    accessToken: config.twitch.accessToken,
+                    channel: config.twitch.channel,
+                    username: config.twitch.username,
+                  }
+                : undefined,
+              facebook:
+                config?.facebook?.accessToken && config?.facebook?.liveVideoId
+                  ? {
+                      accessToken: config.facebook.accessToken,
+                      liveVideoId: config.facebook.liveVideoId,
+                    }
+                  : undefined,
+            });
+          })
+          .catch((err) => console.warn('Chat config fetch failed:', err));
+
+        const unsubscribe = chatAggregator.subscribe((msgs) => setLiveMessages([...msgs]));
+        // Store unsubscribe so we can clean up when streaming stops
+        (prevStreaming as any)._unsubscribeChat = unsubscribe;
+      }
     } else if (!appState.isStreaming && prevStreaming.current) {
       streamTranscript.stopCapture();
+      // Stop chat aggregation
+      chatAggregator.stop();
+      if (typeof (prevStreaming as any)._unsubscribeChat === 'function') {
+        (prevStreaming as any)._unsubscribeChat();
+        (prevStreaming as any)._unsubscribeChat = null;
+      }
+      setLiveMessages([]);
       // Show post-stream panel if we have content
       if (streamTranscript.wordCount > 0 || evidenceMarkers.markers.length > 0) {
         setShowPostStream(true);
@@ -722,6 +779,13 @@ const App: FC = () => {
         </button>
         <div className="h-4 w-[1px] bg-gray-700 mx-1" />
         <button
+          onClick={() => setCanvasResolution((r) => (r === '720p' ? '1080p' : '720p'))}
+          className="px-2 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-[11px] font-bold tabular-nums min-w-[44px] text-center transition-colors"
+          title={`Canvas output: ${canvasResolution} — click to toggle`}
+        >
+          {canvasResolution}
+        </button>
+        <button
           onClick={saveClip}
           className="p-2 rounded-full bg-gray-800 text-gray-400 hover:bg-brand-600 hover:text-white transition-all"
           title="Save Last 30s Clip (C)"
@@ -775,6 +839,7 @@ const App: FC = () => {
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         graphics={graphicsState}
         mirrorCamera={isMirrored}
+        resolution={canvasResolution}
       />
 
       {/* Legal citation lower-third overlay */}
@@ -849,6 +914,14 @@ const App: FC = () => {
         </button>
 
         <div className="h-4 w-[1px] bg-gray-700 mx-1" />
+
+        <button
+          onClick={() => setCanvasResolution((r) => (r === '720p' ? '1080p' : '720p'))}
+          className="px-2 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-[11px] font-bold tabular-nums min-w-[44px] text-center transition-colors"
+          title={`Canvas output: ${canvasResolution} — click to toggle`}
+        >
+          {canvasResolution}
+        </button>
 
         <button
           onClick={saveClip}
@@ -1323,6 +1396,25 @@ const App: FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Recording quality selector */}
+          {!appState.isRecording && (
+            <select
+              value={recordingQuality}
+              onChange={(e) => setRecordingQuality(e.target.value as typeof recordingQuality)}
+              className="text-xs bg-dark-800 border border-gray-700 rounded-lg px-1.5 py-1 text-gray-300 focus:outline-none focus:border-brand-500"
+              title="Recording quality"
+            >
+              <option value="auto">Auto</option>
+              <option value="high">4K</option>
+              <option value="medium">HD</option>
+              <option value="low">SD</option>
+            </select>
+          )}
+          {appState.isRecording && localRecording.currentQuality && (
+            <span className="text-[10px] font-bold text-red-400 uppercase">
+              {localRecording.currentQuality}
+            </span>
+          )}
           <button
             onClick={toggleRecording}
             className={`p-2 rounded-full border ${appState.isRecording ? 'bg-gray-800 border-red-500 text-red-500' : 'border-gray-600 text-gray-400'}`}
@@ -1562,6 +1654,7 @@ const App: FC = () => {
         isStreaming={appState.isStreaming}
         onBroadcast={() => {}}
         authToken={sessionToken}
+        liveMessages={liveMessages}
       />
 
       {guestInviteModal}

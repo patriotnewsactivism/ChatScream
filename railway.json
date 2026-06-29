@@ -2,12 +2,12 @@
   "$schema": "https://railway.app/manifest-schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm run build",
+    "buildCommand": "npm install --omit=dev",
     "watchPatterns": ["server/**", "package.json"],
     "watchTimeout": 30
   },
   "deploy": {
-    "startCommand": "node server/railway.js",
+    "startCommand": "node server/index.js",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 100,
     "healthcheckInterval": 30,

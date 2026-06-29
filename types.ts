@@ -31,6 +31,10 @@ export interface Destination {
   oauthTokenId?: string; // reference to stored token
   isEnabled: boolean;
   status: 'offline' | 'connecting' | 'live' | 'error';
+  /** YouTube: liveChatId for the active broadcast (used by ChatAggregator) */
+  liveChatId?: string;
+  /** Facebook: live video ID returned by the live_videos API (used for comment polling) */
+  liveVideoId?: string;
 }
 
 export interface StreamConfig {

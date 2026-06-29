@@ -78,6 +78,24 @@ const DEFAULT_TRANSITION: SceneTransition = {
   easing: 'ease-in-out',
 };
 
+const SCENES_STORAGE_KEY = 'chatscream_scenes_v1';
+const ACTIVE_SCENE_STORAGE_KEY = 'chatscream_active_scene_v1';
+
+/** Serialize a scene for localStorage — omit live MediaStream references */
+const serializeScene = (scene: Scene): object => ({
+  ...scene,
+  sources: scene.sources.map((s) => ({ ...s, mediaStream: undefined })),
+  createdAt: scene.createdAt instanceof Date ? scene.createdAt.toISOString() : scene.createdAt,
+  updatedAt: scene.updatedAt instanceof Date ? scene.updatedAt.toISOString() : scene.updatedAt,
+});
+
+const deserializeScene = (raw: any): Scene => ({
+  ...raw,
+  createdAt: new Date(raw.createdAt),
+  updatedAt: new Date(raw.updatedAt),
+  sources: (raw.sources || []).map((s: any) => ({ ...s, mediaStream: undefined })),
+});
+
 export class SceneManager {
   private scenes: Map<string, Scene> = new Map();
   private activeSceneId: string | null = null;
@@ -86,7 +104,45 @@ export class SceneManager {
 
   constructor(onSceneChange?: (scene: Scene) => void) {
     this.onSceneChange = onSceneChange;
-    this.initializeDefaultScenes();
+    // Try to rehydrate from localStorage before creating defaults
+    if (!this.loadFromStorage()) {
+      this.initializeDefaultScenes();
+    }
+  }
+
+  /** Persist scenes to localStorage. Called after every mutating operation. */
+  private persistToStorage(): void {
+    try {
+      const serialized = Array.from(this.scenes.values()).map(serializeScene);
+      localStorage.setItem(SCENES_STORAGE_KEY, JSON.stringify(serialized));
+      if (this.activeSceneId) {
+        localStorage.setItem(ACTIVE_SCENE_STORAGE_KEY, this.activeSceneId);
+      } else {
+        localStorage.removeItem(ACTIVE_SCENE_STORAGE_KEY);
+      }
+    } catch (err) {
+      console.warn('[SceneManager] Failed to persist scenes:', err);
+    }
+  }
+
+  /** Rehydrate scenes from localStorage. Returns true if scenes were loaded. */
+  private loadFromStorage(): boolean {
+    try {
+      const raw = localStorage.getItem(SCENES_STORAGE_KEY);
+      if (!raw) return false;
+      const parsed: any[] = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return false;
+      for (const rawScene of parsed) {
+        const scene = deserializeScene(rawScene);
+        this.scenes.set(scene.id, scene);
+      }
+      this.activeSceneId = localStorage.getItem(ACTIVE_SCENE_STORAGE_KEY) || null;
+      console.log(`🎬 Restored ${this.scenes.size} scenes from storage`);
+      return true;
+    } catch (err) {
+      console.warn('[SceneManager] Failed to load scenes from storage:', err);
+      return false;
+    }
   }
 
   private initializeDefaultScenes(): void {
@@ -138,6 +194,7 @@ export class SceneManager {
     this.scenes.set(pipScene.id, pipScene);
 
     console.log('🎬 Initialized default scenes');
+    this.persistToStorage();
   }
 
   public async enumerateCameras(): Promise<Camera[]> {
@@ -349,6 +406,7 @@ export class SceneManager {
 
     scene.sources.splice(sourceIndex, 1);
     scene.updatedAt = new Date();
+    this.persistToStorage();
 
     console.log(`🗑️ Removed source ${sourceId} from scene ${sceneId}`);
     return true;
@@ -367,6 +425,7 @@ export class SceneManager {
 
     source.position = { ...source.position, ...position };
     scene.updatedAt = new Date();
+    this.persistToStorage();
     return true;
   }
 
@@ -383,6 +442,7 @@ export class SceneManager {
 
     source.transform = { ...source.transform, ...transform };
     scene.updatedAt = new Date();
+    this.persistToStorage();
     return true;
   }
 
@@ -407,6 +467,7 @@ export class SceneManager {
 
     scene.isActive = true;
     this.activeSceneId = sceneId;
+    this.persistToStorage();
 
     if (this.onSceneChange) {
       this.onSceneChange(scene);
@@ -436,6 +497,7 @@ export class SceneManager {
     };
 
     this.scenes.set(sceneId, scene);
+    this.persistToStorage();
     console.log(`🎬 Created scene: ${name}`);
     return scene;
   }
@@ -456,6 +518,7 @@ export class SceneManager {
     }
 
     this.scenes.delete(sceneId);
+    this.persistToStorage();
     console.log(`🗑️ Deleted scene: ${scene.name}`);
     return true;
   }

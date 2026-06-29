@@ -1,20 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateChatResponse, moderateMessage } from '../services/claudeService';
-import {
-  MessageSquare,
-  Send,
-  X,
-  Sparkles,
-  Settings,
-  Eye,
-  EyeOff,
-  Volume2,
-  VolumeX,
-  Trash2,
-  Copy,
-  Check,
-  AlertCircle,
-} from 'lucide-react';
+import { AggregatedMessage } from '../services/chatAggregator';
+import { MessageSquare, Send, X, Sparkles, Eye, Trash2, Copy, Check } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -29,13 +16,23 @@ interface ChatStreamProps {
   isStreaming: boolean;
   onBroadcast: (message: ChatMessage) => void;
   authToken: string | null;
+  /** Live platform messages from YouTube / Twitch / Facebook */
+  liveMessages?: AggregatedMessage[];
 }
+
+/** Platform badge color classes */
+const PLATFORM_COLORS: Record<string, string> = {
+  youtube: 'bg-red-600/30 text-red-400 border-red-500/30',
+  twitch: 'bg-purple-600/30 text-purple-400 border-purple-500/30',
+  facebook: 'bg-blue-600/30 text-blue-400 border-blue-500/30',
+};
 
 const ChatStream: React.FC<ChatStreamProps> = ({
   streamTopic,
   isStreaming,
   onBroadcast,
   authToken,
+  liveMessages = [],
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -218,8 +215,38 @@ const ChatStream: React.FC<ChatStreamProps> = ({
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]">
+      {/* Live platform messages */}
+      {liveMessages.length > 0 && (
+        <div className="border-b border-gray-700/60">
+          <div className="px-4 pt-3 pb-1 flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Live Chat
+            </span>
+          </div>
+          <div className="overflow-y-auto max-h-48 px-4 pb-3 space-y-1.5">
+            {liveMessages.map((msg) => {
+              const platformKey = msg.platform.toLowerCase();
+              const colorClass =
+                PLATFORM_COLORS[platformKey] ?? 'bg-gray-600/30 text-gray-400 border-gray-500/30';
+              return (
+                <div key={msg.id} className="flex items-start gap-2 text-sm">
+                  <span
+                    className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ${colorClass}`}
+                  >
+                    {msg.platform}
+                  </span>
+                  <span className="font-semibold text-gray-300 shrink-0">{msg.displayName}:</span>
+                  <span className="text-gray-400 break-words min-w-0">{msg.content}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* AI / user messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[150px]">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />

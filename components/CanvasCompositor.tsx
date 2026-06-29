@@ -3,6 +3,13 @@ import { LayoutMode, BrandingSettings, Scene, SceneSource } from '../types';
 import { ScreamAlert } from '../services/chatScreamer';
 import type { GraphicsState } from './GraphicsOverlay';
 
+export type CanvasResolution = '720p' | '1080p';
+
+const RESOLUTIONS: Record<CanvasResolution, { width: number; height: number }> = {
+  '720p': { width: 1280, height: 720 },
+  '1080p': { width: 1920, height: 1080 },
+};
+
 interface CanvasCompositorProps {
   layout: LayoutMode;
   cameraStream: MediaStream | null;
@@ -18,6 +25,7 @@ interface CanvasCompositorProps {
   nowPlaying?: string | null;
   graphics?: GraphicsState | null; // Scoreboard, timer, lower-third, image overlays
   mirrorCamera?: boolean; // Horizontally flip the camera feed
+  resolution?: CanvasResolution; // Output canvas resolution (default: 720p)
 }
 
 export interface CanvasRef {
@@ -40,6 +48,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     nowPlaying,
     graphics,
     mirrorCamera = false,
+    resolution = '720p',
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -183,8 +192,10 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = 1280;
-    canvas.height = 720;
+    const { width: canvasW, height: canvasH } = RESOLUTIONS[resolution] ?? RESOLUTIONS['720p'];
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    tickerXRef.current = canvasW;
 
     let animationId: number;
 
@@ -674,7 +685,9 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         if (gfx.timer?.visible) {
           const tm = gfx.timer;
           const secs = tm.seconds;
-          const mm = Math.floor(secs / 60).toString().padStart(2, '0');
+          const mm = Math.floor(secs / 60)
+            .toString()
+            .padStart(2, '0');
           const ss = (secs % 60).toString().padStart(2, '0');
           const timerText = `${mm}:${ss}`;
 
@@ -745,14 +758,30 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
 
             const imgW = cached.naturalWidth * img.scale;
             const imgH = cached.naturalHeight * img.scale;
-            let ix = 0, iy = 0;
+            let ix = 0,
+              iy = 0;
             const pad = 20;
             switch (img.position) {
-              case 'top-left':     ix = pad;            iy = pad;            break;
-              case 'top-right':    ix = w - imgW - pad; iy = pad;            break;
-              case 'bottom-left':  ix = pad;            iy = h - imgH - pad; break;
-              case 'bottom-right': ix = w - imgW - pad; iy = h - imgH - pad; break;
-              case 'center':       ix = (w - imgW) / 2; iy = (h - imgH) / 2; break;
+              case 'top-left':
+                ix = pad;
+                iy = pad;
+                break;
+              case 'top-right':
+                ix = w - imgW - pad;
+                iy = pad;
+                break;
+              case 'bottom-left':
+                ix = pad;
+                iy = h - imgH - pad;
+                break;
+              case 'bottom-right':
+                ix = w - imgW - pad;
+                iy = h - imgH - pad;
+                break;
+              case 'center':
+                ix = (w - imgW) / 2;
+                iy = (h - imgH) / 2;
+                break;
             }
             ctx.drawImage(cached, ix, iy, imgW, imgH);
           });
@@ -767,7 +796,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, []);
+  }, [resolution]);
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-black aspect-video rounded-lg overflow-hidden border border-gray-800 shadow-2xl relative">

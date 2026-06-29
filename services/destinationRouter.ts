@@ -81,8 +81,11 @@ export class DestinationRouter {
           JSON.stringify({
             type: 'start',
             destinations: enabled.map((d) => ({
+              id: d.id,
               serverUrl: d.serverUrl,
               streamKey: d.streamKey,
+              platform: d.platform,
+              name: d.name,
             })),
           }),
         );
@@ -90,17 +93,17 @@ export class DestinationRouter {
         this.startRecording();
 
         this.state.status = 'routing';
+        // Mark as 'connecting' — flip to 'live' only when server sends destination_connected
         enabled.forEach((d) => {
           this.state.activeConnections.set(d.id, {
             destination: d,
-            status: 'live',
-            connectedAt: Date.now(),
+            status: 'connecting',
+            connectedAt: null,
             bytesSent: 0,
             error: null,
           });
-          this.updateDestinationStatus(d.id, 'live');
+          this.updateDestinationStatus(d.id, 'connecting');
         });
-        this.state.liveDestinations = enabled.length;
 
         resolve();
       };
@@ -113,11 +116,31 @@ export class DestinationRouter {
       this.ws!.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.type === 'error') {
+          if (msg.type === 'destination_connected') {
+            // FFmpeg opened the RTMP connection — now truly live
+            const conn = this.state.activeConnections.get(msg.destId);
+            if (conn) {
+              conn.status = 'live';
+              conn.connectedAt = Date.now();
+              this.state.liveDestinations++;
+            }
+            this.updateDestinationStatus(msg.destId, 'live');
+            console.log(`✅ Destination confirmed live: ${msg.destId}`);
+          } else if (msg.type === 'destination_error') {
+            const conn = this.state.activeConnections.get(msg.destId);
+            if (conn) {
+              conn.status = 'error';
+              conn.error = msg.message || 'Connection failed';
+            }
+            this.updateDestinationStatus(msg.destId, 'error');
+            console.error(`❌ Destination error [${msg.destId}]: ${msg.message}`);
+          } else if (msg.type === 'error') {
             console.error('Server streaming error:', msg.message);
             this.state.error = msg.message;
           } else if (msg.type === 'stats') {
             if (this.onStats) this.onStats({ bitrate: msg.bitrate });
+          } else if (msg.type === 'destinations_updated') {
+            console.log(`🔄 Server confirmed destination update: ${msg.count} active`);
           }
         } catch (e) {}
       };
@@ -196,23 +219,15 @@ export class DestinationRouter {
     this.state.totalDestinations++;
 
     const allDestinations = Array.from(this.state.activeConnections.values()).map((c) => ({
+      id: c.destination.id,
       serverUrl: c.destination.serverUrl,
       streamKey: c.destination.streamKey,
+      platform: c.destination.platform,
+      name: c.destination.name,
     }));
 
     this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: allDestinations }));
-
-    // Mark as live once server acknowledges (optimistic update after short delay)
-    setTimeout(() => {
-      const conn = this.state.activeConnections.get(destination.id);
-      if (conn && conn.status === 'connecting') {
-        conn.status = 'live';
-        conn.connectedAt = Date.now();
-        this.state.liveDestinations++;
-        this.updateDestinationStatus(destination.id, 'live');
-      }
-    }, 1500);
-
+    // Status will flip to 'live' when the server sends destination_connected after FFmpeg reconnects
     console.log(`➕ Added destination: ${destination.name}`);
   }
 

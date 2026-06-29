@@ -294,7 +294,7 @@ export const saveSession = async (session) => {
         await pool.query(
           `INSERT INTO chatscream_sessions (token, data, expires_at) VALUES ($1, $2, $3)
            ON CONFLICT (token) DO UPDATE SET data = $2, expires_at = $3`,
-          [session.token, JSON.stringify(session), session.expiresAt]
+          [session.token, JSON.stringify(session), session.expiresAt],
         );
       }
     }
@@ -315,7 +315,7 @@ export const getSession = async (token) => {
     } else {
       const result = await pool.query(
         'SELECT data FROM chatscream_sessions WHERE token = $1 AND expires_at > NOW()',
-        [token]
+        [token],
       );
       return result.rows[0]?.data || null;
     }
@@ -358,7 +358,7 @@ export const savePasswordResetToken = async (tokenRecord) => {
         await pool.query(
           `INSERT INTO chatscream_reset_tokens (token_hash, data, expires_at) VALUES ($1, $2, $3)
            ON CONFLICT (token_hash) DO UPDATE SET data = $2, expires_at = $3`,
-          [tokenRecord.tokenHash, JSON.stringify(tokenRecord), tokenRecord.expiresAt]
+          [tokenRecord.tokenHash, JSON.stringify(tokenRecord), tokenRecord.expiresAt],
         );
       }
     }
@@ -384,7 +384,7 @@ export const consumePasswordResetToken = async (tokenHash) => {
     } else {
       const result = await pool.query(
         'DELETE FROM chatscream_reset_tokens WHERE token_hash = $1 AND expires_at > NOW() RETURNING data',
-        [tokenHash]
+        [tokenHash],
       );
       if (!result.rows[0]) return null;
       tokenRecord = result.rows[0].data;
@@ -411,9 +411,13 @@ export const consumePasswordResetToken = async (tokenHash) => {
 // --- CONFIG & APP STATE ---
 
 export const getConfig = (key) => loadState().config[key];
-export const setConfig = (key, value) =>
+export const setConfig = (key, value, updatedBy) =>
   writeState((state) => {
-    state.config[key] = value;
+    state.config[key] = {
+      ...value,
+      updatedAt: new Date().toISOString(),
+      updatedBy: updatedBy || 'system',
+    };
   });
 
 export const listMediaAssets = () => Object.values(loadState().media || {});
@@ -496,9 +500,7 @@ export const updateLeaderboardEntry = (streamerUid, amount) =>
     if (!state.screamHistory) state.screamHistory = [];
 
     // Find or create entry for this streamer
-    let entry = state.leaderboard.find(
-      (e) => e.uid === streamerUid || e.username === streamerUid,
-    );
+    let entry = state.leaderboard.find((e) => e.uid === streamerUid || e.username === streamerUid);
 
     if (entry) {
       entry.screams = (entry.screams || 0) + 1;
@@ -555,15 +557,26 @@ export const resetWeeklyLeaderboard = () =>
 
 export const getWeeklyWinners = () => loadState().weeklyWinners || [];
 
+// ── Scream broadcast bridge ──────────────────────────────────────────────
+// Set by server/index.js at startup so the Stripe webhook can push
+// real-time scream alerts to connected streamer WebSocket clients.
+let _screamBroadcaster = null;
+
+export const setScreamBroadcaster = (fn) => {
+  _screamBroadcaster = fn;
+};
+
+export const broadcastScreamAlert = (streamerUid, alert) => {
+  if (_screamBroadcaster) _screamBroadcaster(streamerUid, alert);
+};
+
 export const addChatMessage = (msg) =>
   writeState((state) => {
     state.chatMessages.push(msg);
   });
 export const listChatMessages = (streamId, limit) => {
   const all = loadState().chatMessages || [];
-  const filtered = streamId
-    ? all.filter((m) => m.streamId === streamId)
-    : all;
+  const filtered = streamId ? all.filter((m) => m.streamId === streamId) : all;
   return limit && limit > 0 ? filtered.slice(-limit) : filtered;
 };
 export const getAffiliate = (code) => loadState().affiliates[code];

@@ -580,25 +580,25 @@ const fallbackProfileFromUser = (user: AuthUser): UserProfile => {
   const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
   const isAdmin = adminEmails.includes(email);
   return {
-  uid: user.uid,
-  email: user.email || '',
-  displayName: sanitizeDisplayName(user.displayName, user.email),
-  photoURL: user.photoURL || undefined,
-  createdAt: new Date().toISOString(),
-  role: isAdmin ? 'admin' : 'user',
-  betaTester: false,
-  subscription: {
-    plan: isAdmin ? 'enterprise' as PlanTier : 'free',
-    status: isAdmin ? 'active' : 'trialing',
-  },
-  usage: {
-    cloudHoursUsed: 0,
-  },
-  settings: {
-    emailNotifications: true,
-    marketingEmails: true,
-  },
-};
+    uid: user.uid,
+    email: user.email || '',
+    displayName: sanitizeDisplayName(user.displayName, user.email),
+    photoURL: user.photoURL || undefined,
+    createdAt: new Date().toISOString(),
+    role: isAdmin ? 'admin' : 'user',
+    betaTester: false,
+    subscription: {
+      plan: isAdmin ? ('enterprise' as PlanTier) : 'free',
+      status: isAdmin ? 'active' : 'trialing',
+    },
+    usage: {
+      cloudHoursUsed: 0,
+    },
+    settings: {
+      emailNotifications: true,
+      marketingEmails: true,
+    },
+  };
 };
 
 const normalizeProfile = (value: unknown): UserProfile | null => {
@@ -620,13 +620,16 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
     displayName: displayName || email || 'User',
     photoURL: toStringValue(raw.photoURL).trim() || undefined,
     createdAt: raw.createdAt ?? new Date().toISOString(),
-    role: isAdmin ? 'admin' : (toStringValue(raw.role).trim() || undefined),
+    role: isAdmin ? 'admin' : toStringValue(raw.role).trim() || undefined,
     betaTester: Boolean(raw.betaTester),
     subscription: {
-      plan: isAdmin ? ('enterprise' as PlanTier) : ((toStringValue(raw.subscription?.plan) as PlanTier) || 'free'),
-      status: isAdmin ? 'active' :
-        ((toStringValue(raw.subscription?.status) as UserProfile['subscription']['status']) ||
-        'trialing'),
+      plan: isAdmin
+        ? ('enterprise' as PlanTier)
+        : (toStringValue(raw.subscription?.plan) as PlanTier) || 'free',
+      status: isAdmin
+        ? 'active'
+        : (toStringValue(raw.subscription?.status) as UserProfile['subscription']['status']) ||
+          'trialing',
       trialEndsAt: raw.subscription?.trialEndsAt,
       currentPeriodEnd: raw.subscription?.currentPeriodEnd,
       stripeCustomerId: toStringValue(raw.subscription?.stripeCustomerId).trim() || undefined,
@@ -920,9 +923,9 @@ export const getBackendCapabilities = async (): Promise<BackendCapabilities> => 
     {},
   );
 
-  const data = (response && typeof response === 'object'
-    ? (response as Record<string, unknown>)
-    : {}) as Record<string, unknown>;
+  const data = (
+    response && typeof response === 'object' ? (response as Record<string, unknown>) : {}
+  ) as Record<string, unknown>;
   const authProviders =
     data.authProviders && typeof data.authProviders === 'object'
       ? (data.authProviders as Record<string, unknown>)
@@ -1114,9 +1117,7 @@ export const ensureAffiliateForSignedInUser = async (): Promise<string> => {
   return normalizeCode(profile?.affiliate?.code || '');
 };
 
-export const applyLocalAccessOverrides = (
-  profile: UserProfile | null,
-): UserProfile | null => {
+export const applyLocalAccessOverrides = (profile: UserProfile | null): UserProfile | null => {
   return profile;
 };
 
@@ -1134,3 +1135,114 @@ export const onIdTokenChange = onAuthChange;
 
 export const getCurrentSessionToken = (): string | null => getSessionToken();
 
+// ── Analytics ──────────────────────────────────────────────────────────────
+
+export interface AnalyticsOverview {
+  totalCloudHours: number;
+  totalStreams: number;
+  streamsThisMonth: number;
+  totalScreams: number;
+  totalDonations: number;
+  topDonors: { name: string; total: number }[];
+  hasActiveSession: boolean;
+}
+
+export const getAnalyticsOverview = async (): Promise<AnalyticsOverview | null> => {
+  const result = await tryRequestVariants<unknown>(
+    [() => authRequest('/api/analytics/overview')],
+    null,
+  );
+  if (!result) return null;
+  return (result as AnalyticsOverview) || null;
+};
+
+// ── Leaderboard Stats ──────────────────────────────────────────────────────
+
+export interface LeaderboardStats {
+  streamerUid: string;
+  streamerName: string;
+  rank: number;
+  screams: number;
+  donated: number;
+  totalEntries: number;
+  previousWins: number;
+}
+
+export const getLeaderboardStats = async (
+  streamerUid: string,
+): Promise<LeaderboardStats | null> => {
+  const result = await tryRequestVariants<unknown>(
+    [() => authRequest(`/api/leaderboard/stats?streamerUid=${encodeURIComponent(streamerUid)}`)],
+    null,
+  );
+  if (!result) return null;
+  return (result as LeaderboardStats) || null;
+};
+
+// ── Schedules ──────────────────────────────────────────────────────────────
+
+export interface StreamSchedule {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  scheduledAt: string;
+  platforms: string[];
+  recurrence?: unknown;
+  autoStart: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const getSchedules = async (): Promise<StreamSchedule[]> => {
+  const result = await tryRequestVariants<unknown>([() => authRequest('/api/streams/schedule')], {
+    schedules: [],
+  });
+  if (!result || typeof result !== 'object') return [];
+  return Array.isArray((result as Record<string, unknown>).schedules)
+    ? ((result as Record<string, unknown>).schedules as StreamSchedule[])
+    : [];
+};
+
+export const createSchedule = async (data: {
+  title: string;
+  description?: string;
+  scheduledAt: string;
+  platforms?: string[];
+  recurrence?: unknown;
+  autoStart?: boolean;
+}): Promise<StreamSchedule | null> => {
+  const result = await tryRequestVariants<unknown>(
+    [() => authRequest('/api/streams/schedule', { method: 'POST', body: data })],
+    null,
+  );
+  if (!result || typeof result !== 'object') return null;
+  return ((result as Record<string, unknown>).schedule as StreamSchedule) || null;
+};
+
+export const updateSchedule = async (
+  id: string,
+  data: Partial<StreamSchedule>,
+): Promise<StreamSchedule | null> => {
+  const result = await tryRequestVariants<unknown>(
+    [
+      () =>
+        authRequest(`/api/streams/schedule/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          body: data,
+        }),
+    ],
+    null,
+  );
+  if (!result || typeof result !== 'object') return null;
+  return ((result as Record<string, unknown>).schedule as StreamSchedule) || null;
+};
+
+export const deleteSchedule = async (id: string): Promise<boolean> => {
+  await tryRequestVariants<unknown>(
+    [() => authRequest(`/api/streams/schedule/${encodeURIComponent(id)}`, { method: 'DELETE' })],
+    null,
+  );
+  return true;
+};

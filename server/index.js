@@ -3,7 +3,13 @@ import { WebSocketServer } from 'ws';
 import { spawn, execFileSync } from 'node:child_process';
 import http from 'node:http';
 import app from './app.js';
-import { closeIdentityStorage, flushState, initIdentityStorage, seedLeaderboard } from './store.js';
+import {
+  closeIdentityStorage,
+  flushState,
+  initIdentityStorage,
+  seedLeaderboard,
+  setScreamBroadcaster,
+} from './store.js';
 
 const port = Number(process.env.PORT || 8787);
 const server = http.createServer(app);
@@ -13,6 +19,25 @@ const wss = new WebSocketServer({ server, path: undefined });
 // ── WebRTC Signaling rooms ────────────────────────────────────────────────
 // Room map: roomId → Set<WebSocket>
 const signalingRooms = new Map();
+
+// ── Scream rooms: streamerUid → Set<WebSocket> ─────────────────────────
+// Streamers join their own scream room to receive real-time donation alerts.
+// The Stripe webhook broadcasts to these rooms when a chat scream is paid.
+const screamRooms = new Map();
+
+const getScreamRoom = (streamerUid) => {
+  if (!screamRooms.has(streamerUid)) screamRooms.set(streamerUid, new Set());
+  return screamRooms.get(streamerUid);
+};
+
+export const broadcastScream = (streamerUid, alert) => {
+  const room = screamRooms.get(streamerUid);
+  if (!room) return;
+  const raw = JSON.stringify({ type: 'scream_alert', alert });
+  room.forEach((client) => {
+    if (client.readyState === 1) client.send(raw);
+  });
+};
 
 const getRoom = (roomId) => {
   if (!signalingRooms.has(roomId)) signalingRooms.set(roomId, new Set());
@@ -53,6 +78,22 @@ wss.on('connection', (ws, req) => {
       if (room.size === 0) signalingRooms.delete(roomId);
       broadcast(roomId, { type: 'peer-left' }, null);
       console.log(`📡 Signal client left room ${roomId} (${room.size} peers)`);
+    });
+
+    return; // Don't fall through to the RTMP ingest handler
+  }
+
+  // ── Scream room: /ws/scream/:streamerUid ────────────────────────────────
+  const screamMatch = url.match(/^\/ws\/scream\/([^/?]+)/);
+  if (screamMatch) {
+    const streamerUid = screamMatch[1];
+    const room = getScreamRoom(streamerUid);
+    room.add(ws);
+    console.log(`🔔 Scream listener joined for streamer ${streamerUid} (${room.size} listeners)`);
+
+    ws.on('close', () => {
+      room.delete(ws);
+      if (room.size === 0) screamRooms.delete(streamerUid);
     });
 
     return; // Don't fall through to the RTMP ingest handler
@@ -147,6 +188,26 @@ wss.on('connection', (ws, req) => {
       return args;
     };
 
+    /**
+     * Build a map of RTMP URL → destination for FFmpeg stderr correlation.
+     * FFmpeg prints the output URL in stderr lines like:
+     *   "Opening 'rtmp://...' for writing"  → connection attempt
+     *   "Output #0, flv, to 'rtmp://...'"   → mux opened (connected)
+     *   "Connection refused" / "Connection timed out" → error
+     * We key by the full output URL (serverUrl + streamKey) to map back to dest IDs.
+     */
+    const buildDestinationUrlMap = (destinations) => {
+      const map = new Map(); // rtmpUrl → destination
+      for (const d of destinations) {
+        const serverUrl = resolveServerUrl(d);
+        if (!serverUrl) continue;
+        const base = serverUrl.endsWith('/') ? serverUrl : serverUrl + '/';
+        const key = (d.streamKey || '').trim();
+        map.set(`${base}${key}`, d);
+      }
+      return map;
+    };
+
     const spawnFfmpeg = (destinations) => {
       if (destinations.length === 0) {
         ws.send(JSON.stringify({ type: 'error', message: 'No valid destinations to stream to.' }));
@@ -168,6 +229,7 @@ wss.on('connection', (ws, req) => {
       console.log('🚀 Spawning FFmpeg for', destinations.length, 'destination(s)');
       console.log('   Args:', args.join(' '));
       const proc = spawn('ffmpeg', args);
+      const destUrlMap = buildDestinationUrlMap(destinations);
 
       proc.on('error', (err) => {
         console.error('Failed to start FFmpeg process:', err);
@@ -176,23 +238,75 @@ wss.on('connection', (ws, req) => {
             ? 'FFmpeg is not installed on this server. Install FFmpeg to enable streaming.'
             : `FFmpeg failed to start: ${err.message}`;
         ws.send(JSON.stringify({ type: 'error', message: hint }));
+        // Mark all destinations as errored
+        for (const d of destinations) {
+          ws.send(JSON.stringify({ type: 'destination_error', destId: d.id, message: hint }));
+        }
       });
 
-      // Log FFmpeg stderr for debugging (contains progress, warnings, errors)
+      // Parse FFmpeg stderr for per-destination connection events
+      let stderrBuffer = '';
       proc.stderr.on('data', (data) => {
-        const line = data.toString().trim();
-        if (line) console.log(`[FFmpeg] ${line}`);
+        stderrBuffer += data.toString();
+        const lines = stderrBuffer.split('\n');
+        stderrBuffer = lines.pop() ?? ''; // keep incomplete last line
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line) continue;
+          console.log(`[FFmpeg] ${line}`);
+
+          // Match output URL in stderr — FFmpeg prints: Output #N, flv, to 'URL'
+          const outputMatch = line.match(/Output #\d+[^']*to '([^']+)'/i);
+          if (outputMatch) {
+            const rtmpUrl = outputMatch[1];
+            // Find which destination this URL corresponds to
+            for (const [mapUrl, dest] of destUrlMap) {
+              if (rtmpUrl.includes(mapUrl) || mapUrl.includes(rtmpUrl)) {
+                ws.send(JSON.stringify({ type: 'destination_connected', destId: dest.id }));
+                break;
+              }
+            }
+            continue;
+          }
+
+          // Match connection errors: look for lines containing a known RTMP URL and an error keyword
+          const errorKeywords =
+            /connection refused|connection timed out|connection reset|no route to host|failed to connect|invalid data|authentication failed|refused|403|401|stream key|forbidden/i;
+          if (errorKeywords.test(line)) {
+            // Try to identify which destination errored by URL match in the line
+            let matched = false;
+            for (const [mapUrl, dest] of destUrlMap) {
+              const urlFragment = mapUrl.split('/').slice(0, 3).join('/'); // rtmp://host
+              if (line.includes(urlFragment) || line.includes(dest.streamKey || '')) {
+                ws.send(
+                  JSON.stringify({ type: 'destination_error', destId: dest.id, message: line }),
+                );
+                matched = true;
+                break;
+              }
+            }
+            // If we can't pin it to a destination, send a generic error
+            if (!matched) {
+              ws.send(JSON.stringify({ type: 'error', message: line }));
+            }
+          }
+        }
       });
 
       proc.on('close', (code) => {
+        // Flush remaining stderr
+        if (stderrBuffer.trim()) console.log(`[FFmpeg] ${stderrBuffer.trim()}`);
+        stderrBuffer = '';
+
         console.log(`FFmpeg process closed with code ${code}`);
         if (code !== 0 && code !== null && !isRestarting) {
-          ws.send(
-            JSON.stringify({
-              type: 'error',
-              message: `FFmpeg exited unexpectedly (code ${code}). Check stream keys and RTMP URLs.`,
-            }),
-          );
+          const msg = `FFmpeg exited unexpectedly (code ${code}). Check stream keys and RTMP URLs.`;
+          ws.send(JSON.stringify({ type: 'error', message: msg }));
+          // Mark all as errored on unexpected exit
+          for (const d of destinations) {
+            ws.send(JSON.stringify({ type: 'destination_error', destId: d.id, message: msg }));
+          }
         }
       });
 
@@ -280,6 +394,9 @@ const checkFfmpeg = () => {
     return false;
   }
 };
+
+// Wire the scream broadcaster so the Stripe webhook can push to WebSocket rooms
+setScreamBroadcaster(broadcastScream);
 
 const startServer = async () => {
   try {

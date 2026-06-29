@@ -1,11 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Calendar, Clock, Copy, ExternalLink, Gauge, Globe, LayoutTemplate, Play, ShieldCheck, Sparkles, Wallet2, Wand2 } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Calendar,
+  Clock,
+  Copy,
+  ExternalLink,
+  Gauge,
+  Globe,
+  LayoutTemplate,
+  Play,
+  ShieldCheck,
+  Sparkles,
+  Wallet2,
+  Wand2,
+  Loader2,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Platform } from '../types';
 import { createCheckoutSession, getPlanById, PRICING_PLANS } from '../services/stripe';
 import BackendStatusCard from '../components/BackendStatusCard';
 import AuthStatusBanner from '../components/AuthStatusBanner';
+import {
+  getAnalyticsOverview,
+  getLeaderboardStats,
+  getSchedules,
+  AnalyticsOverview,
+  LeaderboardStats,
+  StreamSchedule,
+} from '../services/backend';
 
 const planMinutes: Record<string, number> = {
   free: 0,
@@ -19,15 +44,20 @@ const CreatorDashboard: React.FC = () => {
   const { userProfile, logout, sessionToken } = useAuth();
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState('');
+  const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
+  const [leaderboardStats, setLeaderboardStats] = useState<LeaderboardStats | null>(null);
+  const [schedules, setSchedules] = useState<StreamSchedule[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
   const planLabel = getPlanById(plan)?.name || 'Free';
   const referralCode = userProfile?.affiliate?.code || '';
-  const referralLink = typeof window === 'undefined' || !referralCode
-    ? ''
-    : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
+  const referralLink =
+    typeof window === 'undefined' || !referralCode
+      ? ''
+      : `${window.location.origin}/signup?ref=${encodeURIComponent(referralCode)}`;
   const canAccessAdmin = userProfile?.role === 'admin';
-  const nextPlan = PRICING_PLANS.find(p => p.price > 0 && p.id !== plan);
+  const nextPlan = PRICING_PLANS.find((p) => p.price > 0 && p.id !== plan);
 
   const copyToClipboard = async (text: string) => {
     if (!text) return;
@@ -37,6 +67,28 @@ const CreatorDashboard: React.FC = () => {
       // ignore
     }
   };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!userProfile?.uid) return;
+      setLoadingData(true);
+      try {
+        const [analyticsResult, leaderboardResult, scheduleResult] = await Promise.allSettled([
+          getAnalyticsOverview(),
+          getLeaderboardStats(userProfile.uid),
+          getSchedules(),
+        ]);
+        if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value);
+        if (leaderboardResult.status === 'fulfilled') setLeaderboardStats(leaderboardResult.value);
+        if (scheduleResult.status === 'fulfilled') setSchedules(scheduleResult.value);
+      } catch {
+        // Silently handle — dashboard shows defaults
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    fetchData();
+  }, [userProfile?.uid]);
 
   const handleUpgrade = async () => {
     if (!nextPlan || !userProfile) return;
@@ -147,29 +199,44 @@ const CreatorDashboard: React.FC = () => {
               <span className="text-sm text-gray-400">Cloud VM hours</span>
               <Gauge size={16} className="text-brand-400" />
             </div>
-            <p className="text-3xl font-bold">{(includedMinutes / 60).toFixed(0)} hrs</p>
-            <p className="text-xs text-gray-400">Included with your {planLabel} plan</p>
-            <p className="text-[11px] text-gray-500 mt-2">Free: 0, $19: 3 hours, $29: 10 hours, $59: 50 hours.</p>
+            <p className="text-3xl font-bold">
+              {analytics
+                ? analytics.totalCloudHours.toFixed(1)
+                : `${(includedMinutes / 60).toFixed(0)}`}{' '}
+              hrs
+            </p>
+            <p className="text-xs text-gray-400">
+              {analytics
+                ? `${analytics.totalStreams} total stream${analytics.totalStreams !== 1 ? 's' : ''}`
+                : `Included with your ${planLabel} plan`}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-2">
+              Free: 0, $19: 3 hours, $29: 10 hours, $59: 50 hours.
+            </p>
           </div>
           <div className="p-4 rounded-xl border border-gray-800 bg-dark-800/70 space-y-2">
             <div className="flex items-center gap-2 text-brand-300">
               <Sparkles size={16} />
-              <span className="text-sm font-semibold">One-click destinations</span>
+              <span className="text-sm font-semibold">Screams received</span>
             </div>
-            <p className="text-sm text-gray-300">Connect YouTube, Facebook, or Twitch without copying RTMP keys.</p>
-            <button
-              onClick={() => navigate('/studio#destinations')}
-              className="text-xs text-brand-300 underline"
-            >
-              Manage connections
-            </button>
+            <p className="text-2xl font-bold">{analytics ? analytics.totalScreams : '—'}</p>
+            {analytics && analytics.totalDonations > 0 && (
+              <p className="text-xs text-emerald-400">
+                ${analytics.totalDonations.toFixed(2)} in donations
+              </p>
+            )}
+            <p className="text-sm text-gray-300">
+              Viewers send paid screams that appear on your stream.
+            </p>
           </div>
           <div className="p-4 rounded-xl border border-gray-800 bg-dark-800/70 space-y-2">
             <div className="flex items-center gap-2 text-emerald-300">
               <ShieldCheck size={16} />
               <span className="text-sm font-semibold">Payouts & monetization</span>
             </div>
-            <p className="text-sm text-gray-300">Keep your chatscreamers configured and monitor how you get paid out.</p>
+            <p className="text-sm text-gray-300">
+              Keep your chatscreamers configured and monitor how you get paid out.
+            </p>
             <button
               onClick={() => navigate('/studio#monetization')}
               className="text-xs text-emerald-300 underline"
@@ -183,7 +250,9 @@ const CreatorDashboard: React.FC = () => {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="font-semibold">Affiliate / Referral Link</h2>
-              <p className="text-sm text-gray-400">Share your link to credit signups back to you.</p>
+              <p className="text-sm text-gray-400">
+                Share your link to credit signups back to you.
+              </p>
             </div>
             <button
               onClick={() => copyToClipboard(referralLink || referralCode)}
@@ -228,20 +297,40 @@ const CreatorDashboard: React.FC = () => {
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg border border-gray-700 bg-dark-900">
-                  <p className="text-sm font-semibold">Q&A with community</p>
-                  <p className="text-xs text-gray-400">Tomorrow • Multi-destination</p>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-gray-300">
-                    <Clock size={14} /> 45 min cloud-hosted time reserved
+                {loadingData ? (
+                  <div className="col-span-2 flex items-center justify-center py-4">
+                    <Loader2 size={18} className="animate-spin text-gray-500" />
+                    <span className="ml-2 text-sm text-gray-500">Loading schedules...</span>
                   </div>
-                </div>
-                <div className="p-3 rounded-lg border border-gray-700 bg-dark-900">
-                  <p className="text-sm font-semibold">Product drop teaser</p>
-                  <p className="text-xs text-gray-400">Saturday • YouTube + Twitch</p>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-gray-300">
-                    <Wand2 size={14} /> Templates + chat automations ready
+                ) : schedules.length > 0 ? (
+                  schedules.map((s) => (
+                    <div key={s.id} className="p-3 rounded-lg border border-gray-700 bg-dark-900">
+                      <p className="text-sm font-semibold">{s.title}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(s.scheduledAt).toLocaleDateString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-300">
+                        <Clock size={14} />{' '}
+                        {s.platforms.length > 0 ? s.platforms.join(' + ') : 'No platforms set'}
+                        {s.autoStart && <span className="text-brand-400">· Auto-start</span>}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 rounded-lg border border-gray-700 bg-dark-900">
+                    <p className="text-sm font-semibold">No upcoming broadcasts</p>
+                    <p className="text-xs text-gray-400">Schedule your first stream</p>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-300">
+                      <Wand2 size={14} /> Plan ahead to build your audience
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -250,11 +339,20 @@ const CreatorDashboard: React.FC = () => {
                 <LayoutTemplate size={16} className="text-purple-300" />
                 <h2 className="font-semibold">Templates & chat settings</h2>
               </div>
-              <p className="text-sm text-gray-300 mb-3">Save overlays, chat moderation defaults, and payout routing in one place—just like Streamlabs or Streamyard.</p>
+              <p className="text-sm text-gray-300 mb-3">
+                Save overlays, chat moderation defaults, and payout routing in one place—just like
+                Streamlabs or Streamyard.
+              </p>
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 rounded-full text-xs bg-purple-500/15 text-purple-200 border border-purple-500/30">Overlay packs</span>
-                <span className="px-3 py-1 rounded-full text-xs bg-amber-500/15 text-amber-200 border border-amber-500/30">Auto-moderation</span>
-                <span className="px-3 py-1 rounded-full text-xs bg-emerald-500/15 text-emerald-200 border border-emerald-500/30">Payout rules</span>
+                <span className="px-3 py-1 rounded-full text-xs bg-purple-500/15 text-purple-200 border border-purple-500/30">
+                  Overlay packs
+                </span>
+                <span className="px-3 py-1 rounded-full text-xs bg-amber-500/15 text-amber-200 border border-amber-500/30">
+                  Auto-moderation
+                </span>
+                <span className="px-3 py-1 rounded-full text-xs bg-emerald-500/15 text-emerald-200 border border-emerald-500/30">
+                  Payout rules
+                </span>
               </div>
             </div>
           </div>
@@ -266,9 +364,14 @@ const CreatorDashboard: React.FC = () => {
                 <h3 className="font-semibold">Destinations</h3>
               </div>
               <div className="space-y-2">
-                {destinations.map(dest => (
-                  <div key={dest.platform} className="p-3 rounded-lg border border-gray-700 bg-dark-900 flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${dest.isConnected ? 'bg-green-400' : 'bg-gray-600'}`} />
+                {destinations.map((dest) => (
+                  <div
+                    key={dest.platform}
+                    className="p-3 rounded-lg border border-gray-700 bg-dark-900 flex items-center gap-3"
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${dest.isConnected ? 'bg-green-400' : 'bg-gray-600'}`}
+                    />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold">{dest.name}</p>
                       <p className="text-xs text-gray-400 truncate">{dest.status}</p>
@@ -285,31 +388,96 @@ const CreatorDashboard: React.FC = () => {
             </div>
             <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70">
               <div className="flex items-center gap-2 mb-2">
+                <Users size={16} className="text-emerald-300" />
+                <h3 className="font-semibold">Top Donors</h3>
+              </div>
+              {analytics && analytics.topDonors.length > 0 ? (
+                <div className="space-y-1.5">
+                  {analytics.topDonors.map((d, i) => (
+                    <div key={d.name} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300 truncate max-w-[60%]">
+                        {i + 1}. {d.name}
+                      </span>
+                      <span className="text-emerald-400 font-medium">${d.total.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  No donations yet. Share your stream link to start receiving screams!
+                </p>
+              )}
+            </div>
+
+            <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70">
+              <div className="flex items-center gap-2 mb-2">
                 <Wallet2 size={16} className="text-emerald-300" />
                 <h3 className="font-semibold">Monetization</h3>
               </div>
-              <p className="text-sm text-gray-300">Track chat screamers, donations, and payouts at a glance.</p>
+              <p className="text-sm text-gray-300">
+                Track chat screamers, donations, and payouts at a glance.
+              </p>
               <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
                 <ShieldCheck size={14} /> Secure payouts configured
               </div>
             </div>
 
+            {leaderboardStats && (
+              <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70">
+                <div className="flex items-center gap-2 mb-2">
+                  <Trophy size={16} className="text-yellow-400" />
+                  <h3 className="font-semibold">Weekly Leaderboard</h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Your rank</span>
+                    <span className="text-sm font-bold text-white">
+                      #{leaderboardStats.rank} of {leaderboardStats.totalEntries}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Screams this week</span>
+                    <span className="text-sm font-bold text-brand-300">
+                      {leaderboardStats.screams}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Total donated</span>
+                    <span className="text-sm font-bold text-emerald-300">
+                      ${leaderboardStats.donated.toFixed(2)}
+                    </span>
+                  </div>
+                  {leaderboardStats.previousWins > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-400">Previous wins</span>
+                      <span className="text-sm font-bold text-yellow-300">
+                        {leaderboardStats.previousWins}x
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {plan === 'free' && nextPlan && (
               <div className="p-5 border border-brand-500/30 rounded-xl bg-brand-500/5">
-                <p className="text-xs text-brand-400 font-semibold uppercase tracking-wide mb-1">Upgrade your plan</p>
-                <p className="text-sm text-gray-300 mb-3">
-                  Unlock cloud streaming, more destinations, and advanced screams with {nextPlan.name}.
+                <p className="text-xs text-brand-400 font-semibold uppercase tracking-wide mb-1">
+                  Upgrade your plan
                 </p>
-                {upgradeError && (
-                  <p className="text-xs text-red-400 mb-2">{upgradeError}</p>
-                )}
+                <p className="text-sm text-gray-300 mb-3">
+                  Unlock cloud streaming, more destinations, and advanced screams with{' '}
+                  {nextPlan.name}.
+                </p>
+                {upgradeError && <p className="text-xs text-red-400 mb-2">{upgradeError}</p>}
                 <button
                   onClick={handleUpgrade}
                   disabled={upgrading}
                   className="w-full py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 font-semibold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
                 >
                   <ArrowUpRight size={15} />
-                  {upgrading ? 'Redirecting…' : `Upgrade to ${nextPlan.name} — $${nextPlan.price}/mo`}
+                  {upgrading
+                    ? 'Redirecting…'
+                    : `Upgrade to ${nextPlan.name} — $${nextPlan.price}/mo`}
                 </button>
               </div>
             )}

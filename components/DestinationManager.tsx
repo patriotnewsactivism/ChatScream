@@ -89,9 +89,13 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   const [youtubePickerError, setYouTubePickerError] = useState<string | null>(null);
   // Facebook Page picker
   const [showFacebookPicker, setShowFacebookPicker] = useState(false);
-  const [facebookPages, setFacebookPages] = useState<{ id: string; name: string; fanCount: number; pictureUrl: string | null }[]>([]);
+  const [facebookPages, setFacebookPages] = useState<
+    { id: string; name: string; fanCount: number; pictureUrl: string | null }[]
+  >([]);
   const [facebookPagesLoading, setFacebookPagesLoading] = useState(false);
-  const [facebookPageSelectionPending, setFacebookPageSelectionPending] = useState<string | null>(null);
+  const [facebookPageSelectionPending, setFacebookPageSelectionPending] = useState<string | null>(
+    null,
+  );
   const [facebookPickerError, setFacebookPickerError] = useState<string | null>(null);
   // TikTok manual RTMP key entry
   const [showTikTokManualEntry, setShowTikTokManualEntry] = useState(false);
@@ -342,16 +346,21 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     setFacebookPickerError(null);
 
     try {
-      const data = await apiRequest<{ pages: { id: string; name: string; fanCount: number; pictureUrl: string | null }[] }>(
-        '/api/destinations/facebook/pages',
-        { headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` } },
-      );
+      const data = await apiRequest<{
+        pages: { id: string; name: string; fanCount: number; pictureUrl: string | null }[];
+      }>('/api/destinations/facebook/pages', {
+        headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
+      });
       setFacebookPages(data.pages || []);
       if (!data.pages?.length) {
-        setFacebookPickerError('No Facebook Pages found. You can still stream to your personal profile by selecting "Personal Profile" below.');
+        setFacebookPickerError(
+          'No Facebook Pages found. You can still stream to your personal profile by selecting "Personal Profile" below.',
+        );
       }
     } catch {
-      setFacebookPickerError('Could not load Facebook Pages. Reconnect your account or stream to your personal profile.');
+      setFacebookPickerError(
+        'Could not load Facebook Pages. Reconnect your account or stream to your personal profile.',
+      );
       setFacebookPages([]);
     }
     setFacebookPagesLoading(false);
@@ -364,34 +373,41 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     }
     setFacebookPageSelectionPending(pageId ?? 'personal');
     try {
-      const data = await apiRequest<{ streamUrl?: string; streamKey?: string }>(
-        '/api/destinations/facebook/create-live',
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
-          body: pageId ? { pageId } : {},
-        },
-      );
+      const data = await apiRequest<{
+        streamUrl?: string;
+        streamKey?: string;
+        liveVideoId?: string;
+      }>('/api/destinations/facebook/create-live', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
+        body: pageId ? { pageId } : {},
+      });
       if (!data.streamUrl) {
-        safeAlert('Facebook did not return a stream URL. Ensure your account has live streaming permissions.');
+        safeAlert(
+          'Facebook did not return a stream URL. Ensure your account has live streaming permissions.',
+        );
         return;
       }
       // Facebook live_videos returns stream_url as "rtmp://live-api-s.facebook.com:80/rtmp/<key>"
       // Split into serverUrl + streamKey
       const urlParts = data.streamUrl.match(/^(rtmp:\/\/[^/]+\/[^/]+)\/(.+)$/);
       const serverUrl = urlParts ? urlParts[1] : data.streamUrl;
-      const streamKey = urlParts ? urlParts[2] : (data.streamKey || '');
+      const streamKey = urlParts ? urlParts[2] : data.streamKey || '';
+      const liveVideoId = data.liveVideoId || undefined;
 
-      handleAddWithLimitCheck(
-        createOAuthDestination(Platform.FACEBOOK, {
+      handleAddWithLimitCheck({
+        ...createOAuthDestination(Platform.FACEBOOK, {
           name: `Facebook Live - ${pageName}`,
           serverUrl,
           streamKey,
         }),
-      );
+        liveVideoId,
+      });
       setShowFacebookPicker(false);
     } catch (err: unknown) {
-      const msg = (err instanceof Error ? err.message : null) || 'Facebook live creation failed. Confirm your account has live streaming permissions.';
+      const msg =
+        (err instanceof Error ? err.message : null) ||
+        'Facebook live creation failed. Confirm your account has live streaming permissions.';
       safeAlert(msg);
     }
     setFacebookPageSelectionPending(null);
@@ -466,7 +482,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
             const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
               '/api/destinations/twitch/stream-key',
               {
-                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ""}` },
+                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
               },
             );
             if (data.streamKey) {
@@ -566,16 +582,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       )}
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div className="mb-4 bg-brand-900/30 p-3 rounded border border-brand-500/25 text-xs text-gray-300 flex gap-2">
+          <Info size={16} className="text-brand-300 shrink-0 mt-0.5" />
+          <p>
+            Add multiple accounts from the same platform as separate destinations, such as personal
+            and business channels.
+          </p>
+        </div>
 
-      <div className="mb-4 bg-brand-900/30 p-3 rounded border border-brand-500/25 text-xs text-gray-300 flex gap-2">
-        <Info size={16} className="text-brand-300 shrink-0 mt-0.5" />
-        <p>
-          Add multiple accounts from the same platform as separate destinations, such as personal
-          and business channels.
-        </p>
-      </div>
-
-      {showAddForm && (
+        {showAddForm && (
           <div className="bg-gray-800/95 p-3 rounded-lg border border-brand-500 mb-3 animate-fade-in">
             <h3 className="text-xs font-semibold mb-2 text-gray-300">
               ADD MANUAL RTMP DESTINATION
@@ -594,9 +609,11 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
             <input
               type="text"
-              placeholder={newPlatform === Platform.FACEBOOK
-                ? "RTMP Server URL (from Facebook Live Producer)"
-                : "RTMP Server URL (e.g. rtmp://my.server/app)"}
+              placeholder={
+                newPlatform === Platform.FACEBOOK
+                  ? 'RTMP Server URL (from Facebook Live Producer)'
+                  : 'RTMP Server URL (e.g. rtmp://my.server/app)'
+              }
               value={newServerUrl}
               onChange={(e) => setNewServerUrl(e.target.value)}
               className="w-full bg-dark-900 border border-gray-700 rounded p-2 mb-2 text-sm text-white focus:border-brand-500 outline-none"
@@ -642,154 +659,159 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           </div>
         )}
 
-      <section className="mb-4 rounded-lg border border-brand-500/20 bg-dark-900/70 p-3">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[11px] uppercase tracking-wide text-brand-200 font-semibold">
-            Quick Connect (OAuth)
-          </h3>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 font-semibold">
-            Recommended
-          </span>
-        </div>
+        <section className="mb-4 rounded-lg border border-brand-500/20 bg-dark-900/70 p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[11px] uppercase tracking-wide text-brand-200 font-semibold">
+              Quick Connect (OAuth)
+            </h3>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 font-semibold">
+              Recommended
+            </span>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {visibleOAuthOptions.map((option) => (
-            <div
-              key={option.platform}
-              className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900/80 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/30 ${
-                isStreaming || !destinationLimit.allowed ? 'opacity-50' : 'border-gray-600'
-              }`}
-            >
-              <div className="mt-0.5">{option.icon}</div>
-              <div className="flex-1 space-y-2 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm">{option.label}</span>
-                </div>
-                <p className="text-xs text-gray-300 leading-relaxed">{option.description}</p>
-                <div className="inline-flex items-center gap-1 text-[11px] text-brand-200 bg-brand-900/40 px-2 py-1 rounded-full border border-brand-500/20">
-                  <Lock size={12} /> Secure OAuth sign-in
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`text-[11px] truncate ${
-                      isPlatformConnected(option.oauthPlatform)
-                        ? 'text-emerald-300'
-                        : 'text-gray-500'
-                    }`}
-                  >
-                    {isPlatformConnected(option.oauthPlatform)
-                      ? getConnectedLabel(option.oauthPlatform)
-                      : 'Not connected'}
-                  </span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {visibleOAuthOptions.map((option) => (
+              <div
+                key={option.platform}
+                className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left bg-dark-900/80 hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-900/30 ${
+                  isStreaming || !destinationLimit.allowed ? 'opacity-50' : 'border-gray-600'
+                }`}
+              >
+                <div className="mt-0.5">{option.icon}</div>
+                <div className="flex-1 space-y-2 min-w-0">
                   <div className="flex items-center gap-2">
-                    {onOpenAdmin && (
+                    <span className="font-semibold text-sm">{option.label}</span>
+                  </div>
+                  <p className="text-xs text-gray-300 leading-relaxed">{option.description}</p>
+                  <div className="inline-flex items-center gap-1 text-[11px] text-brand-200 bg-brand-900/40 px-2 py-1 rounded-full border border-brand-500/20">
+                    <Lock size={12} /> Secure OAuth sign-in
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`text-[11px] truncate ${
+                        isPlatformConnected(option.oauthPlatform)
+                          ? 'text-emerald-300'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {isPlatformConnected(option.oauthPlatform)
+                        ? getConnectedLabel(option.oauthPlatform)
+                        : 'Not connected'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {onOpenAdmin && (
+                        <button
+                          type="button"
+                          onClick={onOpenAdmin}
+                          disabled={isStreaming}
+                          className="text-[11px] px-2 py-1 rounded bg-gray-800/80 hover:bg-gray-800 border border-gray-600 text-gray-200 disabled:opacity-50"
+                          title="Open Admin Portal (OAuth IDs)"
+                        >
+                          <Settings size={14} />
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={onOpenAdmin}
-                        disabled={isStreaming}
-                        className="text-[11px] px-2 py-1 rounded bg-gray-800/80 hover:bg-gray-800 border border-gray-600 text-gray-200 disabled:opacity-50"
-                        title="Open Admin Portal (OAuth IDs)"
+                        onClick={() => {
+                          void handleOAuthPrimaryAction(option);
+                        }}
+                        disabled={
+                          isStreaming ||
+                          !destinationLimit.allowed ||
+                          connectingPlatform === option.oauthPlatform ||
+                          (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
+                        }
+                        className="text-[11px] px-2 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50 flex items-center gap-1"
+                        aria-label={`Connect ${option.label}`}
                       >
-                        <Settings size={14} />
+                        {connectingPlatform === option.oauthPlatform ? (
+                          <>
+                            <Loader2 size={10} className="animate-spin" />
+                            Opening...
+                          </>
+                        ) : option.oauthPlatform === 'youtube' && isPlatformConnected('youtube') ? (
+                          youtubeChannelsLoading ? (
+                            'Loading...'
+                          ) : (
+                            'Select channel'
+                          )
+                        ) : (
+                          `Connect ${option.label}`
+                        )}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleOAuthPrimaryAction(option);
-                      }}
-                      disabled={
-                        isStreaming ||
-                        !destinationLimit.allowed ||
-                        connectingPlatform === option.oauthPlatform ||
-                        (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
-                      }
-                      className="text-[11px] px-2 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50 flex items-center gap-1"
-                      aria-label={`Connect ${option.label}`}
-                    >
-                      {connectingPlatform === option.oauthPlatform ? (
-                        <>
-                          <Loader2 size={10} className="animate-spin" />
-                          Opening...
-                        </>
-                      ) : option.oauthPlatform === 'youtube' && isPlatformConnected('youtube') ? (
-                        youtubeChannelsLoading ? 'Loading...' : 'Select channel'
-                      ) : (
-                        `Connect ${option.label}`
-                      )}
-                    </button>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleOAuthAddDestination(option);
+                    }}
+                    disabled={
+                      isStreaming ||
+                      !destinationLimit.allowed ||
+                      (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
+                    }
+                    className="w-full text-[11px] px-2 py-2 rounded bg-gray-800/80 hover:bg-gray-800 border border-gray-600 text-gray-200 disabled:opacity-50"
+                  >
+                    {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
+                      ? 'Select destination'
+                      : 'Add destination'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleOAuthAddDestination(option);
-                  }}
-                  disabled={
-                    isStreaming ||
-                    !destinationLimit.allowed ||
-                    (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
-                  }
-                  className="w-full text-[11px] px-2 py-2 rounded bg-gray-800/80 hover:bg-gray-800 border border-gray-600 text-gray-200 disabled:opacity-50"
-                >
-                  {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
-                    ? 'Select destination'
-                    : 'Add destination'}
-                </button>
+              </div>
+            ))}
+          </div>
+          {visibleOAuthOptions.length === 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-amber-300 mb-3">
+                OAuth quick-connect requires provider credentials. Ask an admin to configure them in
+                the Admin Portal.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {oauthOptions.map((option) => (
+                  <div
+                    key={option.platform}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
+                  >
+                    <div className="mt-0.5">{option.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">{option.label}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
+                          Coming Soon
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-        {visibleOAuthOptions.length === 0 && (
-          <div className="space-y-2">
-            <p className="text-xs text-amber-300 mb-3">
-              OAuth quick-connect requires provider credentials. Ask an admin to configure them in the Admin Portal.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {oauthOptions.map((option) => (
-                <div
-                  key={option.platform}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
-                >
-                  <div className="mt-0.5">{option.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{option.label}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
-                        Coming Soon
-                      </span>
+          )}
+          {visibleOAuthOptions.length > 0 && visibleOAuthOptions.length < oauthOptions.length && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+              {oauthOptions
+                .filter((o) => !oauthCapability[o.oauthPlatform])
+                .map((option) => (
+                  <div
+                    key={option.platform}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
+                  >
+                    <div className="mt-0.5">{option.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">{option.label}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
+                          Coming Soon
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
                     </div>
-                    <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
-          </div>
-        )}
-        {visibleOAuthOptions.length > 0 && visibleOAuthOptions.length < oauthOptions.length && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-            {oauthOptions
-              .filter((o) => !oauthCapability[o.oauthPlatform])
-              .map((option) => (
-                <div
-                  key={option.platform}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-dark-900/40 opacity-60"
-                >
-                  <div className="mt-0.5">{option.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{option.label}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
-                        Coming Soon
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
 
         {showYouTubePicker && (
           <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in space-y-2">
@@ -860,7 +882,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => { void handleAddFacebookPage(null, 'Personal Profile'); }}
+                  onClick={() => {
+                    void handleAddFacebookPage(null, 'Personal Profile');
+                  }}
                   disabled={Boolean(facebookPageSelectionPending)}
                   className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
                 >
@@ -873,12 +897,20 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                   <button
                     key={page.id}
                     type="button"
-                    onClick={() => { void handleAddFacebookPage(page.id, page.name); }}
+                    onClick={() => {
+                      void handleAddFacebookPage(page.id, page.name);
+                    }}
                     disabled={Boolean(facebookPageSelectionPending)}
                     className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      {page.pictureUrl && <img src={page.pictureUrl} alt="" className="w-6 h-6 rounded-full shrink-0" />}
+                      {page.pictureUrl && (
+                        <img
+                          src={page.pictureUrl}
+                          alt=""
+                          className="w-6 h-6 rounded-full shrink-0"
+                        />
+                      )}
                       <span className="text-sm truncate">{page.name}</span>
                     </div>
                     <span className="text-[11px] text-brand-300 shrink-0">
@@ -912,8 +944,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 className="text-brand-400 underline"
               >
                 TikTok Studio → Go LIVE
-              </a>
-              {' '}→ RTMP.
+              </a>{' '}
+              → RTMP.
             </p>
             <div className="flex gap-2">
               <input
@@ -922,7 +954,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 value={tiktokManualKey}
                 onChange={(e) => setTikTokManualKey(e.target.value)}
                 className="flex-1 text-xs bg-dark-900 border border-gray-700 rounded px-2 py-1.5 text-white placeholder-gray-500 focus:border-brand-500 outline-none"
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddTikTokManual(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddTikTokManual();
+                }}
               />
               <button
                 type="button"

@@ -139,6 +139,8 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         tokenEndpoint: 'https://open.tiktokapis.com/v2/oauth/token/',
         scopes: [
           'user.info.basic',
+          'live.room.manage', // Required for TikTok LIVE streaming
+          'video.upload', // Required for video/live access
         ],
         redirectUri: baseRedirectUri,
       };
@@ -506,8 +508,57 @@ export const getChannels = async (
   }
 };
 
-// Initiate OAuth flow for a platform
+/** True when running on a mobile/tablet (touchscreen, narrow viewport, or mobile UA). */
+const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+};
+
+/**
+ * Open the OAuth authorization URL.
+ * - Desktop: open a centered popup so the user stays in the studio.
+ * - Mobile: skip the popup (always blocked) and open a new tab directly.
+ * - Fallback: new tab, then same-tab as last resort.
+ */
 export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => {
+  const mobile = isMobileDevice();
+
+  // For mobile we cannot reliably open a popup from an async context, so we
+  // build the URL async and then open a new tab. We must open the tab
+  // synchronously first (from the user-gesture context) to prevent blockers.
+  if (mobile) {
+    // Open a blank tab synchronously so the browser counts this as
+    // user-initiated navigation (avoids the popup-blocker on mobile browsers).
+    const mobileTab = window.open('about:blank', '_blank');
+
+    void (async () => {
+      try {
+        const config = await getOAuthConfig(platform);
+        if (!config.clientId) {
+          console.error(`${platform} OAuth not configured. Missing client ID.`);
+          if (mobileTab && !mobileTab.closed) mobileTab.close();
+          alert(
+            `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client ID.`,
+          );
+          return;
+        }
+        const authUrl = await getAuthorizationUrl(platform, userId);
+        if (mobileTab && !mobileTab.closed) {
+          mobileTab.location.href = authUrl;
+        } else {
+          // Tab was blocked — last resort: navigate same tab
+          window.location.assign(authUrl);
+        }
+      } catch (error) {
+        console.error(`Failed to start ${platform} OAuth (mobile):`, error);
+        if (mobileTab && !mobileTab.closed) mobileTab.close();
+        alert(`Could not start ${platform} sign-in. Check your OAuth configuration and try again.`);
+      }
+    })();
+    return;
+  }
+
+  // Desktop: centered popup keeps the user in the studio.
   const width = 600;
   const height = 700;
   const left = window.screenX + (window.outerWidth - width) / 2;
@@ -535,11 +586,9 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
       if (!config.clientId) {
         console.error(`${platform} OAuth not configured. Missing client ID.`);
         alert(
-          `${platform} integration is not configured yet. Open Admin Portal -> OAuth IDs and paste the ${platform} client ID.`,
+          `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client ID.`,
         );
-        if (popup && !popup.closed) {
-          popup.close();
-        }
+        if (popup && !popup.closed) popup.close();
         return;
       }
 
@@ -559,9 +608,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
       }
     } catch (error) {
       console.error(`Failed to start ${platform} OAuth:`, error);
-      if (popup && !popup.closed) {
-        popup.close();
-      }
+      if (popup && !popup.closed) popup.close();
       alert(
         `Could not start ${platform} sign-in. Verify OAuth client ID and redirect URI settings, then try again.`,
       );

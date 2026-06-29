@@ -78,7 +78,9 @@ const parseAllowedOrigins = () => {
         const withoutWww = hostname.replace(/^www\./, '');
         accumulator.add(`${parsed.protocol}//${withoutWww}${parsed.port ? `:${parsed.port}` : ''}`);
       } else if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
-        accumulator.add(`${parsed.protocol}//www.${hostname}${parsed.port ? `:${parsed.port}` : ''}`);
+        accumulator.add(
+          `${parsed.protocol}//www.${hostname}${parsed.port ? `:${parsed.port}` : ''}`,
+        );
       }
     } catch {
       // Ignore malformed origins; they are not valid allowlist entries.
@@ -90,6 +92,8 @@ const parseAllowedOrigins = () => {
     .map((origin) => origin.trim())
     .filter(Boolean);
   const appBaseUrl = String(process.env.APP_BASE_URL || '').trim();
+  // Hard-coded fallback origins (dev + production domain).
+  // For any Vercel preview or custom domain, set CORS_ORIGINS in Railway env vars.
   const defaults = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -97,7 +101,6 @@ const parseAllowedOrigins = () => {
     'http://127.0.0.1:8787',
     'https://chatscream.live',
     'https://www.chatscream.live',
-    'https://stream-mob-pro.vercel.app',
   ];
   const allOrigins = new Set();
   [...defaults, ...configuredOrigins, appBaseUrl].forEach((origin) =>
@@ -246,14 +249,17 @@ app.post(
 );
 
 // Storage info endpoint (for admin/debugging)
-app.get('/api/storage/info', asyncHandler(async (_req, res) => {
-  try {
-    const { getStorageInfo } = await import('./storage.js');
-    res.json(getStorageInfo());
-  } catch {
-    res.json({ backend: 'local', warning: 'Storage module not loaded' });
-  }
-}));
+app.get(
+  '/api/storage/info',
+  asyncHandler(async (_req, res) => {
+    try {
+      const { getStorageInfo } = await import('./storage.js');
+      res.json(getStorageInfo());
+    } catch {
+      res.json({ backend: 'local', warning: 'Storage module not loaded' });
+    }
+  }),
+);
 
 app.post(
   '/api/ai/stream-metadata',
@@ -570,13 +576,17 @@ const getBackendCapabilities = () => {
   const { clientId: googleClientId, clientSecret: googleClientSecret } = getGoogleAuthCredentials();
   const authStateSecret = getAuthStateSecret();
 
-  const youtubeClientId = String(process.env.YOUTUBE_CLIENT_ID || oauth.youtubeClientId || '').trim();
+  const youtubeClientId = String(
+    process.env.YOUTUBE_CLIENT_ID || oauth.youtubeClientId || '',
+  ).trim();
   const youtubeClientSecret = String(process.env.YOUTUBE_CLIENT_SECRET || '').trim();
   const facebookAppId = String(process.env.FACEBOOK_APP_ID || oauth.facebookAppId || '').trim();
   const facebookAppSecret = String(process.env.FACEBOOK_APP_SECRET || '').trim();
   const twitchClientId = String(process.env.TWITCH_CLIENT_ID || oauth.twitchClientId || '').trim();
   const twitchClientSecret = String(process.env.TWITCH_CLIENT_SECRET || '').trim();
-  const tiktokClientKey = String(process.env.TIKTOK_CLIENT_KEY || oauth.tiktokClientKey || '').trim();
+  const tiktokClientKey = String(
+    process.env.TIKTOK_CLIENT_KEY || oauth.tiktokClientKey || '',
+  ).trim();
   const tiktokClientSecret = String(process.env.TIKTOK_CLIENT_SECRET || '').trim();
 
   return {
@@ -919,7 +929,10 @@ const verifyPassword = async (value = '', record = null) => {
   }
 
   const legacyMatch = hashLegacyPassword(value) === passwordHash;
-  if (legacyMatch && (passwordAlgorithm === LEGACY_HASH_ALGORITHM || isLegacySha256Hash(passwordHash))) {
+  if (
+    legacyMatch &&
+    (passwordAlgorithm === LEGACY_HASH_ALGORITHM || isLegacySha256Hash(passwordHash))
+  ) {
     return {
       verified: true,
       needsUpgrade: true,
@@ -971,7 +984,8 @@ const requireAdmin = (req, res, next) => {
 };
 
 const OAUTH_PLATFORMS = new Set(['youtube', 'facebook', 'twitch', 'tiktok']);
-const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const parseValidatedUserId = (value) => {
   const userId = String(value || '').trim();
@@ -1003,7 +1017,8 @@ const NON_ADMIN_BLOCKED_PROFILE_FIELDS = new Set([
   'connectedPlatforms',
 ]);
 
-const canEditUserProfile = (authProfile, authUid, targetUid) => isAdmin(authProfile) || authUid === targetUid;
+const canEditUserProfile = (authProfile, authUid, targetUid) =>
+  isAdmin(authProfile) || authUid === targetUid;
 
 const validateUserProfileWrite = (isAdminCaller, payload = {}) => {
   if (isAdminCaller) {
@@ -1078,7 +1093,8 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/ready', (_req, res) => {
   const identityStorage = getIdentityStorageMode();
   const managedRequired = isManagedIdentityStorageRequired();
-  const ready = !managedRequired || identityStorage === 'postgres+redis' || identityStorage === 'postgres';
+  const ready =
+    !managedRequired || identityStorage === 'postgres+redis' || identityStorage === 'postgres';
   res.status(ready ? 200 : 503).json({
     ok: ready,
     service: 'chatscream-api',
@@ -1284,9 +1300,7 @@ app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
     return;
   }
   if (!['google', 'facebook'].includes(provider)) {
-    res
-      .status(400)
-      .json({ message: `${provider} sign-in is not available yet.` });
+    res.status(400).json({ message: `${provider} sign-in is not available yet.` });
     return;
   }
   const redirectUrl = `/api/auth/oauth/${provider}${referral ? `?ref=${encodeURIComponent(referral)}` : ''}`;
@@ -1592,9 +1606,7 @@ app.get(
       .trim()
       .toLowerCase();
     if (!['google', 'facebook'].includes(provider)) {
-      res
-        .status(400)
-        .json({ message: `${provider} sign-in is not available yet.` });
+      res.status(400).json({ message: `${provider} sign-in is not available yet.` });
       return;
     }
 
@@ -1612,7 +1624,9 @@ app.get(
     if (provider === 'facebook') {
       const facebookAppId = String(process.env.FACEBOOK_APP_ID || '').trim();
       if (!facebookAppId) {
-        res.status(500).json({ message: 'Facebook sign-in is not configured. Set FACEBOOK_APP_ID.' });
+        res
+          .status(500)
+          .json({ message: 'Facebook sign-in is not configured. Set FACEBOOK_APP_ID.' });
         return;
       }
       const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/facebook/callback`;
@@ -1887,11 +1901,18 @@ app.get('/api/config/oauth', requireAuth, (_req, res) => {
   const oauth = getConfig('oauth') || {};
   res.json({
     ...oauth,
-    youtubeClientId: oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
-    facebookAppId: oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
-    twitchClientId: oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
-    tiktokClientKey: oauth.tiktokClientKey || String(process.env.TIKTOK_CLIENT_KEY || '').trim() || undefined,
-    redirectUriBase: oauth.redirectUriBase || String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim() || undefined,
+    youtubeClientId:
+      oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
+    facebookAppId:
+      oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
+    twitchClientId:
+      oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
+    tiktokClientKey:
+      oauth.tiktokClientKey || String(process.env.TIKTOK_CLIENT_KEY || '').trim() || undefined,
+    redirectUriBase:
+      oauth.redirectUriBase ||
+      String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim() ||
+      undefined,
   });
 });
 
@@ -1908,7 +1929,9 @@ app.get('/api/public/oauth-debug', (req, res) => {
     storedRedirectUriBase: oauth.redirectUriBase || null,
     envRedirectUri: envRedirectUri || null,
     effectiveRedirectUri: envRedirectUri || oauth.redirectUriBase || null,
-    storedYoutubeClientId: oauth.youtubeClientId ? `${oauth.youtubeClientId.slice(0, 12)}...` : null,
+    storedYoutubeClientId: oauth.youtubeClientId
+      ? `${oauth.youtubeClientId.slice(0, 12)}...`
+      : null,
     envYoutubeClientId: envYtClientId ? `${envYtClientId.slice(0, 12)}...` : null,
     effectiveYoutubeClientId: (envYtClientId || oauth.youtubeClientId || '').slice(0, 12) + '...',
   });
@@ -1927,13 +1950,19 @@ app.get('/api/oauth/config/public', requireAuth, (req, res) => {
   const oauth = getConfig('oauth') || {};
   // Env vars take priority over stored admin config so Vercel env updates
   // are immediately effective without requiring an admin portal change.
-  const envRedirectUri = String(process.env.VITE_OAUTH_REDIRECT_URI || process.env.AUTH_REDIRECT_URL || '').trim();
+  const envRedirectUri = String(
+    process.env.VITE_OAUTH_REDIRECT_URI || process.env.AUTH_REDIRECT_URL || '',
+  ).trim();
   res.json({
     ...oauth,
-    youtubeClientId: String(process.env.YOUTUBE_CLIENT_ID || '').trim() || oauth.youtubeClientId || undefined,
-    facebookAppId: String(process.env.FACEBOOK_APP_ID || '').trim() || oauth.facebookAppId || undefined,
-    twitchClientId: String(process.env.TWITCH_CLIENT_ID || '').trim() || oauth.twitchClientId || undefined,
-    tiktokClientKey: String(process.env.TIKTOK_CLIENT_KEY || '').trim() || oauth.tiktokClientKey || undefined,
+    youtubeClientId:
+      String(process.env.YOUTUBE_CLIENT_ID || '').trim() || oauth.youtubeClientId || undefined,
+    facebookAppId:
+      String(process.env.FACEBOOK_APP_ID || '').trim() || oauth.facebookAppId || undefined,
+    twitchClientId:
+      String(process.env.TWITCH_CLIENT_ID || '').trim() || oauth.twitchClientId || undefined,
+    tiktokClientKey:
+      String(process.env.TIKTOK_CLIENT_KEY || '').trim() || oauth.tiktokClientKey || undefined,
     redirectUriBase: envRedirectUri || oauth.redirectUriBase || undefined,
   });
 });
@@ -2498,6 +2527,55 @@ const tiktokApiRequest = async (accessToken) => {
 const FACEBOOK_TOKEN_ENDPOINT = 'https://graph.facebook.com/v18.0/oauth/access_token';
 const FACEBOOK_BASE_URL = 'https://graph.facebook.com/v18.0';
 
+/**
+ * Auto-extend a Facebook user token via fb_exchange_token grant.
+ * Facebook short-lived tokens (~2 hrs) should be exchanged for long-lived (~60 days).
+ * Persists the refreshed token back to the user record.
+ * Returns the updated fb account object (with the fresh accessToken).
+ */
+const refreshFacebookTokenIfNeeded = async (uid, fb) => {
+  if (!fb?.accessToken) return fb;
+
+  // Check if token expires within 10 minutes (or has no expiry stored)
+  const expiresAt = fb.expiresAt ? new Date(fb.expiresAt) : null;
+  const tenMinutesFromNow = new Date(Date.now() + 10 * 60 * 1000);
+  const needsRefresh = !expiresAt || expiresAt <= tenMinutesFromNow;
+
+  if (!needsRefresh) return fb;
+
+  const facebookAppId = String(process.env.FACEBOOK_APP_ID || '').trim();
+  const facebookAppSecret = String(process.env.FACEBOOK_APP_SECRET || '').trim();
+  if (!facebookAppId || !facebookAppSecret) return fb; // Can't refresh without credentials
+
+  try {
+    const extendRes = await fetch(
+      `${FACEBOOK_BASE_URL}/oauth/access_token?` +
+        new URLSearchParams({
+          grant_type: 'fb_exchange_token',
+          client_id: facebookAppId,
+          client_secret: facebookAppSecret,
+          fb_exchange_token: fb.accessToken,
+        }),
+    );
+    const extendData = await extendRes.json();
+    if (!extendData.access_token) {
+      console.warn('[Facebook] Token extension failed:', extendData?.error?.message || 'unknown');
+      return fb; // Return original — let the API call fail naturally with a clear error
+    }
+    const updatedFb = {
+      ...fb,
+      accessToken: extendData.access_token,
+      expiresAt: getExpiryFromSeconds(extendData.expires_in, 60 * 24 * 60 * 60), // ~60 days default
+    };
+    await setConnectedPlatform(uid, 'facebook', updatedFb);
+    console.log('[Facebook] Token auto-extended successfully');
+    return updatedFb;
+  } catch (err) {
+    console.warn('[Facebook] Token extension error:', err?.message || err);
+    return fb; // Proceed with existing token; surface real error from the API call
+  }
+};
+
 const requestFacebookTokenExchange = async ({ code, redirectUri }) => {
   const response = await fetch(
     `${FACEBOOK_TOKEN_ENDPOINT}?` +
@@ -2624,7 +2702,6 @@ app.post(
   }),
 );
 
-
 app.get(
   '/api/destinations/twitch/stream-key',
   requireAuth,
@@ -2632,7 +2709,9 @@ app.get(
     const record = await getUserByUid(req.auth.profile.uid);
     const twitch = record.profile?.connectedPlatforms?.twitch;
     if (!twitch?.accessToken) {
-      return res.status(400).json({ message: 'Twitch not connected. Please reconnect your Twitch account.' });
+      return res
+        .status(400)
+        .json({ message: 'Twitch not connected. Please reconnect your Twitch account.' });
     }
 
     // Refresh Twitch token if needed (Twitch tokens can expire)
@@ -2667,12 +2746,15 @@ app.get(
     }
 
     // Fetch stream key from Twitch Helix API
-    const streamKeyRes = await fetch(`${TWITCH_API_BASE_URL}/streams/key?broadcaster_id=${encodeURIComponent(twitch.accountId || '')}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+    const streamKeyRes = await fetch(
+      `${TWITCH_API_BASE_URL}/streams/key?broadcaster_id=${encodeURIComponent(twitch.accountId || '')}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+        },
       },
-    });
+    );
 
     if (!streamKeyRes.ok) {
       const errData = await streamKeyRes.json().catch(() => ({}));
@@ -2683,12 +2765,39 @@ app.get(
     const streamKeyData = await streamKeyRes.json();
     const streamKey = streamKeyData?.data?.[0]?.stream_key;
     if (!streamKey) {
-      return res.status(400).json({ message: 'Twitch returned no stream key. Ensure your Twitch account has streaming enabled.' });
+      return res
+        .status(400)
+        .json({
+          message:
+            'Twitch returned no stream key. Ensure your Twitch account has streaming enabled.',
+        });
+    }
+
+    // Fetch nearest Twitch ingest server
+    let nearestIngestUrl = 'rtmp://live.twitch.tv/app';
+    try {
+      const ingestsRes = await fetch('https://ingest.twitch.tv/ingests', {
+        headers: { 'Client-Id': process.env.TWITCH_CLIENT_ID || '' },
+      });
+      if (ingestsRes.ok) {
+        const ingestsData = await ingestsRes.json();
+        const ingests = Array.isArray(ingestsData?.ingests) ? ingestsData.ingests : [];
+        // Prefer lowest priority number (highest priority) that supports default ingest
+        const best = ingests
+          .filter((i) => i.url_template && !i.url_template.includes('transcode'))
+          .sort((a, b) => (a.priority || 0) - (b.priority || 0))[0];
+        if (best?.url_template) {
+          // url_template is like "rtmp://..../app/{stream_key}" — strip the key placeholder
+          nearestIngestUrl = best.url_template.replace(/\/?\{stream_key\}$/, '');
+        }
+      }
+    } catch (ingestErr) {
+      console.warn('Could not fetch Twitch ingests, using default:', ingestErr?.message);
     }
 
     res.json({
       streamKey,
-      serverUrl: 'rtmp://live.twitch.tv/app',
+      serverUrl: nearestIngestUrl,
     });
   }),
 );
@@ -2698,8 +2807,14 @@ app.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const record = await getUserByUid(req.auth.profile.uid);
-    const fb = record.profile?.connectedPlatforms?.facebook;
-    if (!fb?.accessToken) return res.status(400).json({ message: 'Facebook not connected. Please reconnect your Facebook account.' });
+    let fb = record.profile?.connectedPlatforms?.facebook;
+    if (!fb?.accessToken)
+      return res
+        .status(400)
+        .json({ message: 'Facebook not connected. Please reconnect your Facebook account.' });
+
+    // Auto-refresh token before API calls so expired short-lived tokens don't block streaming
+    fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, fb);
 
     // Use page token if a page is selected, otherwise fall back to user token
     const pageId = String(req.body?.pageId || fb.pageId || '').trim();
@@ -2712,60 +2827,186 @@ app.post(
         `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,access_token`,
       );
       const pagesData = await pagesRes.json();
-      const page = Array.isArray(pagesData?.data) ? pagesData.data.find((p) => p.id === pageId) : null;
+      const page = Array.isArray(pagesData?.data)
+        ? pagesData.data.find((p) => p.id === pageId)
+        : null;
       if (page?.access_token) {
         streamToken = page.access_token;
         liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
       }
     }
 
-    const fbRes = await fetch(
-      `${liveEndpoint}?access_token=${streamToken}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'LIVE_NOW', title: req.body?.title || 'ChatScream Live' }),
-      },
-    );
+    const fbRes = await fetch(`${liveEndpoint}?access_token=${streamToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'LIVE_NOW', title: req.body?.title || 'ChatScream Live' }),
+    });
     const fbData = await fbRes.json();
     if (fbData?.error) {
       const errMsg = fbData.error?.message || 'Facebook live creation failed.';
       return res.status(400).json({ message: errMsg });
     }
     if (!fbData.stream_url) {
-      return res.status(502).json({ message: 'Failed to create Facebook live video. Ensure your account has live streaming permissions.' });
+      return res
+        .status(502)
+        .json({
+          message:
+            'Failed to create Facebook live video. Ensure your account has live streaming permissions.',
+        });
     }
-    res.json({ streamUrl: fbData.stream_url, streamKey: fbData.secure_stream_url || null });
+    res.json({
+      streamUrl: fbData.stream_url,
+      streamKey: fbData.secure_stream_url || null,
+      liveVideoId: String(fbData.id || '').trim() || null,
+    });
   }),
 );
-
 
 app.get(
   '/api/destinations/facebook/pages',
   requireAuth,
   asyncHandler(async (req, res) => {
     const record = await getUserByUid(req.auth.profile.uid);
-    const fb = record.profile?.connectedPlatforms?.facebook;
+    let fb = record.profile?.connectedPlatforms?.facebook;
     if (!fb?.accessToken) {
       return res.status(400).json({ message: 'Facebook not connected.' });
     }
+
+    // Auto-refresh token before fetching pages
+    fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, fb);
 
     const pagesRes = await fetch(
       `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,picture,fan_count`,
     );
     const pagesData = await pagesRes.json();
     if (pagesData?.error) {
-      return res.status(400).json({ message: pagesData.error?.message || 'Failed to fetch Facebook pages.' });
+      return res
+        .status(400)
+        .json({ message: pagesData.error?.message || 'Failed to fetch Facebook pages.' });
     }
 
-    const pages = Array.isArray(pagesData?.data) ? pagesData.data.map((p) => ({
-      id: p.id,
-      name: p.name,
-      fanCount: p.fan_count || 0,
-      pictureUrl: p.picture?.data?.url || null,
-    })) : [];
+    const pages = Array.isArray(pagesData?.data)
+      ? pagesData.data.map((p) => ({
+          id: p.id,
+          name: p.name,
+          fanCount: p.fan_count || 0,
+          pictureUrl: p.picture?.data?.url || null,
+        }))
+      : [];
 
     res.json({ pages });
+  }),
+);
+
+/**
+ * GET /api/streaming/chat-config
+ * Returns the live chat credentials needed by the client-side ChatAggregator:
+ *  - YouTube: active liveBroadcast's liveChatId + accessToken
+ *  - Twitch:  accessToken + channel name (for IRC)
+ *  - Facebook: caller supplies liveVideoId (stored client-side on destination)
+ */
+app.get(
+  '/api/streaming/chat-config',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const record = await getUserByUid(req.auth.profile.uid);
+    const platforms = record?.profile?.connectedPlatforms || {};
+    const config = {};
+
+    // ── YouTube: fetch active liveBroadcast to get liveChatId ────────────────
+    if (platforms.youtube?.accessToken) {
+      try {
+        const accessToken = await executeWithYouTubeAccessToken(
+          req.auth.profile.uid,
+          async (token) => token,
+        );
+        const broadcastsPayload = await youtubeApiRequest({
+          accessToken,
+          pathName: 'liveBroadcasts',
+          query: {
+            part: 'id,snippet,status',
+            broadcastStatus: 'active',
+            maxResults: '5',
+          },
+        });
+        const broadcasts = Array.isArray(broadcastsPayload?.items) ? broadcastsPayload.items : [];
+        // Also try 'testing' status broadcasts (pre-live)
+        let broadcast =
+          broadcasts.find((b) => b?.status?.lifeCycleStatus === 'live') || broadcasts[0];
+
+        if (!broadcast) {
+          const upcomingPayload = await youtubeApiRequest({
+            accessToken,
+            pathName: 'liveBroadcasts',
+            query: { part: 'id,snippet,status', broadcastStatus: 'upcoming', maxResults: '5' },
+          });
+          const upcoming = Array.isArray(upcomingPayload?.items) ? upcomingPayload.items : [];
+          broadcast = upcoming[0] || null;
+        }
+
+        if (broadcast) {
+          config.youtube = {
+            accessToken,
+            liveChatId: String(broadcast.snippet?.liveChatId || '').trim() || null,
+            broadcastId: String(broadcast.id || '').trim(),
+          };
+        }
+      } catch (err) {
+        console.warn('[chat-config] YouTube liveChatId fetch failed:', err?.message || err);
+      }
+    }
+
+    // ── Twitch: return accessToken + channel for IRC-over-WebSocket ──────────
+    if (platforms.twitch?.accessToken) {
+      // Auto-refresh if expiring
+      let twitchAccount = platforms.twitch;
+      const expiresAt = twitchAccount.expiresAt ? new Date(twitchAccount.expiresAt) : null;
+      const fiveMinutes = new Date(Date.now() + 5 * 60 * 1000);
+      if (expiresAt && expiresAt <= fiveMinutes && twitchAccount.refreshToken) {
+        try {
+          const refreshRes = await fetch(TWITCH_TOKEN_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: process.env.TWITCH_CLIENT_ID || '',
+              client_secret: process.env.TWITCH_CLIENT_SECRET || '',
+              grant_type: 'refresh_token',
+              refresh_token: twitchAccount.refreshToken,
+            }),
+          });
+          const refreshData = await refreshRes.json();
+          if (refreshData.access_token) {
+            twitchAccount = {
+              ...twitchAccount,
+              accessToken: refreshData.access_token,
+              refreshToken: refreshData.refresh_token || twitchAccount.refreshToken,
+              expiresAt: getExpiryFromSeconds(refreshData.expires_in, 3600),
+            };
+            await setConnectedPlatform(req.auth.profile.uid, 'twitch', twitchAccount);
+          }
+        } catch (err) {
+          console.warn('[chat-config] Twitch token refresh failed:', err?.message);
+        }
+      }
+      config.twitch = {
+        accessToken: twitchAccount.accessToken,
+        channel: String(twitchAccount.accountName || '').trim(),
+        username: String(twitchAccount.accountName || 'justinfan12345').trim(),
+      };
+    }
+
+    // Facebook config is purely client-side (liveVideoId comes from the create-live response
+    // stored in the Destination object on the frontend). Return fb accessToken for comment polling.
+    if (platforms.facebook?.accessToken) {
+      const fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, platforms.facebook);
+      config.facebook = {
+        accessToken: fb.accessToken,
+        // liveVideoId is provided by the client as a query param if available
+        liveVideoId: String(req.query.facebookLiveVideoId || '').trim() || null,
+      };
+    }
+
+    res.json({ config });
   }),
 );
 
@@ -2785,7 +3026,9 @@ app.post(
       const record = await getUserByUid(req.auth.profile.uid);
       const twitch = record.profile?.connectedPlatforms?.twitch;
       if (!twitch?.refreshToken) {
-        return res.status(400).json({ message: 'Twitch refresh token not available. Please reconnect.' });
+        return res
+          .status(400)
+          .json({ message: 'Twitch refresh token not available. Please reconnect.' });
       }
       try {
         const refreshRes = await fetch(TWITCH_TOKEN_ENDPOINT, {
@@ -2799,7 +3042,8 @@ app.post(
           }),
         });
         const refreshData = await refreshRes.json();
-        if (!refreshData.access_token) throw new Error(refreshData.message || 'Twitch refresh failed');
+        if (!refreshData.access_token)
+          throw new Error(refreshData.message || 'Twitch refresh failed');
         await setConnectedPlatform(req.auth.profile.uid, 'twitch', {
           ...twitch,
           accessToken: refreshData.access_token,
@@ -2808,7 +3052,11 @@ app.post(
         });
         return res.json({ success: true });
       } catch (error) {
-        return res.status(502).json({ message: error instanceof Error ? error.message : 'Twitch token refresh failed.' });
+        return res
+          .status(502)
+          .json({
+            message: error instanceof Error ? error.message : 'Twitch token refresh failed.',
+          });
       }
     }
 
@@ -2830,7 +3078,8 @@ app.post(
             }),
         );
         const extendData = await extendRes.json();
-        if (!extendData.access_token) throw new Error(extendData?.error?.message || 'Facebook token extension failed');
+        if (!extendData.access_token)
+          throw new Error(extendData?.error?.message || 'Facebook token extension failed');
         await setConnectedPlatform(req.auth.profile.uid, 'facebook', {
           ...fb,
           accessToken: extendData.access_token,
@@ -2838,7 +3087,11 @@ app.post(
         });
         return res.json({ success: true });
       } catch (error) {
-        return res.status(502).json({ message: error instanceof Error ? error.message : 'Facebook token refresh failed.' });
+        return res
+          .status(502)
+          .json({
+            message: error instanceof Error ? error.message : 'Facebook token refresh failed.',
+          });
       }
     }
 
@@ -2883,7 +3136,9 @@ app.post(
       } else {
         const validatedUserId = parseValidatedUserId(requestedUserId);
         if (!validatedUserId) {
-          res.status(400).json({ message: 'A valid userId is required for admin cross-user access.' });
+          res
+            .status(400)
+            .json({ message: 'A valid userId is required for admin cross-user access.' });
           return;
         }
         userId = validatedUserId;
@@ -2909,7 +3164,9 @@ app.get(
     if (isCrossUserRequest && isAdmin(req.auth.profile)) {
       const validatedUserId = parseValidatedUserId(requestedUserId);
       if (!validatedUserId) {
-        res.status(400).json({ message: 'A valid userId is required for admin cross-user access.' });
+        res
+          .status(400)
+          .json({ message: 'A valid userId is required for admin cross-user access.' });
         return;
       }
       userId = validatedUserId;
@@ -3088,6 +3345,34 @@ app.get('/api/leaderboard', (_req, res) => {
   res.json({ entries, weeklyWinners: winners });
 });
 
+app.get(
+  '/api/leaderboard/stats',
+  asyncHandler(async (req, res) => {
+    const streamerUid = String(req.query.streamerUid || req.query.uid || '').trim();
+    if (!streamerUid) {
+      res.status(400).json({ message: 'streamerUid query parameter is required.' });
+      return;
+    }
+    seedLeaderboard();
+    const state = loadState();
+    const entries = state.leaderboard || [];
+    const entry = entries.find((e) => e.uid === streamerUid || e.username === streamerUid);
+    const userRecord = await getUserByUid(streamerUid);
+    const weeklyWinners = state.weeklyWinners || [];
+    const previousWins = weeklyWinners.filter((w) => w.uid === streamerUid).length;
+
+    res.json({
+      streamerUid,
+      streamerName: userRecord?.profile?.displayName || streamerUid,
+      rank: entry?.rank || entries.length + 1,
+      screams: entry?.screams || 0,
+      donated: entry?.donated || 0,
+      totalEntries: entries.length,
+      previousWins,
+    });
+  }),
+);
+
 // Admin-only: manual weekly leaderboard reset (or call from cron)
 app.post('/api/leaderboard/reset', requireAuth, requireAdmin, (_req, res) => {
   resetWeeklyLeaderboard();
@@ -3163,6 +3448,59 @@ app.get(
         totalRevenue: 0,
       },
       recentSessions,
+    });
+  }),
+);
+
+// GET /api/analytics/overview — aggregated stats for CreatorDashboard
+app.get(
+  '/api/analytics/overview',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth.profile.uid;
+    const usage = getCloudUsage(userId);
+
+    // Total stream hours
+    const totalCloudHours = Math.round(Number(usage.cloudHoursUsed || 0) * 100) / 100;
+
+    // Count screams received from chat messages
+    const state = loadState();
+    const screamMessages = (state.chatMessages || []).filter(
+      (m) => m.isScream && m.roomId === userId,
+    );
+    const totalScreams = screamMessages.length;
+    const totalDonations = screamMessages.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
+    // Streams this month
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const hasStreamsThisMonth = usage.lastStreamDate
+      ? new Date(usage.lastStreamDate).getTime() >= monthStart
+      : Boolean(usage.activeCloudSession);
+    const streamsThisMonth = hasStreamsThisMonth ? 1 : 0;
+
+    // Top scream donors
+    const donorMap = {};
+    screamMessages.forEach((m) => {
+      const name = String(m.donorName || 'Anonymous');
+      donorMap[name] = (donorMap[name] || 0) + (Number(m.amount) || 0);
+    });
+    const topDonors = Object.entries(donorMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, total]) => ({ name, total: Math.round(total * 100) / 100 }));
+
+    // Total streams count (approximate — at least 1 if they've ever streamed)
+    const totalStreams = usage.cloudHoursUsed > 0 || usage.lastStreamDate ? 1 : 0;
+
+    res.json({
+      totalCloudHours,
+      totalStreams,
+      streamsThisMonth,
+      totalScreams,
+      totalDonations,
+      topDonors,
+      hasActiveSession: Boolean(usage.activeCloudSession),
     });
   }),
 );
@@ -3257,253 +3595,201 @@ app.delete(
   }),
 );
 
-// ── Billing ──────────────────────────────────────────────────────────────────
+// ── Billing ────────────────────────────────────────────────────────────────
+// Helper: lazy ESM import of stripe — loads only when a billing route is hit.
+let _stripeMod = null;
+const stripe = async () => {
+  if (_stripeMod) return _stripeMod;
+  const key = String(process.env.STRIPE_SECRET_KEY || '').trim();
+  if (!key) return null;
+  try {
+    const { default: Stripe } = await import('stripe');
+    _stripeMod = new Stripe(key, { apiVersion: '2024-06-20' });
+  } catch (err) {
+    console.error('[Billing] Failed to load Stripe SDK:', err.message);
+    return null;
+  }
+  return _stripeMod;
+};
 
-const getStripe = (() => {
-  let stripe = null;
-  return async () => {
-    if (stripe) return stripe;
-    const key = String(process.env.STRIPE_SECRET_KEY || '').trim();
-    if (!key || key.startsWith('sk_test_your')) return null;
-    try {
-      const Stripe = (await import('stripe')).default;
-      stripe = new Stripe(key, { apiVersion: '2024-11-20.acacia' });
-    } catch {
-      stripe = null;
-    }
-    return stripe;
-  };
-})();
-
-app.post(
-  '/api/create-checkout-session',
+// GET /api/billing/subscription — current plan & status
+app.get(
+  '/api/billing/subscription',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const priceId = String(req.body?.priceId || '').trim();
-    const successUrl = String(req.body?.successUrl || `${process.env.APP_BASE_URL || ''}/dashboard?checkout=success`);
-    const cancelUrl = String(req.body?.cancelUrl || `${process.env.APP_BASE_URL || ''}/dashboard`);
-
-    if (!priceId) {
-      return res.status(400).json({ message: 'priceId is required.' });
-    }
-
-    const stripe = await getStripe();
-    if (!stripe) {
-      return res.status(503).json({ message: 'Payments are not configured yet. Please contact support.' });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      customer_email: req.auth.profile?.email || undefined,
-      client_reference_id: req.auth.record.uid,
-      metadata: { uid: req.auth.record.uid },
+    const profile = req.auth.profile;
+    res.json({
+      plan: profile.subscription?.plan || 'free',
+      status: profile.subscription?.status || 'active',
+      currentPeriodEnd: profile.subscription?.currentPeriodEnd || null,
+      stripeCustomerId: profile.stripeCustomerId || null,
     });
-
-    res.json({ url: session.url });
   }),
 );
 
-// ── ChatScreamer Donation Payment ─────────────────────────────────────────────
-// One-time Stripe Checkout for viewers sending a paid ChatScream.
-// Creates a Checkout Session in "payment" mode (not subscription).
-// On completion, the webhook can trigger the scream alert + leaderboard credit.
+// POST /api/billing/create-checkout — create a Stripe Checkout Session
 app.post(
-  '/api/scream/checkout',
+  '/api/billing/create-checkout',
+  requireAuth,
   asyncHandler(async (req, res) => {
-    const streamerUid = String(req.body?.streamerUid || '').trim();
-    const donorName = String(req.body?.donorName || 'Anonymous').trim().slice(0, 50);
-    const message = String(req.body?.message || '').trim().slice(0, 300);
-    const amountCents = Math.round(Number(req.body?.amount || 0) * 100);
+    const { priceId, successUrl, cancelUrl } = req.body || {};
+    if (!priceId) return res.status(400).json({ message: 'priceId is required.' });
 
-    if (!streamerUid) {
-      return res.status(400).json({ message: 'streamerUid is required.' });
-    }
-    if (amountCents < 500) {
-      return res.status(400).json({ message: 'Minimum scream amount is $5.00.' });
-    }
-    if (amountCents > 50000) {
-      return res.status(400).json({ message: 'Maximum scream amount is $500.00.' });
+    const sdk = await stripe();
+    if (!sdk) {
+      return res.status(503).json({ message: 'Billing is not configured on this server.' });
     }
 
-    const stripe = await getStripe();
-    if (!stripe) {
-      return res.status(503).json({ message: 'Payments are not configured yet.' });
-    }
+    const uid = req.auth.profile.uid;
+    const email = req.auth.record.email;
 
-    const baseUrl = String(process.env.APP_BASE_URL || '').trim() || getServerBaseUrl(req);
-    const successUrl = `${baseUrl}/scream/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${baseUrl}/scream/cancel`;
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `ChatScream to ${streamerUid}`,
-              description: message ? `"${message}"` : 'Chat Scream Donation',
-            },
-            unit_amount: amountCents,
-          },
-          quantity: 1,
-        },
-      ],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: {
-        type: 'chatscream',
-        streamerUid,
-        donorName,
-        message,
-        amountCents: String(amountCents),
-      },
+    const session = await sdk.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: email,
+      client_reference_id: uid,
+      metadata: { uid },
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl || `${process.env.APP_BASE_URL || ''}/dashboard?checkout=success`,
+      cancel_url: cancelUrl || `${process.env.APP_BASE_URL || ''}/pricing`,
+      subscription_data: { metadata: { uid } },
     });
 
     res.json({ url: session.url, sessionId: session.id });
   }),
 );
 
-// Endpoint for triggering a scream alert after successful payment (called from success page or webhook)
+// POST /api/billing/portal — create a Stripe Customer Portal session
 app.post(
-  '/api/scream/trigger',
+  '/api/billing/portal',
+  requireAuth,
   asyncHandler(async (req, res) => {
-    const streamerUid = String(req.body?.streamerUid || '').trim();
-    const donorName = String(req.body?.donorName || 'Anonymous').trim();
-    const amount = Number(req.body?.amount || 0);
-    const message = String(req.body?.message || '').trim();
-    const sessionId = String(req.body?.sessionId || '').trim();
+    const { returnUrl } = req.body || {};
+    const profile = req.auth.profile;
 
-    if (!streamerUid || amount < 5) {
-      return res.status(400).json({ message: 'Invalid scream data.' });
+    if (!profile.stripeCustomerId) {
+      return res.status(400).json({ message: 'No billing account found. Please subscribe first.' });
     }
 
-    // Record the scream for leaderboard tracking
-    const screamRecord = {
-      id: randomUUID(),
-      streamerUid,
-      donorName,
-      amount,
-      message,
-      stripeSessionId: sessionId,
-      createdAt: nowIso(),
-    };
+    const sdk = await stripe();
+    if (!sdk) {
+      return res.status(503).json({ message: 'Billing is not configured on this server.' });
+    }
 
-    // Store in state for leaderboard aggregation
-    const state = loadState();
-    if (!state.screamHistory) state.screamHistory = [];
-    state.screamHistory.push(screamRecord);
-
-    // Update leaderboard entry for this streamer
-    updateLeaderboardEntry(streamerUid, amount);
-    flushState();
-
-    // Emit real-time alert via chat messages (SSE / polling)
-    addChatMessage({
-      id: randomUUID(),
-      userId: 'system',
-      username: 'ChatScream',
-      text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message}"`,
-      isScream: true,
-      screamTier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'normal',
-      donorName,
-      amount,
-      createdAt: nowIso(),
-      roomId: streamerUid,
+    const session = await sdk.billingPortal.sessions.create({
+      customer: profile.stripeCustomerId,
+      return_url: returnUrl || `${process.env.APP_BASE_URL || ''}/dashboard`,
     });
 
-    res.json({ success: true, screamId: screamRecord.id });
+    res.json({ url: session.url });
   }),
 );
 
+// POST /api/scream/checkout — alias for backwards compatibility
 app.post(
-  '/api/create-portal-session',
-  requireAuth,
+  '/api/scream/checkout',
   asyncHandler(async (req, res) => {
-    const returnUrl = String(req.body?.returnUrl || `${process.env.APP_BASE_URL || ''}/dashboard`);
-
-    const stripe = await getStripe();
-    if (!stripe) {
-      return res.status(503).json({ message: 'Payments are not configured yet. Please contact support.' });
+    const { streamerUid, donorName, message, amount, successUrl, cancelUrl } = req.body || {};
+    const amountCents = Math.round((Number(amount) || 0) * 100);
+    if (!streamerUid || amountCents < 100) {
+      return res.status(400).json({ message: 'streamerUid and amount (min $1.00) are required.' });
     }
 
-    const customerId = String(req.body?.customerId || req.auth.profile?.stripeCustomerId || '').trim();
-    if (!customerId) {
-      return res.status(400).json({ message: 'No billing account found. Please complete a purchase first.' });
+    const sdk = await stripe();
+    if (!sdk) {
+      return res.status(503).json({ message: 'Billing is not configured on this server.' });
     }
 
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: returnUrl,
+    const session = await sdk.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            unit_amount: amountCents,
+            product_data: {
+              name: 'ChatScream',
+              description: message ? `"${String(message).slice(0, 200)}"` : 'Live stream donation',
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        type: 'chatscream',
+        streamerUid: String(streamerUid),
+        donorName: String(donorName || 'Anonymous').slice(0, 64),
+        message: String(message || '').slice(0, 200),
+        amountCents: String(amountCents),
+      },
+      success_url: successUrl || `${process.env.APP_BASE_URL || ''}/thank-you`,
+      cancel_url: cancelUrl || `${process.env.APP_BASE_URL || ''}/`,
     });
 
-    res.json({ url: portalSession.url });
+    res.json({ url: session.url, sessionId: session.id });
   }),
 );
-
-app.use((error, _req, res, next) => {
-  if (res.headersSent) {
-    next(error);
-    return;
-  }
-  console.error('API error:', error);
-  res.status(500).json({ message: 'Internal server error.' });
-});
-
-
-// Generic AI generation endpoint — for PostStreamPanel article/FB post/summary generation
 app.post(
-  '/api/ai/chat',
-  requireAuth,
+  '/api/billing/chatscream',
   asyncHandler(async (req, res) => {
-    const message = String(req.body?.message || req.body?.prompt || '').trim();
-    if (!message) {
-      res.status(400).json({ message: 'message is required.' });
-      return;
+    const { streamerUid, donorName, message, amountCents, successUrl, cancelUrl } = req.body || {};
+    if (!streamerUid || !amountCents || amountCents < 100) {
+      return res
+        .status(400)
+        .json({ message: 'streamerUid and amountCents (min 100) are required.' });
     }
-    const { content, error } = await generateFreeformContent(message);
-    if (error) {
-      res.status(500).json({ message: error });
-      return;
+
+    const sdk = await stripe();
+    if (!sdk) {
+      return res.status(503).json({ message: 'Billing is not configured on this server.' });
     }
-    res.json({ response: content, content });
+
+    const session = await sdk.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            unit_amount: Number(amountCents),
+            product_data: {
+              name: 'ChatScream',
+              description: message ? `"${String(message).slice(0, 200)}"` : 'Live stream donation',
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        type: 'chatscream',
+        streamerUid: String(streamerUid),
+        donorName: String(donorName || 'Anonymous').slice(0, 64),
+        message: String(message || '').slice(0, 200),
+        amountCents: String(amountCents),
+      },
+      success_url: successUrl || `${process.env.APP_BASE_URL || ''}/thank-you`,
+      cancel_url: cancelUrl || `${process.env.APP_BASE_URL || ''}/`,
+    });
+
+    res.json({ url: session.url, sessionId: session.id });
   }),
 );
 
-app.post(
-  '/api/ai/generate',
-  requireAuth,
-  asyncHandler(async (req, res) => {
-    const prompt = String(req.body?.prompt || req.body?.message || '').trim();
-    if (!prompt) {
-      res.status(400).json({ message: 'prompt is required.' });
-      return;
-    }
-    const { content, error } = await generateFreeformContent(prompt);
-    if (error) {
-      res.status(500).json({ message: error });
-      return;
-    }
-    res.json({ response: content, content });
-  }),
-);
+// ── Static frontend (fullstack / single-server mode) ──────────────────────
+// Serve the built Vite frontend from dist/ when it exists.
+// In Railway + Vercel split deployments this block is never reached because
+// dist/ is not present on the Railway backend container.
+const distDir = path.resolve(process.cwd(), 'dist');
 
-app.use('/api', (_req, res) => {
-  res.status(404).json({ message: 'API route not found.' });
-});
-
-const distDir = path.join(process.cwd(), 'dist');
 if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir));
-  app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/')) {
-      res.status(404).json({ message: 'API route not found.' });
-      return;
-    }
+  app.use(express.static(distDir, { maxAge: '1y', immutable: true }));
+  // SPA fallback — must be LAST so API routes are matched first
+  app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distDir, 'index.html'));
   });
+  console.log(`📦 Serving frontend from ${distDir}`);
 }
+
 export default app;

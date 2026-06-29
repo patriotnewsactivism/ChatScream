@@ -154,18 +154,23 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
   if (session.metadata?.type === 'chatscream') {
     const { streamerUid, donorName, message, amountCents } = session.metadata;
     const amount = Number(amountCents) / 100;
-    console.log(`[Stripe Webhook] ✅ ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`);
+    console.log(
+      `[Stripe Webhook] ✅ ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`,
+    );
 
     try {
-      const { updateLeaderboardEntry, addChatMessage, flushState } = await import('../store.js');
+      const { updateLeaderboardEntry, addChatMessage, flushState, broadcastScreamAlert } =
+        await import('../store.js');
       const { randomUUID } = await import('node:crypto');
 
       // Record the scream for leaderboard
       updateLeaderboardEntry(streamerUid, amount);
 
+      const screamId = randomUUID();
+
       // Create chat message for the scream alert
       addChatMessage({
-        id: randomUUID(),
+        id: screamId,
         userId: 'system',
         username: 'ChatScream',
         text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message || ''}"`,
@@ -177,6 +182,17 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
         roomId: streamerUid,
       });
 
+      // Broadcast to streamer's WebSocket scream room
+      broadcastScreamAlert(streamerUid, {
+        id: screamId,
+        donorName,
+        amount,
+        message: message || '',
+        tier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'standard',
+        streamerId: streamerUid,
+        timestamp: new Date().toISOString(),
+      });
+
       flushState();
     } catch (error) {
       console.error('[Stripe Webhook] Failed to process scream payment:', error);
@@ -186,7 +202,9 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
 
   const uid = session.client_reference_id || session.metadata?.uid;
   if (!uid) {
-    console.error('[Stripe Webhook] checkout.session.completed: no uid in client_reference_id or metadata');
+    console.error(
+      '[Stripe Webhook] checkout.session.completed: no uid in client_reference_id or metadata',
+    );
     return;
   }
 
@@ -207,7 +225,9 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
   // If line items weren't expanded, try subscription metadata
   if (!plan && session.subscription) {
     // We'll catch it in subscription.updated event
-    console.log(`[Stripe Webhook] checkout completed for ${uid}, subscription: ${session.subscription}`);
+    console.log(
+      `[Stripe Webhook] checkout completed for ${uid}, subscription: ${session.subscription}`,
+    );
   }
 
   const profile = {
@@ -231,7 +251,9 @@ async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }
   // Find user by stripeCustomerId or stripeSubscriptionId
   const record = await findUserByStripeId(subscription.customer, subscription.id, getUserByUid);
   if (!record) {
-    console.log(`[Stripe Webhook] subscription.updated: no user found for customer ${subscription.customer}`);
+    console.log(
+      `[Stripe Webhook] subscription.updated: no user found for customer ${subscription.customer}`,
+    );
     return;
   }
 
@@ -256,7 +278,9 @@ async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }
   };
 
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ✅ Subscription updated for user ${record.uid}: plan=${plan}, status=${mappedStatus}`);
+  console.log(
+    `[Stripe Webhook] ✅ Subscription updated for user ${record.uid}: plan=${plan}, status=${mappedStatus}`,
+  );
 }
 
 async function handleSubscriptionDeleted(subscription, { getUserByUid, putUser }) {
