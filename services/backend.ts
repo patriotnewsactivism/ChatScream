@@ -1131,6 +1131,9 @@ export const onAuthChange = (callback: AuthListener) => {
   };
 };
 
+export const onAuthStateChange = onAuthChange;
+
+/** @deprecated Use `onAuthStateChange` instead — this alias exists for backward compatibility. */
 export const onIdTokenChange = onAuthChange;
 
 export const getCurrentSessionToken = (): string | null => getSessionToken();
@@ -1245,4 +1248,10 @@ export const deleteSchedule = async (id: string): Promise<boolean> => {
     null,
   );
   return true;
+};
+
+// ── Platform Disconnect ────────────────────────────────────────────────────
+
+export const disconnectPlatform = async (platform: string): Promise<void> => {
+  await authRequest('/api/oauth/disconnect', { method: 'POST', body: { platform } });
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   Calendar,
@@ -14,8 +14,6 @@ import {
   Sparkles,
   Wallet2,
   Wand2,
-  CheckCircle2,
-  X,
   Loader2,
   Trophy,
   Users,
@@ -29,6 +27,7 @@ import {
   getAnalyticsOverview,
   getLeaderboardStats,
   getSchedules,
+  disconnectPlatform,
   AnalyticsOverview,
   LeaderboardStats,
   StreamSchedule,
@@ -43,17 +42,16 @@ const planMinutes: Record<string, number> = {
 
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(
-    searchParams.get('checkout') === 'success',
-  );
-  const { userProfile, logout, sessionToken } = useAuth();
+  const { userProfile, logout, sessionToken, refreshProfile } = useAuth();
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState('');
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
   const [leaderboardStats, setLeaderboardStats] = useState<LeaderboardStats | null>(null);
   const [schedules, setSchedules] = useState<StreamSchedule[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [disconnectError, setDisconnectError] = useState('');
   const plan = userProfile?.subscription?.plan || 'free';
   const includedMinutes = planMinutes[plan] ?? 0;
   const planLabel = getPlanById(plan)?.name || 'Free';
@@ -78,6 +76,21 @@ const CreatorDashboard: React.FC = () => {
     const fetchData = async () => {
       if (!userProfile?.uid) return;
       setLoadingData(true);
+
+      // Handle checkout success redirect
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('checkout') === 'success') {
+        setCheckoutSuccess(true);
+        // Clean URL without reload
+        params.delete('checkout');
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({}, '', newUrl);
+        // Refresh profile to pick up new plan status
+        await refreshProfile();
+        // Auto-dismiss after 8 seconds
+        setTimeout(() => setCheckoutSuccess(false), 8000);
+      }
+
       try {
         const [analyticsResult, leaderboardResult, scheduleResult] = await Promise.allSettled([
           getAnalyticsOverview(),
@@ -149,25 +162,20 @@ const CreatorDashboard: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-b from-dark-900 via-dark-900 to-black text-white">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
         <AuthStatusBanner />
-        {showCheckoutSuccess && (
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-emerald-600/40 bg-emerald-600/10">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
-              <div>
-                <p className="text-sm font-bold text-emerald-300">Upgrade complete!</p>
-                <p className="text-xs text-emerald-400/70">
-                  Your plan is now active. Cloud streaming and premium features are unlocked.
-                </p>
-              </div>
+        {checkoutSuccess && (
+          <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center gap-3 animate-fade-in">
+            <ShieldCheck size={18} className="text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-300">Payment successful!</p>
+              <p className="text-xs text-emerald-400/80">
+                Your plan has been updated. Enjoy your new features!
+              </p>
             </div>
             <button
-              onClick={() => {
-                setShowCheckoutSuccess(false);
-                setSearchParams({}, { replace: true });
-              }}
-              className="text-emerald-400/60 hover:text-emerald-300"
+              onClick={() => setCheckoutSuccess(false)}
+              className="ml-auto text-gray-500 hover:text-white shrink-0"
             >
-              <X size={18} />
+              &times;
             </button>
           </div>
         )}
@@ -400,12 +408,55 @@ const CreatorDashboard: React.FC = () => {
                     <div
                       className={`w-2 h-2 rounded-full shrink-0 ${dest.isConnected ? 'bg-green-400' : 'bg-gray-600'}`}
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold">{dest.name}</p>
                       <p className="text-xs text-gray-400 truncate">{dest.status}</p>
                     </div>
+                    {dest.isConnected && disconnecting !== dest.platform && (
+                      <button
+                        onClick={() => setDisconnecting(dest.platform)}
+                        className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase shrink-0"
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                    {dest.isConnected && disconnecting === dest.platform && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={async () => {
+                            setDisconnectError('');
+                            try {
+                              await disconnectPlatform(dest.platform);
+                              await refreshProfile();
+                              setDisconnecting(null);
+                            } catch (err) {
+                              setDisconnectError(
+                                err instanceof Error ? err.message : 'Failed to disconnect',
+                              );
+                            }
+                          }}
+                          className="text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-0.5 rounded"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDisconnecting(null);
+                            setDisconnectError('');
+                          }}
+                          className="text-[10px] text-gray-400 hover:text-white font-bold px-1"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
+                {disconnectError && (
+                  <div className="p-2 bg-red-900/30 border border-red-500/30 rounded-lg text-xs text-red-400">
+                    {disconnectError}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => navigate('/studio#destinations')}

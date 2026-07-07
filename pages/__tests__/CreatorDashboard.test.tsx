@@ -54,7 +54,7 @@ describe('CreatorDashboard', () => {
     expect(screen.getByText('Creator control center')).toBeInTheDocument();
     expect(screen.getByText(/Cloud VM hours/i)).toBeInTheDocument();
     expect(screen.getByText('10 hrs')).toBeInTheDocument();
-    expect(screen.getByText(/One-click destinations/i)).toBeInTheDocument();
+    expect(screen.getByText('Destinations')).toBeInTheDocument();
   });
 
   it('shows admin portal action when role claim is admin', async () => {
