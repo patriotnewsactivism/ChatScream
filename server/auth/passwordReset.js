@@ -1,4 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+
+const PASSWORD_HASH_ALGORITHM = 'bcrypt';
+const BCRYPT_ROUNDS = Math.max(12, Number.parseInt(process.env.BCRYPT_COST || '12', 10) || 12);
 
 const DEFAULT_RESET_TTL_SECONDS = 15 * 60;
 const DEFAULT_EMAIL_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -16,14 +20,22 @@ const numberFromEnv = (value, fallback) => {
 
 const nowMs = () => Date.now();
 const nowIso = () => new Date().toISOString();
-const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
+const normalizeEmail = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
 
-const hashToken = (token) => createHash('sha256').update(String(token || '')).digest('hex');
+const hashToken = (token) =>
+  createHash('sha256')
+    .update(String(token || ''))
+    .digest('hex');
 
-const hashPassword = (value = '') => createHash('sha256').update(value).digest('hex');
+const hashPassword = async (value = '') => bcrypt.hash(value, BCRYPT_ROUNDS);
 
 const buildResetUrl = (rawToken) => {
-  const configured = String(process.env.PASSWORD_RESET_URL || process.env.APP_BASE_URL || '').trim();
+  const configured = String(
+    process.env.PASSWORD_RESET_URL || process.env.APP_BASE_URL || '',
+  ).trim();
   if (!configured) {
     return `/reset-password/confirm?token=${encodeURIComponent(rawToken)}`;
   }
@@ -69,7 +81,12 @@ export const getGenericResetResponse = () => ({
   message: 'If an account exists for this email, a password reset link has been sent.',
 });
 
-export const issuePasswordResetToken = async ({ email, ip, getUserByEmail, savePasswordResetToken }) => {
+export const issuePasswordResetToken = async ({
+  email,
+  ip,
+  getUserByEmail,
+  savePasswordResetToken,
+}) => {
   const normalizedEmail = normalizeEmail(email);
   const throttleKey = `${ip || 'unknown'}:${normalizedEmail || 'empty'}`;
   const rate = takeEmailResetRateLimit(throttleKey);
@@ -201,7 +218,8 @@ export const confirmPasswordReset = async ({
 
   await putUser({
     ...userRecord,
-    passwordHash: hashPassword(password),
+    passwordHash: await hashPassword(password),
+    passwordAlgorithm: PASSWORD_HASH_ALGORITHM,
   });
   return { ok: true, status: 200, body: { success: true } };
 };

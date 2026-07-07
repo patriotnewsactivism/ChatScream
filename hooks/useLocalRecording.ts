@@ -16,27 +16,28 @@ export type RecordingQuality = 'high' | 'medium' | 'low' | 'auto';
 
 interface RecordingConfig {
   quality: RecordingQuality;
-  segmentDurationMs: number;    // chunk length (default 30 000)
-  maxDurationMs: number;        // hard cap (default 4 hrs)
+  segmentDurationMs: number; // chunk length (default 30 000)
+  maxDurationMs: number; // hard cap (default 4 hrs)
   mimeType?: string;
 }
 
 interface RecordingState {
   isRecording: boolean;
   isPaused: boolean;
-  duration: number;             // seconds
+  duration: number; // seconds
   chunkCount: number;
   totalSizeMB: number;
   currentQuality: RecordingQuality;
 }
 
 const QUALITY_BITRATES: Record<Exclude<RecordingQuality, 'auto'>, number> = {
-  high: 4_000_000,   // 4 Mbps
-  medium: 2_000_000,  // 2 Mbps
-  low: 800_000,       // 800 kbps
+  high: 4_000_000, // 4 Mbps
+  medium: 2_000_000, // 2 Mbps
+  low: 800_000, // 800 kbps
 };
 
 const pickMimeType = (): string => {
+  if (typeof MediaRecorder === 'undefined') return 'video/webm';
   const preferred = [
     // Prefer MP4 (H.264+AAC) for broad device compatibility
     'video/mp4;codecs=h264,aac',
@@ -98,9 +99,13 @@ export const useLocalRecording = (
   // Initialize IndexedDB
   useEffect(() => {
     openChunkStore()
-      .then(db => { dbRef.current = db; })
+      .then((db) => {
+        dbRef.current = db;
+      })
       .catch(console.warn);
-    return () => { dbRef.current?.close(); };
+    return () => {
+      dbRef.current?.close();
+    };
   }, []);
 
   // Save chunk to IDB for crash recovery
@@ -120,7 +125,7 @@ export const useLocalRecording = (
     else newQ = 'high';
 
     if (newQ !== state.currentQuality) {
-      setState(prev => ({ ...prev, currentQuality: newQ }));
+      setState((prev) => ({ ...prev, currentQuality: newQ }));
       // Restart recorder with new bitrate (seamless segment boundary)
       if (recorderRef.current?.state === 'recording') {
         recorderRef.current.requestData(); // flush current segment
@@ -133,7 +138,7 @@ export const useLocalRecording = (
     if (!state.isRecording || state.isPaused) return;
     if (resourceLevel === 'red') {
       recorderRef.current?.pause();
-      setState(prev => ({ ...prev, isPaused: true }));
+      setState((prev) => ({ ...prev, isPaused: true }));
     }
   }, [resourceLevel, state.isRecording, state.isPaused]);
 
@@ -142,69 +147,77 @@ export const useLocalRecording = (
     if (!state.isRecording || !state.isPaused) return;
     if (resourceLevel !== 'red') {
       recorderRef.current?.resume();
-      setState(prev => ({ ...prev, isPaused: false }));
+      setState((prev) => ({ ...prev, isPaused: false }));
     }
   }, [resourceLevel, state.isRecording, state.isPaused]);
 
   // ── Start ────────────────────────────────────────────────────────────────
-  const startRecording = useCallback((stream: MediaStream) => {
-    const effectiveQ: Exclude<RecordingQuality, 'auto'> =
-      quality === 'auto'
-        ? (resourceLevel === 'red' ? 'low' : resourceLevel === 'yellow' ? 'medium' : 'high')
-        : quality;
+  const startRecording = useCallback(
+    (stream: MediaStream) => {
+      const effectiveQ: Exclude<RecordingQuality, 'auto'> =
+        quality === 'auto'
+          ? resourceLevel === 'red'
+            ? 'low'
+            : resourceLevel === 'yellow'
+              ? 'medium'
+              : 'high'
+          : quality;
 
-    const bitrate = QUALITY_BITRATES[effectiveQ];
+      const bitrate = QUALITY_BITRATES[effectiveQ];
 
-    const recorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: bitrate,
-    });
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: bitrate,
+      });
 
-    chunksRef.current = [];
-    // Clear IDB chunks from previous recording
-    if (dbRef.current) {
-      const tx = dbRef.current.transaction('chunks', 'readwrite');
-      tx.objectStore('chunks').clear();
-    }
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-        persistChunk(e.data);
-        setState(prev => ({
-          ...prev,
-          chunkCount: prev.chunkCount + 1,
-          totalSizeMB: +(
-            chunksRef.current.reduce((sum, c) => sum + c.size, 0) / (1024 * 1024)
-          ).toFixed(1),
-        }));
+      chunksRef.current = [];
+      // Clear IDB chunks from previous recording
+      if (dbRef.current) {
+        const tx = dbRef.current.transaction('chunks', 'readwrite');
+        tx.objectStore('chunks').clear();
       }
-    };
 
-    recorder.start(segmentDurationMs); // timeslice = chunked recording
-    recorderRef.current = recorder;
-    startTimeRef.current = Date.now();
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          persistChunk(e.data);
+          setState((prev) => ({
+            ...prev,
+            chunkCount: prev.chunkCount + 1,
+            totalSizeMB: +(
+              chunksRef.current.reduce((sum, c) => sum + c.size, 0) /
+              (1024 * 1024)
+            ).toFixed(1),
+          }));
+        }
+      };
 
-    // Duration timer
-    timerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setState(prev => ({ ...prev, duration: elapsed }));
+      recorder.start(segmentDurationMs); // timeslice = chunked recording
+      recorderRef.current = recorder;
+      startTimeRef.current = Date.now();
 
-      // Hard cap
-      if (elapsed * 1000 >= maxDurationMs) {
-        stopRecording();
-      }
-    }, 1000);
+      // Duration timer
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setState((prev) => ({ ...prev, duration: elapsed }));
 
-    setState({
-      isRecording: true,
-      isPaused: false,
-      duration: 0,
-      chunkCount: 0,
-      totalSizeMB: 0,
-      currentQuality: effectiveQ,
-    });
-  }, [quality, resourceLevel, mimeType, segmentDurationMs, maxDurationMs, persistChunk]);
+        // Hard cap
+        if (elapsed * 1000 >= maxDurationMs) {
+          stopRecording();
+        }
+      }, 1000);
+
+      setState({
+        isRecording: true,
+        isPaused: false,
+        duration: 0,
+        chunkCount: 0,
+        totalSizeMB: 0,
+        currentQuality: effectiveQ,
+      });
+    },
+    [quality, resourceLevel, mimeType, segmentDurationMs, maxDurationMs, persistChunk],
+  );
 
   // ── Stop + Download ──────────────────────────────────────────────────────
   const stopRecording = useCallback(() => {
@@ -231,7 +244,7 @@ export const useLocalRecording = (
       chunksRef.current = [];
     }, 200);
 
-    setState(prev => ({ ...prev, isRecording: false, isPaused: false }));
+    setState((prev) => ({ ...prev, isRecording: false, isPaused: false }));
   }, [mimeType]);
 
   // ── Pause / Resume ───────────────────────────────────────────────────────
@@ -240,10 +253,10 @@ export const useLocalRecording = (
     if (!recorder) return;
     if (recorder.state === 'recording') {
       recorder.pause();
-      setState(prev => ({ ...prev, isPaused: true }));
+      setState((prev) => ({ ...prev, isPaused: true }));
     } else if (recorder.state === 'paused') {
       recorder.resume();
-      setState(prev => ({ ...prev, isPaused: false }));
+      setState((prev) => ({ ...prev, isPaused: false }));
     }
   }, []);
 

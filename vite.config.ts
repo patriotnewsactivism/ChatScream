@@ -72,6 +72,10 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: './vitest.setup.ts',
       exclude: ['tests/e2e/**', '**/node_modules/**', 'payments/node_modules/**', 'dist/**'],
+      // Server auth tests spin up real HTTP servers and hash passwords with
+      // bcrypt (cost 12), which comfortably fits the 5s default in isolation
+      // but can exceed it under parallel CPU contention across test files.
+      testTimeout: 15000,
     },
   };
 });
