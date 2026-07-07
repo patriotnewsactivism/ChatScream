@@ -13,6 +13,8 @@
  * Host receives the guest MediaStream via onGuestStream callback
  */
 
+import { buildWsUrl } from './apiClient';
+
 export interface GuestConnection {
   id: string;
   stream: MediaStream;
@@ -50,8 +52,7 @@ export class GuestHostService {
   }
 
   connect() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${window.location.host}/ws/signal/${this.roomId}`);
+    this.ws = new WebSocket(buildWsUrl(`/ws/signal/${this.roomId}`));
 
     this.ws.onopen = () => {
       this.send({ type: 'host-ready', roomId: this.roomId });
@@ -164,8 +165,7 @@ export class GuestClientService {
   }
 
   async join(stream: MediaStream): Promise<void> {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${window.location.host}/ws/signal/${this.roomId}`);
+    this.ws = new WebSocket(buildWsUrl(`/ws/signal/${this.roomId}`));
 
     await new Promise<void>((resolve, reject) => {
       this.ws!.onopen = () => resolve();

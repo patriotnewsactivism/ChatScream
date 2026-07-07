@@ -78,6 +78,18 @@ export const buildApiUrl = (path: string): string => {
   return `${base}${path}`;
 };
 
+// WebSocket equivalent of buildApiUrl — the frontend (Vercel) and backend
+// (Railway) are on different hosts, so signaling sockets must point at the
+// configured API host, not window.location.host (which is Vercel's).
+export const buildWsUrl = (path: string): string => {
+  const base = getApiBaseUrl();
+  if (base) {
+    return `${base.replace(/^http/i, 'ws')}${path}`;
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}${path}`;
+};
+
 const getApiUrlCandidates = (path: string): string[] => {
   if (/^https?:\/\//i.test(path)) return [path];
 
@@ -89,10 +101,7 @@ const getApiUrlCandidates = (path: string): string[] => {
   const sameOrigin = path;
   const fallbackBases = getFallbackApiBaseUrls();
 
-  return [
-    sameOrigin,
-    ...fallbackBases.map((fallbackBase) => `${fallbackBase}${path}`),
-  ];
+  return [sameOrigin, ...fallbackBases.map((fallbackBase) => `${fallbackBase}${path}`)];
 };
 
 const isRetryableStatus = (status: number): boolean => status >= 500 || status === 404;
@@ -156,8 +165,7 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
       const error = new ApiRequestError(message, response.status, data);
       lastError = error;
 
-      const shouldTryFallback =
-        index < urls.length - 1 && isRetryableStatus(response.status);
+      const shouldTryFallback = index < urls.length - 1 && isRetryableStatus(response.status);
       if (!shouldTryFallback) {
         throw error;
       }
