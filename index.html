@@ -36,6 +36,10 @@
           });
         } catch(e) {}
       }
+      // Exposed so the recovery button's onclick="" HTML attribute (which can't
+      // safely nest quoted string/array literals inside its own quoting) can
+      // call back into this closure without re-embedding the key list as a string.
+      window.__csClearLoop = clearLoopCount;
 
       var loopCount = getLoopCount();
       if (loopCount >= MAX_LOOPS) {
@@ -50,7 +54,7 @@
             +'<h1 style="font-size:18px;font-weight:700;margin:0 0 8px">Stuck in a loop?</h1>'
             +'<p style="color:#999;font-size:13px;line-height:1.5;margin:0 0 20px">ChatScream hit a snag loading. Tap below to wipe the cache and start fresh.</p>'
             +'<button onclick="(function(){'
-            +'try{['cs_loop_count','cs_loop_ts','cs_sw_reload_ts','chunk_error_reload_count','chunk_error_reload_ts'].forEach(function(k){localStorage.removeItem(k);});}catch(e){}'
+            +'try{window.__csClearLoop&&window.__csClearLoop();}catch(e){}'
             +'try{if(caches&&caches.keys)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})});}catch(e){}'
             +'try{if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister()})});}catch(e){}'
             +'setTimeout(function(){location.reload();},300);})()" '

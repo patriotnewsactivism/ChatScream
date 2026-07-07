@@ -71,7 +71,10 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 50,
       storage: 25,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID || import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro',
+    stripePriceId:
+      import.meta.env.VITE_STRIPE_STARTER_PRICE_ID ||
+      import.meta.env.VITE_STRIPE_PRO_PRICE_ID ||
+      'price_pro',
     hasWatermark: false,
   },
   {
@@ -97,7 +100,10 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 200,
       storage: 100,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID || import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID || 'price_expert',
+    stripePriceId:
+      import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID ||
+      import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID ||
+      'price_expert',
     hasWatermark: false,
   },
   {
@@ -125,7 +131,10 @@ export const PRICING_PLANS: PricingPlan[] = [
       chatScreams: 999,
       storage: 500,
     },
-    stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID || 'price_enterprise',
+    stripePriceId:
+      import.meta.env.VITE_STRIPE_PRO_PRICE_ID ||
+      import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID ||
+      'price_enterprise',
     popular: true,
     hasWatermark: false,
   },
@@ -144,7 +153,7 @@ export const createCheckoutSession = async (
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch(buildApiUrl('/api/create-checkout-session'), {
+  const response = await fetch(buildApiUrl('/api/billing/create-checkout'), {
     method: 'POST',
     headers,
     credentials: 'include',
@@ -176,7 +185,7 @@ export const createPortalSession = async (
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch(buildApiUrl('/api/create-portal-session'), {
+  const response = await fetch(buildApiUrl('/api/billing/portal'), {
     method: 'POST',
     headers,
     credentials: 'include',
@@ -197,13 +206,13 @@ export const createPortalSession = async (
 
 // Get Plan by ID
 export const getPlanById = (planId: string): PricingPlan | undefined => {
-  return PRICING_PLANS.find(plan => plan.id === planId);
+  return PRICING_PLANS.find((plan) => plan.id === planId);
 };
 
 // Calculate discounted price with affiliate code
 export const calculateDiscountedPrice = (
   basePrice: number,
-  affiliateDiscount: number = 0
+  affiliateDiscount: number = 0,
 ): number => {
   return basePrice * (1 - affiliateDiscount);
 };
@@ -222,7 +231,7 @@ export const formatPrice = (price: number): string => {
 export const hasFeatureAccess = (
   userPlan: string,
   feature: 'chatScreams' | 'destinations' | 'cloudStreamHours' | 'storage',
-  currentUsage: number
+  currentUsage: number,
 ): boolean => {
   const plan = getPlanById(userPlan);
   if (!plan) return false;
@@ -235,10 +244,7 @@ export const hasFeatureAccess = (
 
 // Check if user can add more destinations
 // Master admin emails — full access, no plan limits
-export const ADMIN_EMAILS: string[] = [
-  'don@donmatthews.live',
-  'mreardon@wtpnews.org',
-];
+export const ADMIN_EMAILS: string[] = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
 
 export const isAdminEmail = (email?: string | null): boolean =>
   !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());
@@ -246,14 +252,14 @@ export const isAdminEmail = (email?: string | null): boolean =>
 export const canAddDestination = (
   userPlan: string,
   currentDestinations: number,
-  userEmail?: string | null
+  userEmail?: string | null,
 ): { allowed: boolean; maxDestinations: number; message: string } => {
   // Admins always get unlimited access
   if (isAdminEmail(userEmail)) {
     return {
       allowed: true,
       maxDestinations: -1,
-      message: 'Admin — unlimited destinations'
+      message: 'Admin — unlimited destinations',
     };
   }
 
@@ -262,7 +268,7 @@ export const canAddDestination = (
     return {
       allowed: false,
       maxDestinations: 1,
-      message: 'Invalid plan'
+      message: 'Invalid plan',
     };
   }
 
@@ -272,7 +278,7 @@ export const canAddDestination = (
     return {
       allowed: true,
       maxDestinations: -1,
-      message: 'Unlimited destinations'
+      message: 'Unlimited destinations',
     };
   }
 
@@ -280,14 +286,14 @@ export const canAddDestination = (
     return {
       allowed: false,
       maxDestinations: maxDest,
-      message: `Your ${plan.name} plan allows ${maxDest} destination${maxDest > 1 ? 's' : ''}. Upgrade to add more.`
+      message: `Your ${plan.name} plan allows ${maxDest} destination${maxDest > 1 ? 's' : ''}. Upgrade to add more.`,
     };
   }
 
   return {
     allowed: true,
     maxDestinations: maxDest,
-    message: `${currentDestinations}/${maxDest} destinations used`
+    message: `${currentDestinations}/${maxDest} destinations used`,
   };
 };
 
@@ -300,7 +306,7 @@ export const planHasWatermark = (userPlan: string): boolean => {
 // Get remaining cloud hours
 export const getRemainingCloudHours = (
   userPlan: string,
-  usedHours: number
+  usedHours: number,
 ): { remaining: number; total: number; percentUsed: number } => {
   const plan = getPlanById(userPlan);
   if (!plan) {
@@ -317,7 +323,7 @@ export const getRemainingCloudHours = (
 // Check if cloud streaming is available
 export const canUseCloudStreaming = (
   userPlan: string,
-  usedHours: number
+  usedHours: number,
 ): { allowed: boolean; message: string } => {
   const plan = getPlanById(userPlan);
   if (!plan) {
@@ -328,20 +334,21 @@ export const canUseCloudStreaming = (
   if (total === 0) {
     return {
       allowed: false,
-      message: 'Cloud streaming is not available on the Free plan. Upgrade to Pro for 3 hours of cloud streaming.'
+      message:
+        'Cloud streaming is not available on the Free plan. Upgrade to Pro for 3 hours of cloud streaming.',
     };
   }
 
   if (usedHours >= total) {
     return {
       allowed: false,
-      message: `You've used all ${total} cloud streaming hours this month. Upgrade your plan for more hours.`
+      message: `You've used all ${total} cloud streaming hours this month. Upgrade your plan for more hours.`,
     };
   }
 
   return {
     allowed: true,
-    message: `${(total - usedHours).toFixed(1)} cloud hours remaining`
+    message: `${(total - usedHours).toFixed(1)} cloud hours remaining`,
   };
 };
 

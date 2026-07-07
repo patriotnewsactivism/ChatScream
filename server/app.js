@@ -18,6 +18,7 @@ import {
   getIdentityStorageMode,
   isManagedIdentityStorageRequired,
   getPublicProfile,
+  getOwnProfile,
   getSession,
   getUserByEmail,
   getUserByUid,
@@ -1748,7 +1749,8 @@ app.get(
       res.status(404).json({ message: 'User not found.' });
       return;
     }
-    res.json({ profile: getPublicProfile(record) });
+    const isSelfOrAdmin = req.params.uid === req.auth.record.uid || isAdmin(req.auth?.profile);
+    res.json({ profile: isSelfOrAdmin ? getOwnProfile(record) : getPublicProfile(record) });
   }),
 );
 
@@ -1780,7 +1782,7 @@ app.patch(
     }
     const profile = deepMerge(record.profile, req.body || {});
     await putUser({ ...record, profile });
-    res.json({ profile: getPublicProfile({ ...record, profile }) });
+    res.json({ profile: getOwnProfile({ ...record, profile }) });
   }),
 );
 
@@ -1793,7 +1795,8 @@ app.get(
       res.status(404).json({ message: 'User not found.' });
       return;
     }
-    res.json({ profile: getPublicProfile(record) });
+    const isSelfOrAdmin = req.params.uid === req.auth.record.uid || isAdmin(req.auth?.profile);
+    res.json({ profile: isSelfOrAdmin ? getOwnProfile(record) : getPublicProfile(record) });
   }),
 );
 
@@ -1825,7 +1828,7 @@ app.put(
     }
     const profile = deepMerge(record.profile, req.body || {});
     await putUser({ ...record, profile });
-    res.json({ profile: getPublicProfile({ ...record, profile }) });
+    res.json({ profile: getOwnProfile({ ...record, profile }) });
   }),
 );
 
@@ -3406,13 +3409,16 @@ app.get(
     const weeklyWinners = state.weeklyWinners || [];
     const previousWins = weeklyWinners.filter((w) => w.uid === streamerUid).length;
 
+    // Unranked users (no leaderboard entry yet) are placed one past the last
+    // real entry — totalEntries must grow to match, or rank can exceed it
+    // (e.g. "#11 of 10").
     res.json({
       streamerUid,
       streamerName: userRecord?.profile?.displayName || streamerUid,
       rank: entry?.rank || entries.length + 1,
       screams: entry?.screams || 0,
       donated: entry?.donated || 0,
-      totalEntries: entries.length,
+      totalEntries: entry ? entries.length : entries.length + 1,
       previousWins,
     });
   }),
