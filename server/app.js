@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'node:path';
 import fs from 'node:fs';
 import multer from 'multer';
@@ -127,6 +128,55 @@ app.use(
     credentials: true,
   }),
 );
+// ── Security headers ──────────────────────────────────────────────────────
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // CSP handled by Vite in production
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
+
+// ── Simple in-memory rate limiter (protects against brute-force) ──────────
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_DEFAULT_MAX = 100;
+const RATE_LIMIT_AUTH_MAX = 10;
+
+const rateLimiter =
+  (maxRequests = RATE_LIMIT_DEFAULT_MAX) =>
+  (req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const key = `${ip}:${req.path}`;
+    const now = Date.now();
+    const entry = rateLimitStore.get(key);
+
+    if (entry && now - entry.start < RATE_LIMIT_WINDOW_MS) {
+      entry.count++;
+      if (entry.count > maxRequests) {
+        res.status(429).json({ message: 'Too many requests. Please try again later.' });
+        return;
+      }
+    } else {
+      rateLimitStore.set(key, { start: now, count: 1 });
+    }
+
+    // Cleanup old entries periodically
+    if (Math.random() < 0.01) {
+      const cutoff = now - RATE_LIMIT_WINDOW_MS;
+      rateLimitStore.forEach((v, k) => {
+        if (v.start < cutoff) rateLimitStore.delete(k);
+      });
+    }
+
+    next();
+  };
+
+// Apply rate limiting to auth and payment routes
+app.use('/api/auth', rateLimiter(RATE_LIMIT_AUTH_MAX));
+app.use('/api/scream', rateLimiter(RATE_LIMIT_AUTH_MAX));
+app.use('/api/billing', rateLimiter(RATE_LIMIT_AUTH_MAX));
+app.use('/api/media/upload', rateLimiter(20));
 // ── Stripe Webhook (must be BEFORE express.json to get raw body) ──────────
 app.post(
   '/api/webhooks/stripe',
@@ -2769,12 +2819,9 @@ app.get(
     const streamKeyData = await streamKeyRes.json();
     const streamKey = streamKeyData?.data?.[0]?.stream_key;
     if (!streamKey) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'Twitch returned no stream key. Ensure your Twitch account has streaming enabled.',
-        });
+      return res.status(400).json({
+        message: 'Twitch returned no stream key. Ensure your Twitch account has streaming enabled.',
+      });
     }
 
     // Fetch nearest Twitch ingest server
@@ -2851,12 +2898,10 @@ app.post(
       return res.status(400).json({ message: errMsg });
     }
     if (!fbData.stream_url) {
-      return res
-        .status(502)
-        .json({
-          message:
-            'Failed to create Facebook live video. Ensure your account has live streaming permissions.',
-        });
+      return res.status(502).json({
+        message:
+          'Failed to create Facebook live video. Ensure your account has live streaming permissions.',
+      });
     }
     res.json({
       streamUrl: fbData.stream_url,
@@ -3056,11 +3101,9 @@ app.post(
         });
         return res.json({ success: true });
       } catch (error) {
-        return res
-          .status(502)
-          .json({
-            message: error instanceof Error ? error.message : 'Twitch token refresh failed.',
-          });
+        return res.status(502).json({
+          message: error instanceof Error ? error.message : 'Twitch token refresh failed.',
+        });
       }
     }
 
@@ -3091,11 +3134,9 @@ app.post(
         });
         return res.json({ success: true });
       } catch (error) {
-        return res
-          .status(502)
-          .json({
-            message: error instanceof Error ? error.message : 'Facebook token refresh failed.',
-          });
+        return res.status(502).json({
+          message: error instanceof Error ? error.message : 'Facebook token refresh failed.',
+        });
       }
     }
 

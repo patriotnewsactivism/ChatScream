@@ -3,7 +3,7 @@ import { ApiRequestError } from '../services/apiClient';
 import {
   AuthTokenResult,
   AuthUser,
-  onIdTokenChange,
+  onAuthStateChange,
   signUpWithEmail,
   signInWithEmail,
   signInWithGoogle,
@@ -140,7 +140,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }, 3000);
 
-    const unsubscribe = onIdTokenChange(async (backendUser) => {
+    const unsubscribe = onAuthStateChange(async (backendUser) => {
       window.clearTimeout(loadingGuard);
       setUser(backendUser);
       setSessionToken(null);
@@ -157,7 +157,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
           // Profile loads in background — does not block studio rendering
           getUserProfile(backendUser.uid)
-            .then((profile) => { if (isMounted) setUserProfile(applyLocalAccessOverrides(profile)); })
+            .then((profile) => {
+              if (isMounted) setUserProfile(applyLocalAccessOverrides(profile));
+            })
             .catch(() => {});
           ensureAffiliateForSignedInUser().catch(() => {});
           scheduleTokenRefresh(tokenResult, backendUser);
@@ -358,7 +360,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const refreshSession = async (): Promise<string | null> => {
@@ -465,4 +467,3 @@ function getErrorMessage(error?: unknown): string {
 }
 
 export default AuthProvider;
-

@@ -473,7 +473,8 @@ export const deleteSchedule = (id) =>
     if (state.schedules) delete state.schedules[id];
   });
 
-// --- SCENE OPERATIONS ---
+// ── Scenes ──────────────────────────────────────────────────────────────────
+
 export const listScenes = (userId) => {
   const all = loadState().scenes || {};
   return Object.values(all).filter((s) => s.userId === userId);

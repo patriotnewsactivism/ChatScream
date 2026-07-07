@@ -43,7 +43,7 @@ vi.mock('../../services/backend', () => ({
   ensureAffiliateForSignedInUser: vi.fn(async () => {}),
   clearLocalSession: vi.fn(),
   backendConfigError: null,
-  onIdTokenChange: vi.fn((cb: (user: AuthUser | null) => void) => {
+  onAuthStateChange: vi.fn((cb: (user: AuthUser | null) => void) => {
     tokenChangeHandler = cb;
     cb(mockUser as AuthUser);
     return () => {
