@@ -444,6 +444,21 @@ export const getPublicProfile = (record) => ({
   photoURL: record.profile?.photoURL || '',
 });
 
+// Full profile — only for the record owner (or admin) to see, never for
+// cross-user lookups. Includes billing, connected destinations, and
+// affiliate data that getPublicProfile intentionally omits.
+export const getOwnProfile = (record) => ({
+  ...getPublicProfile(record),
+  createdAt: record.profile?.createdAt,
+  role: record.profile?.role,
+  betaTester: Boolean(record.profile?.betaTester),
+  subscription: record.profile?.subscription,
+  usage: record.profile?.usage,
+  affiliate: record.profile?.affiliate,
+  settings: record.profile?.settings,
+  connectedPlatforms: record.profile?.connectedPlatforms,
+});
+
 export const setConnectedPlatform = async (uid, platform, value) => {
   const user = await getUserByUid(uid);
   if (user) {

@@ -32,7 +32,7 @@ describe('stripe service API base URL handling', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://backend.chatscream.live/api/create-checkout-session',
+      'https://backend.chatscream.live/api/billing/create-checkout',
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -49,7 +49,7 @@ describe('stripe service API base URL handling', () => {
     await createPortalSession('cus_123', 'https://app.example.com/dashboard');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://backend.chatscream.live/api/create-portal-session',
+      'https://backend.chatscream.live/api/billing/portal',
       expect.objectContaining({ method: 'POST' }),
     );
   });
