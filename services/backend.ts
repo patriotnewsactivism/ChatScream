@@ -548,6 +548,11 @@ export interface OAuthPublicConfig {
   redirectUriBase: string;
 }
 
+export interface OAuthDiagnostics {
+  configured: boolean;
+  missingSecret: boolean;
+}
+
 export interface BackendCapabilities {
   authProviders: {
     google: boolean;
@@ -557,6 +562,12 @@ export interface BackendCapabilities {
     facebook: boolean;
     twitch: boolean;
     tiktok: boolean;
+  };
+  oauthDiagnostics?: {
+    youtube: OAuthDiagnostics;
+    facebook: OAuthDiagnostics;
+    twitch: OAuthDiagnostics;
+    tiktok: OAuthDiagnostics;
   };
 }
 
@@ -934,6 +945,23 @@ export const getBackendCapabilities = async (): Promise<BackendCapabilities> => 
     data.streamKeyPlatforms && typeof data.streamKeyPlatforms === 'object'
       ? (data.streamKeyPlatforms as Record<string, unknown>)
       : {};
+  const oauthDiagnosticsRaw =
+    data.oauthDiagnostics && typeof data.oauthDiagnostics === 'object'
+      ? (data.oauthDiagnostics as Record<string, unknown>)
+      : {};
+
+  // Parse oauthDiagnostics with defaults
+  const parseOAuthDiag = (raw: unknown): OAuthDiagnostics => ({
+    configured: toBooleanValue((raw as Record<string, unknown> | undefined)?.configured),
+    missingSecret: toBooleanValue((raw as Record<string, unknown> | undefined)?.missingSecret),
+  });
+
+  const oauthDiagnostics = {
+    youtube: parseOAuthDiag(oauthDiagnosticsRaw.youtube),
+    facebook: parseOAuthDiag(oauthDiagnosticsRaw.facebook),
+    twitch: parseOAuthDiag(oauthDiagnosticsRaw.twitch),
+    tiktok: parseOAuthDiag(oauthDiagnosticsRaw.tiktok),
+  };
 
   return {
     authProviders: {
@@ -945,6 +973,7 @@ export const getBackendCapabilities = async (): Promise<BackendCapabilities> => 
       twitch: toBooleanValue(streamKeyPlatforms.twitch),
       tiktok: toBooleanValue(streamKeyPlatforms.tiktok),
     },
+    oauthDiagnostics,
   };
 };
 

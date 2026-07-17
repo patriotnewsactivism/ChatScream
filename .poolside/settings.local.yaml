@@ -1,0 +1,5 @@
+tools:
+  shell:
+    allow:
+      - dir *
+      - Get-ChildItem *

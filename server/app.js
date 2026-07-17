@@ -644,15 +644,39 @@ const getBackendCapabilities = () => {
   ).trim();
   const tiktokClientSecret = String(process.env.TIKTOK_CLIENT_SECRET || '').trim();
 
+  // NOTE: We check ALL credentials to determine capability. This helps the UI show
+  // the correct state. When credentials are missing, OAuth will still appear but
+  // will fail with clear error messages when actually attempting to connect.
+  const hasFullYouTube = Boolean(youtubeClientId && youtubeClientSecret);
+  const hasFullFacebook = Boolean(facebookAppId && facebookAppSecret);
+  const hasFullTwitch = Boolean(twitchClientId && twitchClientSecret);
+  const hasFullTikTok = Boolean(tiktokClientKey && tiktokClientSecret);
+
   return {
     authProviders: {
       google: Boolean(googleClientId && googleClientSecret && authStateSecret),
     },
     streamKeyPlatforms: {
-      youtube: Boolean(youtubeClientId && youtubeClientSecret),
-      facebook: Boolean(facebookAppId && facebookAppSecret),
-      twitch: Boolean(twitchClientId && twitchClientSecret),
-      tiktok: Boolean(tiktokClientKey && tiktokClientSecret),
+      youtube: hasFullYouTube,
+      facebook: hasFullFacebook,
+      twitch: hasFullTwitch,
+      tiktok: hasFullTikTok,
+    },
+    // Diagnostic info for admin UI - shows what's configured vs what's missing
+    oauthDiagnostics: {
+      youtube: {
+        configured: hasFullYouTube,
+        missingSecret: !!youtubeClientId && !youtubeClientSecret,
+      },
+      facebook: {
+        configured: hasFullFacebook,
+        missingSecret: !!facebookAppId && !facebookAppSecret,
+      },
+      twitch: { configured: hasFullTwitch, missingSecret: !!twitchClientId && !twitchClientSecret },
+      tiktok: {
+        configured: hasFullTikTok,
+        missingSecret: !!tiktokClientKey && !tiktokClientSecret,
+      },
     },
   };
 };
