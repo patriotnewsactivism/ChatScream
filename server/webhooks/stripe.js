@@ -2,14 +2,14 @@
  * ChatScream Stripe Webhook Handler
  *
  * Handles events from Stripe to keep subscription data in sync:
- * - checkout.session.completed → activate subscription
- * - customer.subscription.updated → plan changes
- * - customer.subscription.deleted → handle cancellations
- * - invoice.payment_failed → flag failed payments
+ * - checkout.session.completed â activate subscription
+ * - customer.subscription.updated â plan changes
+ * - customer.subscription.deleted â handle cancellations
+ * - invoice.payment_failed â flag failed payments
  *
  * Setup:
  * 1. Set STRIPE_WEBHOOK_SECRET in env vars
- * 2. Create webhook in Stripe Dashboard → Developers → Webhooks
+ * 2. Create webhook in Stripe Dashboard â Developers â Webhooks
  *    - Endpoint URL: https://chatscream.live/api/webhooks/stripe
  *    - Events: checkout.session.completed, customer.subscription.updated,
  *              customer.subscription.deleted, invoice.payment_failed
@@ -147,7 +147,7 @@ export const createStripeWebhookHandler = ({ getUserByUid, putUser }) => {
   };
 };
 
-// ── Event Handlers ────────────────────────────────────────────────────────────
+// ââ Event Handlers ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
   // Handle ChatScream one-time donations
@@ -155,7 +155,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
     const { streamerUid, donorName, message, amountCents } = session.metadata;
     const amount = Number(amountCents) / 100;
     console.log(
-      `[Stripe Webhook] ✅ ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`,
+      `[Stripe Webhook] â ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`,
     );
 
     try {
@@ -173,7 +173,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
         id: screamId,
         userId: 'system',
         username: 'ChatScream',
-        text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message || ''}"`,
+        text: `ð¥ ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message || ''}"`,
         isScream: true,
         screamTier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'normal',
         donorName,
@@ -244,7 +244,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
   };
 
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ✅ User ${uid} upgraded to plan: ${plan || 'pending'}`);
+  console.log(`[Stripe Webhook] â User ${uid} upgraded to plan: ${plan || 'pending'}`);
 }
 
 async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }) {
@@ -279,7 +279,7 @@ async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }
 
   await putUser({ ...record, profile });
   console.log(
-    `[Stripe Webhook] ✅ Subscription updated for user ${record.uid}: plan=${plan}, status=${mappedStatus}`,
+    `[Stripe Webhook] â Subscription updated for user ${record.uid}: plan=${plan}, status=${mappedStatus}`,
   );
 }
 
@@ -298,7 +298,7 @@ async function handleSubscriptionDeleted(subscription, { getUserByUid, putUser }
   };
 
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ✅ Subscription canceled for user ${record.uid}, reverted to free`);
+  console.log(`[Stripe Webhook] â Subscription canceled for user ${record.uid}, reverted to free`);
 }
 
 async function handlePaymentFailed(invoice, { getUserByUid, putUser }) {
@@ -315,17 +315,17 @@ async function handlePaymentFailed(invoice, { getUserByUid, putUser }) {
   };
 
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ⚠️ Payment failed for user ${record.uid}`);
+  console.log(`[Stripe Webhook] â ï¸ Payment failed for user ${record.uid}`);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 /**
  * Find a user by Stripe customer ID or subscription ID.
  * Since we store these in the JSONB profile, we need to search.
  */
 async function findUserByStripeId(customerId, subscriptionId, getUserByUid) {
-  // This is a simplified approach — in production with many users,
+  // This is a simplified approach â in production with many users,
   // you'd want a stripeCustomerId index or lookup table.
   // For now, we search through the store's listUsers function.
   try {

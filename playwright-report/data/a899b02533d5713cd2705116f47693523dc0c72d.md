@@ -475,7 +475,7 @@
         - img [ref=e605]
         - text: Google Cloud Ready
       - heading "Deployment Ready out of Houston, TX" [level=2] [ref=e608]
-      - paragraph [ref=e609]: Cloud resources stay linked and validated so you can focus on production testing—no guessing whether the VM or database connections are live.
+      - paragraph [ref=e609]: Cloud resources stay linked and validated so you can focus on production testingâno guessing whether the VM or database connections are live.
       - generic [ref=e610]:
         - generic [ref=e611]:
           - img [ref=e612]
@@ -581,7 +581,7 @@
               - link "Cookie Policy" [ref=e729]:
                 - /url: /cookie-policy
       - generic [ref=e730]:
-        - paragraph [ref=e731]: © 2025 ChatScream. Based in Houston, TX. All rights reserved.
+        - paragraph [ref=e731]: Â© 2025 ChatScream. Based in Houston, TX. All rights reserved.
         - generic [ref=e732]:
           - link [ref=e733]:
             - /url: https://www.youtube.com

@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     build: {
-      // Content hash in ALL chunk filenames — guarantees no stale chunk collisions
+      // Content hash in ALL chunk filenames â guarantees no stale chunk collisions
       rollupOptions: {
         output: {
           entryFileNames: 'assets/[name]-[hash].js',
@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // NOTE: API keys removed — AI calls go through the server, not the client.
+      // NOTE: API keys removed â AI calls go through the server, not the client.
       // Backend API
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL || ''),
       'import.meta.env.VITE_FUNCTIONS_BASE_URL': JSON.stringify(env.VITE_FUNCTIONS_BASE_URL || ''),

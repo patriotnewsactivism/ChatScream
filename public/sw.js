@@ -1,4 +1,4 @@
-// ChatScream Service Worker v3 — NUCLEAR UNREGISTER
+// ChatScream Service Worker v3 â NUCLEAR UNREGISTER
 // Strategy: install immediately, activate immediately, nuke all caches, unregister.
 // Never navigate/reload clients. Never intercept fetch. Pure cleanup.
 
@@ -19,7 +19,7 @@ self.addEventListener('activate', (event) => {
       // 2. Claim all clients so we control them immediately
       await self.clients.claim();
 
-      // 3. Unregister self — we don't want a SW at all
+      // 3. Unregister self â we don't want a SW at all
       await self.registration.unregister();
 
       // 4. Tell each client to reload ONCE using a postMessage
@@ -32,4 +32,4 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Do NOT intercept fetch — we want the browser to go direct to network always
+// Do NOT intercept fetch â we want the browser to go direct to network always

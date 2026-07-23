@@ -1,4 +1,4 @@
-# ChatScream — Project Chapters
+# ChatScream â Project Chapters
 
 > Browser-based multi-streaming studio. Stream without limits. Scream for attention.
 > **Repo:** `patriotnewsactivism/ChatScream`
@@ -53,7 +53,7 @@
 
 | File | Purpose |
 |------|---------|
-| `contexts/AuthContext.tsx` | Auth state provider — login, logout, token management |
+| `contexts/AuthContext.tsx` | Auth state provider â login, logout, token management |
 | `pages/AuthPage.tsx` | Login/signup page |
 | `pages/OAuthCallback.tsx` | OAuth redirect handler |
 | `components/AuthStatusBanner.tsx` | Auth status indicator banner |
@@ -70,11 +70,11 @@
 
 ## Chapter 3: Streaming Engine & Pipeline
 
-**Goal:** Core streaming infrastructure — capture, encode, relay to multiple platforms.
+**Goal:** Core streaming infrastructure â capture, encode, relay to multiple platforms.
 
 | File | Purpose |
 |------|---------|
-| `services/streamingPipeline.ts` | Main pipeline — capture → encode → relay |
+| `services/streamingPipeline.ts` | Main pipeline â capture â encode â relay |
 | `services/RTMPSender.ts` | RTMP protocol sender to streaming platforms |
 | `services/cloudStreamingService.ts` | Cloud-based encoding and relay via AWS |
 | `services/bitrateAdaptation.ts` | Adaptive bitrate based on network conditions |
@@ -101,14 +101,14 @@
 
 | File | Purpose |
 |------|---------|
-| `components/CanvasCompositor.tsx` | Main canvas — composites video, overlays, graphics |
+| `components/CanvasCompositor.tsx` | Main canvas â composites video, overlays, graphics |
 | `components/ProgramPreview.tsx` | Live program output preview |
-| `components/SceneSelector.tsx` | Scene switching — different layouts and views |
+| `components/SceneSelector.tsx` | Scene switching â different layouts and views |
 | `components/LayoutSelector.tsx` | Choose stream layout (pip, side-by-side, etc.) |
 | `components/BackgroundSelector.tsx` | Virtual background selection |
 | `components/GraphicsOverlay.tsx` | Lower thirds, logos, text overlays |
-| `components/BrandingPanel.tsx` | Brand customization — colors, logos, watermarks |
-| `components/MediaBin.tsx` | Media asset library — images, videos, audio |
+| `components/BrandingPanel.tsx` | Brand customization â colors, logos, watermarks |
+| `components/MediaBin.tsx` | Media asset library â images, videos, audio |
 | `services/sceneManager.ts` | Scene state management and transitions |
 
 **Key Concepts:**
@@ -125,7 +125,7 @@
 
 | File | Purpose |
 |------|---------|
-| `hooks/useAudioPipeline.ts` | Web Audio API pipeline — mix, process, output |
+| `hooks/useAudioPipeline.ts` | Web Audio API pipeline â mix, process, output |
 | `components/AudioMixer.tsx` | Multi-channel audio mixer UI |
 | `components/MusicPlayer.tsx` | Background music player with volume control |
 
@@ -138,12 +138,12 @@
 
 ## Chapter 6: Chat Screamer & Donations
 
-**Goal:** The USP — donation-triggered overlays that demand attention.
+**Goal:** The USP â donation-triggered overlays that demand attention.
 
 | File | Purpose |
 |------|---------|
 | `components/ScreamDonation.tsx` | Scream donation UI and configuration |
-| `services/chatScreamer.ts` | Scream logic — tier detection, animation triggers |
+| `services/chatScreamer.ts` | Scream logic â tier detection, animation triggers |
 | `services/screamLeaderboard.ts` | Weekly leaderboard tracking |
 | `services/stripe.ts` | Stripe payment processing for donations |
 
@@ -188,7 +188,7 @@
 
 **Key Concepts:**
 - MediaRecorder API for browser-native recording
-- Rolling clip buffer — "clip that!" saves the last N seconds
+- Rolling clip buffer â "clip that!" saves the last N seconds
 - Local file download for recordings
 
 ---
@@ -220,7 +220,7 @@
 |------|---------|
 | `components/AnalyticsDashboard.tsx` | Overview analytics dashboard |
 | `components/StreamAnalyticsDashboard.tsx` | Per-stream analytics deep dive |
-| `pages/CreatorDashboard.tsx` | Creator home — stats, recent streams, quick actions |
+| `pages/CreatorDashboard.tsx` | Creator home â stats, recent streams, quick actions |
 | `components/BackendStatusCard.tsx` | Server/backend health status |
 
 **Key Concepts:**
@@ -236,7 +236,7 @@
 
 | File | Purpose |
 |------|---------|
-| `pages/GuestPage.tsx` | Guest join page — camera/mic check, enter stream |
+| `pages/GuestPage.tsx` | Guest join page â camera/mic check, enter stream |
 | `services/webrtcGuestService.ts` | WebRTC peer connection for guest video/audio |
 
 **Key Concepts:**
@@ -252,7 +252,7 @@
 
 | File | Purpose |
 |------|---------|
-| `pages/AdminPage.tsx` | Admin panel — user management, platform stats |
+| `pages/AdminPage.tsx` | Admin panel â user management, platform stats |
 
 ---
 
@@ -262,9 +262,9 @@
 
 | File | Purpose |
 |------|---------|
-| `server/index.js` | Server entry point — starts Express |
-| `server/app.js` | Express app setup — middleware, routes, CORS |
-| `server/ai.js` | AI endpoint — proxies requests to AI models |
+| `server/index.js` | Server entry point â starts Express |
+| `server/app.js` | Express app setup â middleware, routes, CORS |
+| `server/ai.js` | AI endpoint â proxies requests to AI models |
 | `server/auth/passwordReset.js` | Password reset flow |
 | `server/db/schema.js` | Database schema definition (Drizzle) |
 | `server/storage.js` | File/media storage management |
@@ -273,7 +273,7 @@
 | `server/railway.js` | Railway deployment helper |
 | `api/index.js` | Vercel API entry point |
 | `api/all.js` | Catch-all API routes for serverless |
-| `services/backend.ts` | Frontend → backend API client |
+| `services/backend.ts` | Frontend â backend API client |
 | `services/apiClient.ts` | HTTP client wrapper |
 | `services/env.ts` | Environment variable management |
 | `services/sanitize.ts` | Input sanitization utilities |
@@ -403,32 +403,32 @@
 ## Architecture Summary
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              Frontend (React + Vite)                 │
-│  ┌──────────┐  ┌──────────┐  ┌─────────────────┐   │
-│  │ Landing  │  │ Studio   │  │ Creator         │   │
-│  │ Pages    │  │ Canvas   │  │ Dashboard       │   │
-│  │ Ch. 15   │  │ Ch. 3-9  │  │ Ch. 10          │   │
-│  └──────────┘  └──────────┘  └─────────────────┘   │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────┼───────────────────────────────┐
-│         Backend API (Node.js/Express)                │
-│  ┌──────────┐  ┌──────────┐  ┌─────────────────┐   │
-│  │ Auth/    │  │ AI       │  │ Payments        │   │
-│  │ OAuth    │  │ Proxy    │  │ (Stripe)        │   │
-│  │ Ch. 2    │  │ Ch. 9,13 │  │ Ch. 6, 13       │   │
-│  └──────────┘  └──────────┘  └─────────────────┘   │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────┼───────────────────────────────┐
-│         Infrastructure (AWS + Docker)                │
-│  ┌──────────────────────────────────────────────┐   │
-│  │ EC2 Auto Scaling Workers (FFmpeg + RTMP)     │   │
-│  │ Postgres + pgvector                           │   │
-│  │ Ch. 14                                        │   │
-│  └──────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────┘
+âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â              Frontend (React + Vite)                 â
+â  ââââââââââââ  ââââââââââââ  âââââââââââââââââââ   â
+â  â Landing  â  â Studio   â  â Creator         â   â
+â  â Pages    â  â Canvas   â  â Dashboard       â   â
+â  â Ch. 15   â  â Ch. 3-9  â  â Ch. 10          â   â
+â  ââââââââââââ  ââââââââââââ  âââââââââââââââââââ   â
+âââââââââââââââââââââââ¬ââââââââââââââââââââââââââââââââ
+                      â
+âââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââ
+â         Backend API (Node.js/Express)                â
+â  ââââââââââââ  ââââââââââââ  âââââââââââââââââââ   â
+â  â Auth/    â  â AI       â  â Payments        â   â
+â  â OAuth    â  â Proxy    â  â (Stripe)        â   â
+â  â Ch. 2    â  â Ch. 9,13 â  â Ch. 6, 13       â   â
+â  ââââââââââââ  ââââââââââââ  âââââââââââââââââââ   â
+âââââââââââââââââââââââ¬ââââââââââââââââââââââââââââââââ
+                      â
+âââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââ
+â         Infrastructure (AWS + Docker)                â
+â  ââââââââââââââââââââââââââââââââââââââââââââââââ   â
+â  â EC2 Auto Scaling Workers (FFmpeg + RTMP)     â   â
+â  â Postgres + pgvector                           â   â
+â  â Ch. 14                                        â   â
+â  ââââââââââââââââââââââââââââââââââââââââââââââââ   â
+ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 ```
 
 ---

@@ -1,8 +1,8 @@
-# ChatScream — Full Feature Wiring Plan
+# ChatScream â Full Feature Wiring Plan
 
 ## Overview
 
-This plan covers wiring up every feature of ChatScream: the multi-platform streaming studio, ChatScream donation alerts, the creator dashboard, and backend production readiness. The codebase has extensive scaffolding but has gaps in missing API endpoints, inconsistent auth patterns, and no payment → scream processing pipeline.
+This plan covers wiring up every feature of ChatScream: the multi-platform streaming studio, ChatScream donation alerts, the creator dashboard, and backend production readiness. The codebase has extensive scaffolding but has gaps in missing API endpoints, inconsistent auth patterns, and no payment â scream processing pipeline.
 
 ---
 
@@ -31,9 +31,9 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 
 **Work:**
 
-- Add `GET /api/leaderboard` — returns current weekly leaderboard entries
-- Add `GET /api/leaderboard/stats` — returns stats for a given streamer
-- Add `POST /api/leaderboard/reset` (admin) — resets weekly leaderboard
+- Add `GET /api/leaderboard` â returns current weekly leaderboard entries
+- Add `GET /api/leaderboard/stats` â returns stats for a given streamer
+- Add `POST /api/leaderboard/reset` (admin) â resets weekly leaderboard
 - Wire to `server/store.js` `updateLeaderboardEntry`, `getWeeklyWinners`, `resetWeeklyLeaderboard`
 
 ### 1.3 Add Cloud Streaming Session Management
@@ -51,9 +51,9 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 
 **Work:**
 
-- Rename `onIdTokenChange` → `onAuthStateChange` in `backend.ts` to avoid confusion
+- Rename `onIdTokenChange` â `onAuthStateChange` in `backend.ts` to avoid confusion
 - Ensure `completeRedirectSignIn` is called from the `OAuthCallback` page properly
-- Test full OAuth redirect flow end-to-end: Google → YouTube → stream key
+- Test full OAuth redirect flow end-to-end: Google â YouTube â stream key
 
 ### 1.5 Add Missing CORS + Security Middleware
 
@@ -67,23 +67,23 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 
 ## Phase 2: Studio (App.tsx + components/)
 
-### 2.1 Fix Video Playback → Stream Compositing
+### 2.1 Fix Video Playback â Stream Compositing
 
 **Current behavior:** `CanvasCompositor` renders a hidden `mediaVideoRef.current` for `activeVideoUrl`. `VideoTransportBar` controls this element.
 
 **Issues found:**
 
-- `VideoTransportBar` calls `canvasRef.current?.getVideoElement()` which returns `mediaVideoRef.current` — correct
+- `VideoTransportBar` calls `canvasRef.current?.getVideoElement()` which returns `mediaVideoRef.current` â correct
 - But `mediaVideoRef.current` is created in `CanvasCompositor` as `document.createElement('video')`, and its `src` is set by `activeVideoUrl` prop via `useEffect`
 - Audio from video goes through `useAudioPipeline` which connects `videoElement` to the audio graph
 
 **Fixes needed:**
 
 - If `mediaVideoRef.current` isn't initialized yet when `VideoTransportBar` mounts, `duration` will be 0 and bar returns `null`. Add a retry/wait mechanism or pass `duration` as a separate prop.
-- Ensure video auto-play is permitted (user gesture requirement) — add a "Play video" button if auto-play fails
+- Ensure video auto-play is permitted (user gesture requirement) â add a "Play video" button if auto-play fails
 - When video ends, provide visual feedback and auto-loop or stop
 
-### 2.2 CanvasCompositor Scene Mode — Video Context Fix
+### 2.2 CanvasCompositor Scene Mode â Video Context Fix
 
 **Issue:** In Scene Mode (activeScene), video sources from `videoCacheRef` are drawn to canvas. These pre-loaded video elements don't get their volume controlled by `useAudioPipeline`.
 
@@ -99,7 +99,7 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 **Work:**
 
 - Share a single `AudioContext` (already done via `useAudioPipeline`'s `combinedStream`)
-- The program canvas output is what gets streamed — audio goes via `combinedStream` not from canvas capture
+- The program canvas output is what gets streamed â audio goes via `combinedStream` not from canvas capture
 - Verify this is correct: `handleBroadcast` uses `combinedStream` for audio, `canvasStream.getVideoTracks()` for video. This is correct.
 
 ### 2.4 Stream Transport Recording UI
@@ -167,7 +167,7 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 
 ### 3.3 Destination Status Cards
 
-**Current:** Shows static "Connected — channelName" or "Not connected" based on `connectedPlatforms` from profile.
+**Current:** Shows static "Connected â channelName" or "Not connected" based on `connectedPlatforms` from profile.
 
 **Work:**
 
@@ -271,19 +271,19 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 
 | Test                                           | What it covers      |
 | ---------------------------------------------- | ------------------- |
-| E2E: Sign up → create destination → go live    | Full streaming loop |
-| E2E: OAuth YouTube connect → fetch stream key  | OAuth integration   |
-| E2E: Send scream → webhook → overlay           | Scream payment flow |
+| E2E: Sign up â create destination â go live    | Full streaming loop |
+| E2E: OAuth YouTube connect â fetch stream key  | OAuth integration   |
+| E2E: Send scream â webhook â overlay           | Scream payment flow |
 | Component: CanvasCompositor renders with video | Studio rendering    |
 | Component: VideoTransportBar controls playback | Video playback      |
 
 ### 6.3 Manual Testing Checklist
 
-- [ ] Full OAuth flow: Google sign-in → YouTube channel picker → stream key
-- [ ] Test record → download via IndexedDB
-- [ ] Test multiview TAKE with video + camera → verify stream output
-- [ ] Test scream demo → verify canvas overlay and sound
+- [ ] Full OAuth flow: Google sign-in â YouTube channel picker â stream key
+- [ ] Test record â download via IndexedDB
+- [ ] Test multiview TAKE with video + camera â verify stream output
+- [ ] Test scream demo â verify canvas overlay and sound
 - [ ] Test mobile studio: camera flip, recording, PWA
 - [ ] Test guest camera invite via room ID
-- [ ] Test destination limit enforcement (add 2 destinations on free plan → should reject)
-- [ ] Test cloud hours cutoff (start cloud stream → hours exhausted → should auto-stop)
+- [ ] Test destination limit enforcement (add 2 destinations on free plan â should reject)
+- [ ] Test cloud hours cutoff (start cloud stream â hours exhausted â should auto-stop)

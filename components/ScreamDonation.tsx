@@ -1,10 +1,14 @@
+// components/ScreamDonation.tsx
 /**
- * ScreamDonation — Viewer-facing component for sending paid ChatScreams.
+ * ScreamDonation – Viewer-facing component for sending paid ChatScreams.
  *
- * This opens a Stripe Checkout session in "payment" mode so viewers can
+ * This component opens a Stripe Checkout session in "payment" mode so viewers can
  * donate to trigger an on-stream scream alert for the streamer.
  *
- * Usage: Embed on a streamer's public page or donation overlay URL.
+ * The component now handles loading and error states during checkout creation.
+ * It disables all form controls while a request is in flight to prevent duplicate
+ * submissions, shows a spinner on the submit button, and displays any error
+ * messages returned by the API.
  */
 import React, { useState } from 'react';
 import { Zap, DollarSign, MessageSquare, Loader2 } from 'lucide-react';
@@ -19,28 +23,28 @@ const SCREAM_TIERS = [
   {
     amount: 5,
     label: 'Scream',
-    emoji: '📢',
+    emoji: 'ð¢',
     color: 'from-blue-500 to-cyan-500',
     description: 'Basic alert',
   },
   {
     amount: 10,
     label: 'Loud Scream',
-    emoji: '🔊',
+    emoji: 'ð',
     color: 'from-orange-500 to-yellow-500',
     description: 'Louder + effects',
   },
   {
     amount: 25,
     label: 'Mega Scream',
-    emoji: '🎺',
+    emoji: 'ðº',
     color: 'from-red-500 to-pink-500',
     description: 'Full screen takeover',
   },
   {
     amount: 50,
     label: 'MAXIMUM SCREAM',
-    emoji: '🔥',
+    emoji: 'ð¥',
     color: 'from-red-600 to-orange-500',
     description: 'Legendary + TTS + screen shake',
   },
@@ -69,7 +73,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
       const successUrl = `${window.location.origin}/thank-you?streamer=${encodeURIComponent(streamerUid)}`;
       const cancelUrl = window.location.href;
 
-      const res = await fetch(buildApiUrl('/api/billing/chatscream'), {
+      const res = await fetch(buildApiUrl('/api/scream/checkout'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -85,12 +89,13 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to create checkout session');
+        throw new Error(data.message || data.error || 'Failed to create checkout session');
       }
 
-      // Redirect to Stripe Checkout
       if (data.url) {
         window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned from server');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -123,6 +128,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
               setSelectedAmount(tier.amount);
               setCustomAmount('');
             }}
+            disabled={isLoading}
             className={`p-3 rounded-xl border text-left transition-all ${
               !customAmount && selectedAmount === tier.amount
                 ? `bg-gradient-to-r ${tier.color} border-transparent text-white shadow-lg`
@@ -153,6 +159,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
             value={customAmount}
             onChange={(e) => setCustomAmount(e.target.value)}
             placeholder="5.00 minimum"
+            disabled={isLoading}
             className="w-full bg-dark-950 border border-gray-700 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-gray-600 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
           />
         </div>
@@ -166,6 +173,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
           onChange={(e) => setDonorName(e.target.value)}
           placeholder="Anonymous"
           maxLength={50}
+          disabled={isLoading}
           className="w-full bg-dark-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
         />
       </div>
@@ -182,6 +190,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
           placeholder="Type your message..."
           maxLength={300}
           rows={3}
+          disabled={isLoading}
           className="w-full bg-dark-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none resize-none"
         />
         <div className="text-right text-xs text-gray-600 mt-0.5">{message.length}/300</div>
@@ -202,10 +211,7 @@ const ScreamDonation: React.FC<ScreamDonationProps> = ({ streamerUid, streamerNa
         {isLoading ? (
           <Loader2 size={20} className="animate-spin" />
         ) : (
-          <>
-            <Zap size={20} />
-            Send ${effectiveAmount.toFixed(2)} ChatScream
-          </>
+          <> <Zap size={20} /> Send ${effectiveAmount.toFixed(2)} ChatScream </>
         )}
       </button>
 

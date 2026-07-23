@@ -1,5 +1,5 @@
 /**
- * useEvidenceMarkers — Timestamped evidence markers for field journalists.
+ * useEvidenceMarkers â Timestamped evidence markers for field journalists.
  *
  * Drop markers during a livestream to tag key moments (e.g., "Officer threatened arrest").
  * Export as a formatted evidence log with timestamps linked to recording time.
@@ -24,12 +24,12 @@ export interface EvidenceMarkersResult {
 }
 
 const QUICK_LABELS = [
-  '⚠️ Rights violation',
-  '🚔 Officer contact',
-  '📋 Badge/ID visible',
-  '🎤 Key statement',
-  '📍 Location change',
-  '⚖️ Unlawful order',
+  'â ï¸ Rights violation',
+  'ð Officer contact',
+  'ð Badge/ID visible',
+  'ð¤ Key statement',
+  'ð Location change',
+  'âï¸ Unlawful order',
 ];
 
 export const useEvidenceMarkers = (streamDuration: number): EvidenceMarkersResult => {
@@ -40,7 +40,7 @@ export const useEvidenceMarkers = (streamDuration: number): EvidenceMarkersResul
       const marker: EvidenceMarker = {
         id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         timestamp: streamDuration,
-        label: label || '📌 Marker',
+        label: label || 'ð Marker',
         createdAt: new Date(),
       };
       setMarkers((prev) => [...prev, marker]);
@@ -66,8 +66,8 @@ export const useEvidenceMarkers = (streamDuration: number): EvidenceMarkersResul
   const exportLog = useCallback((): string => {
     if (markers.length === 0) return 'No evidence markers recorded.';
 
-    const header = `EVIDENCE LOG — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
-    const divider = '─'.repeat(60) + '\n';
+    const header = `EVIDENCE LOG â ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+    const divider = 'â'.repeat(60) + '\n';
     const lines = markers.map(
       (m, i) =>
         `${(i + 1).toString().padStart(3, ' ')}. [${formatTimestamp(m.timestamp)}] ${m.label}\n     Recorded: ${m.createdAt.toLocaleTimeString()}`,

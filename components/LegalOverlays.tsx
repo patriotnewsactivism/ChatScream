@@ -1,5 +1,5 @@
 /**
- * LegalOverlays — Pre-built "Know Your Rights" lower-third citation library.
+ * LegalOverlays â Pre-built "Know Your Rights" lower-third citation library.
  *
  * One-tap citation popups for First Amendment auditors and civil rights journalists.
  * Each overlay shows on the stream canvas as a lower-third graphic.
@@ -18,14 +18,14 @@ export interface LegalCitation {
 }
 
 export const LEGAL_CITATIONS: LegalCitation[] = [
-  // First Amendment — Speech & Expression
+  // First Amendment â Speech & Expression
   {
     id: 'reed-v-gilbert',
     category: 'Free Speech',
     shortTitle: 'Content-Based Restrictions',
     citation: 'Reed v. Town of Gilbert, 576 U.S. 155 (2015)',
     summary: 'Content-based restrictions on speech are presumptively unconstitutional and subject to strict scrutiny.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
   {
     id: 'norton-v-springfield',
@@ -33,7 +33,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Panhandling is Protected Speech',
     citation: 'Norton v. City of Springfield, 806 F.3d 411 (7th Cir. 2015)',
     summary: 'Panhandling is protected speech under the First Amendment. Cities cannot ban peaceful solicitation.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
   {
     id: 'speet-v-schuette',
@@ -41,7 +41,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Begging as Free Speech',
     citation: 'Speet v. Schuette, 726 F.3d 867 (6th Cir. 2013)',
     summary: 'Begging is a form of protected speech. Anti-begging statutes violate the First Amendment.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
   {
     id: 'loper-v-nypd',
@@ -49,7 +49,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Begging Cannot Be Criminalized',
     citation: 'Loper v. New York City Police Dept., 999 F.2d 699 (2d Cir. 1993)',
     summary: 'Begging and panhandling in public spaces is constitutionally protected expressive conduct.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
   {
     id: 'schaumburg-v-citizens',
@@ -57,7 +57,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Charitable Solicitation',
     citation: 'Village of Schaumburg v. Citizens for a Better Environment, 444 U.S. 620 (1980)',
     summary: 'Charitable solicitation is protected speech. Broad restrictions on door-to-door solicitation are unconstitutional.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
   {
     id: 'mccullen-v-coakley',
@@ -65,17 +65,17 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Buffer Zones & Free Speech',
     citation: 'McCullen v. Coakley, 573 U.S. 464 (2014)',
     summary: 'Buffer zones restricting speech on public sidewalks must be narrowly tailored to serve a significant government interest.',
-    icon: '🗣️',
+    icon: 'ð£ï¸',
   },
 
-  // First Amendment — Recording & Press
+  // First Amendment â Recording & Press
   {
     id: 'glik-v-cunniffe',
     category: 'Recording Rights',
     shortTitle: 'Right to Record Police',
     citation: 'Glik v. Cunniffe, 655 F.3d 78 (1st Cir. 2011)',
     summary: 'Citizens have a First Amendment right to record police officers performing duties in public.',
-    icon: '📹',
+    icon: 'ð¹',
   },
   {
     id: 'turner-v-driver',
@@ -83,7 +83,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Recording Police (5th Cir.)',
     citation: 'Turner v. Driver, 848 F.3d 678 (5th Cir. 2017)',
     summary: 'The First Amendment protects the right to record police performing official duties in public places.',
-    icon: '📹',
+    icon: 'ð¹',
   },
   {
     id: 'fields-v-philly',
@@ -91,7 +91,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Recording Police (3rd Cir.)',
     citation: 'Fields v. City of Philadelphia, 862 F.3d 353 (3rd Cir. 2017)',
     summary: 'Recording police activity in public is protected by the First Amendment, even without expressive intent.',
-    icon: '📹',
+    icon: 'ð¹',
   },
   {
     id: 'aclu-v-alvarez',
@@ -99,17 +99,17 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Audio Recording of Police',
     citation: 'ACLU of Illinois v. Alvarez, 679 F.3d 583 (7th Cir. 2012)',
     summary: 'Eavesdropping laws cannot be used to criminalize audio recording of police performing duties in public.',
-    icon: '📹',
+    icon: 'ð¹',
   },
 
-  // Fourth Amendment — Search & Seizure
+  // Fourth Amendment â Search & Seizure
   {
     id: 'terry-v-ohio',
     category: 'Search & Seizure',
     shortTitle: 'Stop & Frisk Standards',
     citation: 'Terry v. Ohio, 392 U.S. 1 (1968)',
     summary: 'Police need reasonable suspicion of criminal activity to briefly detain a person. A "hunch" is not enough.',
-    icon: '🔍',
+    icon: 'ð',
   },
   {
     id: 'florida-v-bostick',
@@ -117,17 +117,17 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Consensual Encounters',
     citation: 'Florida v. Bostick, 501 U.S. 429 (1991)',
     summary: 'A police encounter is consensual if a reasonable person would feel free to decline and walk away.',
-    icon: '🔍',
+    icon: 'ð',
   },
 
-  // Civil Rights — Section 1983
+  // Civil Rights â Section 1983
   {
     id: 'monell-v-nyc',
     category: 'Civil Rights',
     shortTitle: 'Municipal Liability',
     citation: 'Monell v. Dept. of Social Services, 436 U.S. 658 (1978)',
-    summary: 'Cities can be sued under §1983 when their official policies or customs cause constitutional violations.',
-    icon: '⚖️',
+    summary: 'Cities can be sued under Â§1983 when their official policies or customs cause constitutional violations.',
+    icon: 'âï¸',
   },
   {
     id: 'bivens-v-agents',
@@ -135,7 +135,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Federal Agent Liability',
     citation: 'Bivens v. Six Unknown Named Agents, 403 U.S. 388 (1971)',
     summary: 'Federal agents can be sued personally for violating constitutional rights.',
-    icon: '⚖️',
+    icon: 'âï¸',
   },
 
   // Supremacy Clause
@@ -145,7 +145,7 @@ export const LEGAL_CITATIONS: LegalCitation[] = [
     shortTitle: 'Supremacy Clause',
     citation: 'U.S. Constitution, Article VI, Clause 2',
     summary: 'Federal law and the Constitution are the supreme law of the land. No state or local law can override them.',
-    icon: '🏛️',
+    icon: 'ðï¸',
   },
 ];
 

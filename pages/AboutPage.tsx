@@ -20,7 +20,7 @@ const AboutPage: FC = () => {
             <h2 className="text-xl font-semibold text-white mb-3">Our Mission</h2>
             <p className="text-gray-300">
               Make live video accessible to every creator, anywhere. We obsess over reliability,
-              simplicity, and expressive tools that let you focus on content—not wiring.
+              simplicity, and expressive tools that let you focus on contentânot wiring.
             </p>
           </div>
           <div className="p-6 rounded-2xl border border-gray-800 bg-dark-800/80">

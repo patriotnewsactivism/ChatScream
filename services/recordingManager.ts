@@ -87,7 +87,7 @@ export class RecordingManager {
     }
 
     try {
-      console.log('🔴 Starting recording:', title);
+      console.log('ð´ Starting recording:', title);
 
       const recordingId = `rec_${Date.now()}`;
       const recording: Recording = {
@@ -123,10 +123,10 @@ export class RecordingManager {
         this.updateRecordingProgress(recordingId);
       }, 1000);
 
-      console.log('✅ Recording started:', recordingId);
+      console.log('â Recording started:', recordingId);
       return { success: true, recordingId };
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
+      console.error('â Failed to start recording:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to start recording',
@@ -184,7 +184,7 @@ export class RecordingManager {
     recording.duration = Math.floor((Date.now() - recording.startTime.getTime()) / 1000);
 
     if (this.config.autoSplitDuration && recording.duration >= this.config.autoSplitDuration) {
-      console.log('⏱️ Auto-splitting recording due to duration limit');
+      console.log('â±ï¸ Auto-splitting recording due to duration limit');
       void this.stopRecording(recordingId);
     }
 
@@ -192,7 +192,7 @@ export class RecordingManager {
       this.config.autoSplitSize &&
       recording.fileSize >= this.config.autoSplitSize * 1024 * 1024
     ) {
-      console.log('💾 Auto-splitting recording due to file size limit');
+      console.log('ð¾ Auto-splitting recording due to file size limit');
       void this.stopRecording(recordingId);
     }
   }
@@ -213,7 +213,7 @@ export class RecordingManager {
     }
 
     try {
-      console.log('⏹️ Stopping recording:', targetId);
+      console.log('â¹ï¸ Stopping recording:', targetId);
 
       if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
         this.mediaRecorder.stop();
@@ -228,10 +228,10 @@ export class RecordingManager {
       recording.status = 'processing';
       this.activeRecording = null;
 
-      console.log('✅ Recording stopped:', targetId);
+      console.log('â Recording stopped:', targetId);
       return { success: true, recording };
     } catch (error) {
-      console.error('❌ Failed to stop recording:', error);
+      console.error('â Failed to stop recording:', error);
       recording.status = 'failed';
       return {
         success: false,
@@ -244,7 +244,7 @@ export class RecordingManager {
     const recording = this.recordings.get(recordingId);
     if (!recording) return;
 
-    console.log('📦 Finalizing recording:', recordingId);
+    console.log('ð¦ Finalizing recording:', recordingId);
 
     try {
       const blob = new Blob(this.recordedChunks, {
@@ -262,9 +262,9 @@ export class RecordingManager {
       }
 
       recording.status = 'completed';
-      console.log('✅ Recording finalized:', recordingId);
+      console.log('â Recording finalized:', recordingId);
     } catch (error) {
-      console.error('❌ Failed to finalize recording:', error);
+      console.error('â Failed to finalize recording:', error);
       recording.status = 'failed';
     }
 
@@ -272,7 +272,7 @@ export class RecordingManager {
   }
 
   private async saveToLocal(blob: Blob, recording: Recording): Promise<void> {
-    console.log('💾 Saving recording to local storage...');
+    console.log('ð¾ Saving recording to local storage...');
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -287,11 +287,11 @@ export class RecordingManager {
       URL.revokeObjectURL(url);
     }, 100);
 
-    console.log('✅ Recording saved locally');
+    console.log('â Recording saved locally');
   }
 
   private async uploadToCloud(blob: Blob, recording: Recording): Promise<void> {
-    console.log('☁️ Uploading recording to cloud storage...');
+    console.log('âï¸ Uploading recording to cloud storage...');
 
     const formData = new FormData();
     formData.append('file', blob, `${recording.id}.${this.config.format}`);
@@ -308,7 +308,7 @@ export class RecordingManager {
     recording.storageUrl = `https://storage.chatscream.com/recordings/${recording.userId}/${recording.id}.${this.config.format}`;
     recording.thumbnailUrl = `https://storage.chatscream.com/thumbnails/${recording.userId}/${recording.id}.jpg`;
 
-    console.log('✅ Recording uploaded to cloud');
+    console.log('â Recording uploaded to cloud');
   }
 
   public getRecording(recordingId: string): Recording | null {
@@ -338,13 +338,13 @@ export class RecordingManager {
     }
 
     this.recordings.delete(recordingId);
-    console.log('🗑️ Recording deleted:', recordingId);
+    console.log('ðï¸ Recording deleted:', recordingId);
     return { success: true };
   }
 
   public updateConfig(config: Partial<RecordingConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('⚙️ Recording config updated');
+    console.log('âï¸ Recording config updated');
   }
 
   public getConfig(): RecordingConfig {

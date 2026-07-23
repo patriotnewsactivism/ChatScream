@@ -89,11 +89,11 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// âââ helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const isMobileViewport = () => window.innerWidth < 768;
 
-// ─── component ──────────────────────────────────────────────────────────────
+// âââ component ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const App: FC = () => {
   const navigate = useNavigate();
@@ -127,7 +127,7 @@ const App: FC = () => {
   // Graphics/scoreboard overlay state
   const [graphicsState, setGraphicsState] = useState<GraphicsState>(defaultGraphicsState);
 
-  // Resource guard — protects phones from freezing
+  // Resource guard â protects phones from freezing
   const resourceGuard = useResourceGuard(true);
 
   // canvas / media state
@@ -199,7 +199,7 @@ const App: FC = () => {
   const [screamDemoName, setScreamDemoName] = useState('');
   const [screamDemoAmount, setScreamDemoAmount] = useState('50');
 
-  // ── WebSocket scream room: listen for real donation alerts ────────────────
+  // ââ WebSocket scream room: listen for real donation alerts ââââââââââââââââ
   const screamWsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -233,7 +233,7 @@ const App: FC = () => {
             }
           }
         } catch {
-          // Bad message — ignore
+          // Bad message â ignore
         }
       };
 
@@ -296,7 +296,7 @@ const App: FC = () => {
     initAudio();
   }, [initAudio]);
 
-  // ── media fetch ────────────────────────────────────────────────────────────
+  // ââ media fetch ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const fetchMedia = useCallback(async () => {
     try {
@@ -317,7 +317,7 @@ const App: FC = () => {
     fetchMedia();
   }, [fetchMedia]);
 
-  // ── guest host service ─────────────────────────────────────────────────────
+  // ââ guest host service âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   useEffect(() => {
     const svc = new GuestHostService(
@@ -337,7 +337,7 @@ const App: FC = () => {
     setTimeout(() => setInviteCopied(false), 2500);
   };
 
-  // ── scream handler ─────────────────────────────────────────────────────────
+  // ââ scream handler âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const triggerScream = (donor: string, amount: number, message: string) => {
     const scream = createScreamAlert(donor, amount, message, user?.uid || 'demo');
@@ -348,7 +348,7 @@ const App: FC = () => {
     }
   };
 
-  // ── media actions ──────────────────────────────────────────────────────────
+  // ââ media actions ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   // Track local object URLs so we can revoke them on cleanup
   const localObjectUrlsRef = useRef<Map<string, string>>(new Map());
@@ -361,7 +361,7 @@ const App: FC = () => {
   }, []);
 
   const handleMediaUpload = async (file: File, type: MediaType) => {
-    // For video and audio: play locally from device — no upload needed.
+    // For video and audio: play locally from device â no upload needed.
     // This avoids uploading large files during a live stream.
     if (type === 'video' || type === 'audio') {
       const localUrl = URL.createObjectURL(file);
@@ -429,7 +429,7 @@ const App: FC = () => {
       setActiveAudioId(null);
     }
 
-    // If it's a local object URL, just revoke and remove — no server call
+    // If it's a local object URL, just revoke and remove â no server call
     const localUrl = localObjectUrlsRef.current.get(id);
     if (localUrl) {
       URL.revokeObjectURL(localUrl);
@@ -468,7 +468,7 @@ const App: FC = () => {
     }
   };
 
-  // ── camera / screen ────────────────────────────────────────────────────────
+  // ââ camera / screen ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const toggleCamera = async () => {
     if (cameraStream) {
@@ -523,7 +523,7 @@ const App: FC = () => {
     }
   };
 
-  // ── clip buffer ────────────────────────────────────────────────────────────
+  // ââ clip buffer ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   useEffect(() => {
     const canvasStream = canvasRef.current?.getStream();
@@ -540,20 +540,20 @@ const App: FC = () => {
 
   const saveClip = () => {
     if (!clipBufferRef.current?.hasData) {
-      setMobileTip('No clip data yet — start your camera first');
+      setMobileTip('No clip data yet â start your camera first');
       return;
     }
     clipBufferRef.current.saveClip();
   };
 
-  // ── broadcast / recording ──────────────────────────────────────────────────
+  // ââ broadcast / recording ââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const handleBroadcast = async () => {
     if (appState.isStreaming) {
       await rtmpSenderRef.current?.disconnect();
       setAppState((prev) => ({ ...prev, isStreaming: false, streamDuration: 0 }));
     } else {
-      // ── Pre-flight checks ──────────────────────────────────────────────
+      // ââ Pre-flight checks ââââââââââââââââââââââââââââââââââââââââââââââ
       const enabledDests = destinations.filter((d) => d.isEnabled);
       if (enabledDests.length === 0) {
         return alert(
@@ -585,7 +585,7 @@ const App: FC = () => {
       const canvasStream = canvasRef.current?.getStream();
       if (!canvasStream)
         return alert(
-          'Media not ready — no video source. Enable your camera or share your screen first.',
+          'Media not ready â no video source. Enable your camera or share your screen first.',
         );
 
       // Build output: video always required, audio optional
@@ -593,7 +593,7 @@ const App: FC = () => {
       if (combinedStream && combinedStream.getAudioTracks().length > 0) {
         tracks.push(...combinedStream.getAudioTracks());
       } else {
-        console.warn('⚠️ No audio tracks available — streaming video-only');
+        console.warn('â ï¸ No audio tracks available â streaming video-only');
       }
       const outputStream = new MediaStream(tracks);
 
@@ -630,7 +630,7 @@ const App: FC = () => {
     } else {
       // Safety check for low-memory devices
       if (!resourceGuard.safeToEnable('recording')) {
-        setMobileTip('⚠️ Device memory too low to record safely. Close other apps and try again.');
+        setMobileTip('â ï¸ Device memory too low to record safely. Close other apps and try again.');
         return;
       }
       // Ensure audio pipeline is initialized
@@ -647,7 +647,7 @@ const App: FC = () => {
     }
   };
 
-  // ── stream duration timer ──────────────────────────────────────────────────
+  // ââ stream duration timer ââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   useEffect(() => {
     let interval: any;
@@ -674,7 +674,7 @@ const App: FC = () => {
       streamTranscript.startCapture();
       if (captionsOn) streamTranscript.clearTranscript();
 
-      // Start live chat aggregation — fetch credentials from server
+      // Start live chat aggregation â fetch credentials from server
       const facebookDest = destinations.find((d) => d.platform === Platform.FACEBOOK && d.isEnabled);
       const facebookLiveVideoId = facebookDest?.liveVideoId || '';
       const params = facebookLiveVideoId
@@ -757,7 +757,7 @@ const App: FC = () => {
       .padStart(2, '0')}`;
   };
 
-  // ── keyboard shortcuts ─────────────────────────────────────────────────────
+  // ââ keyboard shortcuts âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   useKeyboardShortcuts({
     onToggleLive: handleBroadcast,
@@ -774,16 +774,16 @@ const App: FC = () => {
     },
   });
 
-  // ── shared canvas preview + overlay ───────────────────────────────────────
+  // ââ shared canvas preview + overlay âââââââââââââââââââââââââââââââââââââââ
 
-  // Multiview TAKE handler — pushes preview layout → program (live)
+  // Multiview TAKE handler â pushes preview layout â program (live)
   const handleMultiviewTake = useCallback((newLayout: LayoutMode, newScene: Scene | null) => {
     setLayout(newLayout);
     setActiveScene(newScene);
   }, []);
 
   const canvasPreview = multiviewEnabled ? (
-    // ── Switcher-style Program / Preview split ──
+    // ââ Switcher-style Program / Preview split ââ
     <div className="w-full space-y-2">
       <ProgramPreview
         programLayout={layout}
@@ -854,7 +854,7 @@ const App: FC = () => {
         <button
           onClick={() => setCanvasResolution((r) => (r === '720p' ? '1080p' : '720p'))}
           className="px-2 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-[11px] font-bold tabular-nums min-w-[44px] text-center transition-colors"
-          title={`Canvas output: ${canvasResolution} — click to toggle`}
+          title={`Canvas output: ${canvasResolution} â click to toggle`}
         >
           {canvasResolution}
         </button>
@@ -891,7 +891,7 @@ const App: FC = () => {
       </div>
     </div>
   ) : (
-    // ── Single canvas (original behavior) ──
+    // ââ Single canvas (original behavior) ââ
     <div
       className={`relative w-full ${isMobile ? 'shrink-0' : ''}`}
       style={{ aspectRatio: '16/9', maxHeight: isMobile ? '45vh' : undefined }}
@@ -956,7 +956,7 @@ const App: FC = () => {
           {cameraStream ? <Video size={18} /> : <VideoOff size={18} />}
         </button>
 
-        {/* Camera swap (front/back) + mirror toggle — always visible when camera active */}
+        {/* Camera swap (front/back) + mirror toggle â always visible when camera active */}
         {cameraStream && (
           <>
             <button
@@ -997,7 +997,7 @@ const App: FC = () => {
         <button
           onClick={() => setCanvasResolution((r) => (r === '720p' ? '1080p' : '720p'))}
           className="px-2 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-[11px] font-bold tabular-nums min-w-[44px] text-center transition-colors"
-          title={`Canvas output: ${canvasResolution} — click to toggle`}
+          title={`Canvas output: ${canvasResolution} â click to toggle`}
         >
           {canvasResolution}
         </button>
@@ -1046,7 +1046,7 @@ const App: FC = () => {
     </div>
   );
 
-  // ── guest invite modal ─────────────────────────────────────────────────────
+  // ââ guest invite modal âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const guestInviteModal = showGuestInvite && (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1061,7 +1061,7 @@ const App: FC = () => {
           </button>
         </div>
         <p className="text-sm text-gray-400 mb-4">
-          Share this link with your guest. They can join from any browser — no app needed.
+          Share this link with your guest. They can join from any browser â no app needed.
         </p>
         <div className="flex gap-2 mb-4">
           <input
@@ -1091,7 +1091,7 @@ const App: FC = () => {
     </div>
   );
 
-  // ── recording stop confirmation ──────────────────────────────────────────
+  // ââ recording stop confirmation ââââââââââââââââââââââââââââââââââââââââââ
   const recordingStopModal = showRecordingStopConfirm && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="bg-dark-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm mx-4">
@@ -1130,7 +1130,7 @@ const App: FC = () => {
     </div>
   );
 
-  // ── scream demo modal ─────────────────────────────────────────────────────
+  // ââ scream demo modal âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const screamDemoModal = showScreamDemo && (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1185,13 +1185,13 @@ const App: FC = () => {
           }}
           className="w-full py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-500 hover:to-orange-400 font-semibold text-white transition-all"
         >
-          Fire Scream 🔥
+          Fire Scream ð¥
         </button>
       </div>
     </div>
   );
 
-  // ── mobile tip toast ───────────────────────────────────────────────────────
+  // ââ mobile tip toast âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const mobileTipToast = mobileTip && (
     <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-dark-800 border border-gray-700 text-sm text-white px-4 py-2 rounded-full shadow-xl z-40 pointer-events-none">
@@ -1199,7 +1199,7 @@ const App: FC = () => {
     </div>
   );
 
-  // ── tab content ────────────────────────────────────────────────────────────
+  // ââ tab content ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const studioTabContent = (
     <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
@@ -1238,12 +1238,12 @@ const App: FC = () => {
       )}
 
       <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-        {/* Resource health bar — shows device status on all devices */}
+        {/* Resource health bar â shows device status on all devices */}
         <ResourceHealthBar snapshot={resourceGuard} compact={isMobile} />
 
         {canvasPreview}
 
-        {/* Video transport bar — seek, play/pause, volume for static video */}
+        {/* Video transport bar â seek, play/pause, volume for static video */}
         {activeVideoUrl && (
           <VideoTransportBar
             videoElement={canvasRef.current?.getVideoElement() ?? null}
@@ -1269,7 +1269,7 @@ const App: FC = () => {
               :{(localRecording.duration % 60).toString().padStart(2, '0')}
             </span>
             <span className="text-[10px] text-gray-500">
-              {localRecording.chunkCount} chunks · {localRecording.totalSizeMB} MB ·{' '}
+              {localRecording.chunkCount} chunks Â· {localRecording.totalSizeMB} MB Â·{' '}
               {localRecording.currentQuality}
             </span>
             {localRecording.isPaused && (
@@ -1289,7 +1289,7 @@ const App: FC = () => {
         {isMobile ? (
           // Mobile: simplified one-thumb field studio
           <div className="space-y-3 px-1">
-            {/* Primary action buttons — big, finger-friendly */}
+            {/* Primary action buttons â big, finger-friendly */}
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={toggleCamera}
@@ -1351,7 +1351,7 @@ const App: FC = () => {
               {showMobileDrawer ? 'Hide advanced' : 'More controls'}
             </button>
 
-            {/* Slide-up drawer — advanced controls */}
+            {/* Slide-up drawer â advanced controls */}
             {showMobileDrawer && (
               <div className="space-y-4 bg-dark-900 border border-gray-700 rounded-xl p-3 animate-fade-in">
                 <div className="flex items-center gap-2">
@@ -1359,7 +1359,7 @@ const App: FC = () => {
                   <button
                     onClick={() => {
                       if (!multiviewEnabled && !resourceGuard.safeToEnable('multiview')) {
-                        setMobileTip('⚠️ Not enough memory for multiview. Close other apps.');
+                        setMobileTip('â ï¸ Not enough memory for multiview. Close other apps.');
                         return;
                       }
                       setMultiviewEnabled((v) => !v);
@@ -1474,11 +1474,11 @@ const App: FC = () => {
     </div>
   );
 
-  // ── render ─────────────────────────────────────────────────────────────────
+  // ââ render âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   return (
     <div className="flex flex-col h-screen bg-dark-950 text-white overflow-hidden">
-      {/* ── header ── */}
+      {/* ââ header ââ */}
       <header className="flex items-center justify-between px-4 py-2 bg-dark-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -1514,7 +1514,7 @@ const App: FC = () => {
                           ? 'bg-red-900/40 border-red-500/40 text-red-300'
                           : 'bg-gray-800 border-gray-700 text-gray-500'
                       }`}
-                      title={`${d.platform}${d.name ? ` — ${d.name}` : ''}: ${d.status}`}
+                      title={`${d.platform}${d.name ? ` â ${d.name}` : ''}: ${d.status}`}
                     >
                       <div
                         className={`w-1.5 h-1.5 rounded-full ${
@@ -1628,7 +1628,7 @@ const App: FC = () => {
 
       <AuthStatusBanner />
 
-      {/* ── main body ── */}
+      {/* ââ main body ââ */}
       <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
         {/* Desktop: left sidebar nav */}
         {!isMobile && (

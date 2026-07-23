@@ -101,7 +101,7 @@ const CreatorDashboard: React.FC = () => {
         if (leaderboardResult.status === 'fulfilled') setLeaderboardStats(leaderboardResult.value);
         if (scheduleResult.status === 'fulfilled') setSchedules(scheduleResult.value);
       } catch {
-        // Silently handle — dashboard shows defaults
+        // Silently handle â dashboard shows defaults
       } finally {
         setLoadingData(false);
       }
@@ -136,7 +136,7 @@ const CreatorDashboard: React.FC = () => {
       name: 'YouTube',
       platform: Platform.YOUTUBE,
       status: connected.youtube?.channelName
-        ? `Connected — ${connected.youtube.channelName}`
+        ? `Connected â ${connected.youtube.channelName}`
         : 'Not connected',
       isConnected: Boolean(connected.youtube),
     },
@@ -144,7 +144,7 @@ const CreatorDashboard: React.FC = () => {
       name: 'Facebook Live',
       platform: Platform.FACEBOOK,
       status: connected.facebook?.pageName
-        ? `Connected — ${connected.facebook.pageName}`
+        ? `Connected â ${connected.facebook.pageName}`
         : 'Not connected',
       isConnected: Boolean(connected.facebook),
     },
@@ -152,7 +152,7 @@ const CreatorDashboard: React.FC = () => {
       name: 'Twitch',
       platform: Platform.TWITCH,
       status: connected.twitch?.channelName
-        ? `Connected — ${connected.twitch.channelName}`
+        ? `Connected â ${connected.twitch.channelName}`
         : 'Not connected',
       isConnected: Boolean(connected.twitch),
     },
@@ -255,7 +255,7 @@ const CreatorDashboard: React.FC = () => {
               <Sparkles size={16} />
               <span className="text-sm font-semibold">Screams received</span>
             </div>
-            <p className="text-2xl font-bold">{analytics ? analytics.totalScreams : '—'}</p>
+            <p className="text-2xl font-bold">{analytics ? analytics.totalScreams : 'â'}</p>
             {analytics && analytics.totalDonations > 0 && (
               <p className="text-xs text-emerald-400">
                 ${analytics.totalDonations.toFixed(2)} in donations
@@ -303,13 +303,13 @@ const CreatorDashboard: React.FC = () => {
             <div className="md:col-span-1">
               <div className="text-[11px] uppercase font-bold text-gray-400">Code</div>
               <div className="mt-2 px-3 py-2 rounded-lg bg-dark-900 border border-gray-700 text-sm text-white break-all">
-                {referralCode || 'Generating…'}
+                {referralCode || 'Generatingâ¦'}
               </div>
             </div>
             <div className="md:col-span-2">
               <div className="text-[11px] uppercase font-bold text-gray-400">Link</div>
               <div className="mt-2 px-3 py-2 rounded-lg bg-dark-900 border border-gray-700 text-sm text-white break-all">
-                {referralLink || 'Generating…'}
+                {referralLink || 'Generatingâ¦'}
               </div>
             </div>
           </div>
@@ -354,7 +354,7 @@ const CreatorDashboard: React.FC = () => {
                       <div className="mt-2 flex items-center gap-2 text-xs text-gray-300">
                         <Clock size={14} />{' '}
                         {s.platforms.length > 0 ? s.platforms.join(' + ') : 'No platforms set'}
-                        {s.autoStart && <span className="text-brand-400">· Auto-start</span>}
+                        {s.autoStart && <span className="text-brand-400">Â· Auto-start</span>}
                       </div>
                     </div>
                   ))
@@ -376,7 +376,7 @@ const CreatorDashboard: React.FC = () => {
                 <h2 className="font-semibold">Templates & chat settings</h2>
               </div>
               <p className="text-sm text-gray-300 mb-3">
-                Save overlays, chat moderation defaults, and payout routing in one place—just like
+                Save overlays, chat moderation defaults, and payout routing in one placeâjust like
                 Streamlabs or Streamyard.
               </p>
               <div className="flex flex-wrap gap-2">
@@ -555,8 +555,8 @@ const CreatorDashboard: React.FC = () => {
                 >
                   <ArrowUpRight size={15} />
                   {upgrading
-                    ? 'Redirecting…'
-                    : `Upgrade to ${nextPlan.name} — $${nextPlan.price}/mo`}
+                    ? 'Redirectingâ¦'
+                    : `Upgrade to ${nextPlan.name} â $${nextPlan.price}/mo`}
                 </button>
               </div>
             )}

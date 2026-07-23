@@ -1,5 +1,5 @@
 /**
- * ScreamOverlay — HTML/CSS-based scream donation animation overlay.
+ * ScreamOverlay â HTML/CSS-based scream donation animation overlay.
  *
  * Replaces the old canvas-based scream rendering with performant CSS keyframe
  * animations. Uses the ScreamTier config from stripe.ts for visual properties.

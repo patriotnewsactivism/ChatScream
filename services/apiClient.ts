@@ -1,10 +1,10 @@
-export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+import { ApiRequestError } from './apiClient';
 
-export interface ApiRequestOptions {
-  method?: ApiMethod;
-  body?: unknown;
-  token?: string | null;
+interface ApiRequestOptions {
+  method?: string;
   headers?: Record<string, string>;
+  body?: unknown;
+  token?: string;
   credentials?: RequestCredentials;
 }
 
@@ -20,7 +20,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+const trimTrailingSlash = (value: string) => value.replace(//+$/, '');
 
 const canUseApiSubdomainFallback = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -181,4 +181,12 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
   }
 
   throw (lastError as Error) || new Error('Request failed.');
+};
+
+export const getUserSession = async (token: string) => {
+  return await apiRequest('/api/user/session', { method: 'GET', token });
+};
+
+export const saveUserSession = async (sessionData: any, token: string) => {
+  return await apiRequest('/api/user/session', { method: 'POST', body: sessionData, token });
 };

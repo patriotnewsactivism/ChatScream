@@ -56,7 +56,7 @@ export class StreamingPipeline {
 
   constructor(onStateChange?: (state: PipelineState) => void) {
     this.onStateChange = onStateChange || null;
-    console.log('🏗️ StreamingPipeline initialized');
+    console.log('ðï¸ StreamingPipeline initialized');
   }
 
   /**
@@ -64,7 +64,7 @@ export class StreamingPipeline {
    * Validates plan limits and prepares stream
    */
   public async initialize(config: StreamingPipelineConfig): Promise<void> {
-    console.log(`🔧 Initializing ${config.mode} streaming pipeline...`);
+    console.log(`ð§ Initializing ${config.mode} streaming pipeline...`);
 
     this.updateState({ status: 'initializing' });
 
@@ -85,7 +85,7 @@ export class StreamingPipeline {
         this.watermarkedStream = await this.applyWatermark(config.stream);
         this.stream = this.watermarkedStream;
         this.updateState({ hasWatermark: true });
-        console.log('🏷️ Watermark applied to stream');
+        console.log('ð·ï¸ Watermark applied to stream');
       } else {
         this.stream = config.stream;
         this.updateState({ hasWatermark: false });
@@ -97,10 +97,10 @@ export class StreamingPipeline {
         error: null,
       });
 
-      console.log(`✅ ${config.mode} pipeline initialized successfully`);
+      console.log(`â ${config.mode} pipeline initialized successfully`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Pipeline initialization failed:', errorMessage);
+      console.error('â Pipeline initialization failed:', errorMessage);
       captureException(new Error(errorMessage), {
         stage: 'initialize',
         mode: config.mode,
@@ -134,7 +134,7 @@ export class StreamingPipeline {
     }
 
     console.log(
-      `🚀 Starting ${this.state.mode} stream to ${enabledDestinations.length} destinations...`,
+      `ð Starting ${this.state.mode} stream to ${enabledDestinations.length} destinations...`,
     );
 
     this.updateState({
@@ -156,14 +156,14 @@ export class StreamingPipeline {
 
     // Pipeline is ready - destination router will handle actual connections
     this.updateState({ status: 'live' });
-    console.log(`🟢 ${this.state.mode} pipeline live`);
+    console.log(`ð¢ ${this.state.mode} pipeline live`);
   }
 
   /**
    * Stop streaming
    */
   public async stop(): Promise<void> {
-    console.log('🛑 Stopping streaming pipeline...');
+    console.log('ð Stopping streaming pipeline...');
 
     this.updateState({ status: 'stopping' });
 
@@ -183,7 +183,7 @@ export class StreamingPipeline {
       ? (Date.now() - this.state.startTime) / 1000 / 60 / 60 // hours
       : 0;
 
-    console.log(`📊 Session duration: ${sessionDuration.toFixed(2)} hours`);
+    console.log(`ð Session duration: ${sessionDuration.toFixed(2)} hours`);
 
     this.updateState({
       status: 'idle',
@@ -192,7 +192,7 @@ export class StreamingPipeline {
       activeDestinations: 0,
     });
 
-    console.log('✅ Pipeline stopped');
+    console.log('â Pipeline stopped');
   }
 
   /**
@@ -218,7 +218,7 @@ export class StreamingPipeline {
     await video.play();
 
     // Watermark styling
-    const watermarkText = '🎥 ChatScream Free';
+    const watermarkText = 'ð¥ ChatScream Free';
     const watermarkOpacity = 0.7;
     const watermarkSize = 32;
 
@@ -282,7 +282,7 @@ export class StreamingPipeline {
 
       const durationHours = (Date.now() - this.state.startTime) / 1000 / 60 / 60;
 
-      console.log(`⏱️ Cloud session: ${durationHours.toFixed(2)} hours`);
+      console.log(`â±ï¸ Cloud session: ${durationHours.toFixed(2)} hours`);
 
       // This would integrate with cloudStreamingService to check remaining hours
       // For now, just log monitoring

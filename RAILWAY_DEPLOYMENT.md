@@ -5,7 +5,7 @@ Deploy ChatScream backend to Railway with full WebSocket support.
 ## Quick Start (Web UI)
 
 1. Go to [railway.app](https://railway.app)
-2. Click "New Project" → "Deploy from GitHub repo"
+2. Click "New Project" â "Deploy from GitHub repo"
 3. Select your `ChatScream` repository
 4. Railway will auto-detect the `railway.json` configuration
 5. Click "Deploy"
@@ -78,7 +78,7 @@ https://chatscream-api.railway.app
 
 ## Custom Domain (Optional)
 
-1. Go to Railway project → Settings → Domains
+1. Go to Railway project â Settings â Domains
 2. Add your custom domain: `api.chatscream.live`
 3. Update DNS (Railway will provide instructions)
 4. Update `.env.production`:
@@ -98,8 +98,8 @@ wscat -c wss://your-app.railway.app/ws/signal/test-room
 
 ## Features Enabled
 
-✅ HTTP API (auth, users, payments)
-✅ WebSockets (guest cameras, signaling)
-✅ Long-running processes (FFmpeg, RTMP)
-✅ Auto-SSL
-✅ Auto-scaling
+â HTTP API (auth, users, payments)
+â WebSockets (guest cameras, signaling)
+â Long-running processes (FFmpeg, RTMP)
+â Auto-SSL
+â Auto-scaling

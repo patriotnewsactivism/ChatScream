@@ -1,4 +1,4 @@
-/**
+/*
  * AI service — DeepSeek V4 Flash (primary) with Gemini fallback.
  *
  * DeepSeek V4 Flash: $0.14/M input tokens, $0.28/M output tokens
@@ -16,7 +16,9 @@ const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-// ── Client factories ───────────────────────────────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Client factories                                                             │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 const getDeepSeekKey = () => String(process.env.DEEPSEEK_API_KEY || '').trim();
 const getGeminiKey  = () => String(process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
@@ -30,7 +32,9 @@ const createGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-// ── DeepSeek fetch helper (OpenAI-compatible) ─────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ DeepSeek fetch helper (OpenAI-compatible)                                     │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 const deepSeekChat = async (messages, { temperature = 0.7, jsonMode = false } = {}) => {
   const key = getDeepSeekKey();
@@ -62,7 +66,9 @@ const deepSeekChat = async (messages, { temperature = 0.7, jsonMode = false } = 
   return data.choices?.[0]?.message?.content || '';
 };
 
-// ── Generic text generation (DeepSeek first, Gemini fallback) ─────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Generic text generation (DeepSeek first, Gemini fallback)                     │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 const generateText = async (prompt, opts = {}) => {
   if (hasDeepSeek()) {
@@ -83,7 +89,9 @@ const generateText = async (prompt, opts = {}) => {
   throw new Error('No AI provider configured. Set DEEPSEEK_API_KEY or GEMINI_API_KEY.');
 };
 
-// ── JSON generation helper ────────────────────────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ JSON generation helper                                                         │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 const generateJson = async (schema, prompt) => {
   // Try DeepSeek JSON mode first
@@ -117,7 +125,9 @@ const generateJson = async (schema, prompt) => {
   return null;
 };
 
-// ── Utility helpers ───────────────────────────────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Utility helpers                                                             │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 const normalizeText = (value, fallback = '') => {
   if (typeof value !== 'string') return fallback;
@@ -162,7 +172,9 @@ const scoreSentiment = (messages) => {
   return 'neutral';
 };
 
-// ── Fallback builders (no AI needed) ─────────────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Fallback builders (no AI needed)                                             │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 export const buildFallbackMetadata = (topic) => ({
   title: normalizeText(topic, 'New Live Stream').slice(0, 90),
@@ -211,7 +223,9 @@ export const buildFallbackContentAnalysis = (recentChat, streamTitle, streamTopi
   return { sentiment, topics, engagementSuggestions: dedupe([qCount > 0 ? 'Answer the strongest audience question on-screen next.' : '', topics[0] ? `Give a 30-second recap focused on ${topics[0]}.` : 'Offer a short recap before moving on.', 'Summarize the evidence, then invite one concrete follow-up from chat.'], 3), warnings, audienceMood: mood };
 };
 
-// ── Exported AI functions ─────────────────────────────────────────────────────
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Exported AI functions                                                         │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
 export const generateStreamMetadataWithAi = async (topic) => {
   const fallback = buildFallbackMetadata(topic);
@@ -265,5 +279,49 @@ export const generateFreeformContent = async (prompt) => {
     return { content, error: null };
   } catch (err) {
     return { error: err.message, content: null };
+  }
+};
+
+export const generateChatSummaryWithAi = async (chatMessages, filters = {}) => {
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      summary: { type: Type.STRING },
+      sentiment: { type: Type.STRING },
+      topics: { type: Type.ARRAY, items: { type: Type.STRING } }
+    },
+    required: ['summary', 'sentiment', 'topics']
+  };
+
+  const filteredMessages = chatMessages.filter(msg => {
+    if (filters.sentiment && msg.sentiment !== filters.sentiment) return false;
+    if (filters.topic && !msg.topics?.includes(filters.topic)) return false;
+    return true;
+  });
+
+  if (filteredMessages.length === 0) {
+    return {
+      summary: 'No messages match the current filters.',
+      sentiment: 'neutral',
+      topics: []
+    };
+  }
+
+  const prompt = `Summarize the following chat messages in 3-5 sentences. Focus on key points and sentiment. Messages: ${filteredMessages.map(m => m.content).join(' | ')}`;
+
+  try {
+    const result = await generateJson(schema, prompt);
+    return {
+      summary: normalizeText(result?.summary, 'No summary available'),
+      sentiment: ['positive', 'neutral', 'negative'].includes(result?.sentiment) ? result.sentiment : 'neutral',
+      topics: dedupe(result?.topics || [], 5)
+    };
+  } catch (err) {
+    console.error('Failed to generate chat summary:', err);
+    return {
+      summary: 'Failed to generate summary. Please try again.',
+      sentiment: 'neutral',
+      topics: []
+    };
   }
 };

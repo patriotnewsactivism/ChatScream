@@ -1,27 +1,27 @@
-# ChatScream — Deployment Guide
+# ChatScream â Deployment Guide
 
 **Architecture:** Vercel (React frontend) + Railway (Express/WebSocket backend + FFmpeg)
 
 ---
 
-## 1. Railway — Backend
+## 1. Railway â Backend
 
 ### One-time setup
 
 1. Create a new Railway project and connect your GitHub repo.
 2. Railway auto-detects Node.js via `nixpacks.toml` (FFmpeg included).
-3. Set the following environment variables in **Railway → Variables**:
+3. Set the following environment variables in **Railway â Variables**:
 
 ```
-# ── Required ──────────────────────────────────────────────────────
+# ââ Required ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 NODE_ENV=production
 PORT=8787
 
-# Postgres (Railway → Add Plugin → PostgreSQL, then copy the URL)
+# Postgres (Railway â Add Plugin â PostgreSQL, then copy the URL)
 POSTGRES_URL=postgresql://...
 POSTGRES_SSL=true
 
-# Redis (Railway → Add Plugin → Redis, then copy the URL)
+# Redis (Railway â Add Plugin â Redis, then copy the URL)
 REDIS_URL=redis://...
 REDIS_TLS=true
 
@@ -32,7 +32,7 @@ CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live
 # AI
 ANTHROPIC_API_KEY=sk-ant-...
 
-# ── OAuth Secrets (backend only — never expose these to the frontend) ──
+# ââ OAuth Secrets (backend only â never expose these to the frontend) ââ
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 YOUTUBE_CLIENT_ID=...
@@ -45,7 +45,7 @@ TIKTOK_CLIENT_KEY=...
 TIKTOK_CLIENT_SECRET=...
 AUTH_STATE_SECRET=<random 32+ char string>
 
-# ── Stripe (optional — leave blank to disable billing) ──
+# ââ Stripe (optional â leave blank to disable billing) ââ
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 VITE_STRIPE_PRO_PRICE_ID=price_...
@@ -58,11 +58,11 @@ VITE_STRIPE_ENTERPRISE_PRICE_ID=price_...
 
 ### WebSocket support
 
-Railway supports WebSocket connections on the same port as HTTP — no extra config needed.
+Railway supports WebSocket connections on the same port as HTTP â no extra config needed.
 
 ### Stripe webhook
 
-In Stripe Dashboard → Developers → Webhooks, add an endpoint:
+In Stripe Dashboard â Developers â Webhooks, add an endpoint:
 
 - URL: `https://<your-railway-url>/api/webhooks/stripe`
 - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
@@ -71,29 +71,29 @@ Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
-## 2. Vercel — Frontend
+## 2. Vercel â Frontend
 
 ### One-time setup
 
 1. Import your repo in Vercel. Framework preset: **Vite**.
-2. Build command: `npm run build` — Output dir: `dist`
-3. Set the following environment variables in **Vercel → Settings → Environment Variables**:
+2. Build command: `npm run build` â Output dir: `dist`
+3. Set the following environment variables in **Vercel â Settings â Environment Variables**:
 
 ```
-# ── Required ──────────────────────────────────────────────────────
+# ââ Required ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 VITE_APP_ENV=production
 VITE_DEBUG=false
 
 # Your Railway backend URL (no trailing slash)
 VITE_API_BASE_URL=https://chatscream-production.up.railway.app
 
-# OAuth Public Client IDs (safe to expose — secrets stay on Railway)
+# OAuth Public Client IDs (safe to expose â secrets stay on Railway)
 VITE_YOUTUBE_CLIENT_ID=...
 VITE_FACEBOOK_APP_ID=...
 VITE_TWITCH_CLIENT_ID=...
 VITE_TIKTOK_CLIENT_KEY=...
 
-# Must match the redirect URI registered in each OAuth console (see §3)
+# Must match the redirect URI registered in each OAuth console (see Â§3)
 VITE_OAUTH_REDIRECT_URI=https://chatscream.live/oauth/callback
 
 # Stripe publishable key (safe to expose)
@@ -103,7 +103,7 @@ VITE_STRIPE_EXPERT_PRICE_ID=price_...
 VITE_STRIPE_ENTERPRISE_PRICE_ID=price_...
 ```
 
-4. `vercel.json` is already configured with SPA rewrites and cache headers — no changes needed.
+4. `vercel.json` is already configured with SPA rewrites and cache headers â no changes needed.
 
 ---
 
@@ -113,10 +113,10 @@ Register `https://chatscream.live/oauth/callback` as an authorized redirect URI 
 
 | Platform         | Console URL                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Google / YouTube | [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth 2.0 Client          |
-| Facebook         | [developers.facebook.com](https://developers.facebook.com) → App → Facebook Login → Settings → Valid OAuth Redirect URIs |
-| Twitch           | [dev.twitch.tv/console](https://dev.twitch.tv/console) → Your App → OAuth Redirect URLs                                  |
-| TikTok           | [developers.tiktok.com](https://developers.tiktok.com) → App → Login Kit → Redirect URI                                  |
+| Google / YouTube | [console.cloud.google.com](https://console.cloud.google.com) â APIs & Services â Credentials â OAuth 2.0 Client          |
+| Facebook         | [developers.facebook.com](https://developers.facebook.com) â App â Facebook Login â Settings â Valid OAuth Redirect URIs |
+| Twitch           | [dev.twitch.tv/console](https://dev.twitch.tv/console) â Your App â OAuth Redirect URLs                                  |
+| TikTok           | [developers.tiktok.com](https://developers.tiktok.com) â App â Login Kit â Redirect URI                                  |
 
 **Scopes required:**
 
@@ -129,8 +129,8 @@ Register `https://chatscream.live/oauth/callback` as an authorized redirect URI 
 
 ## 4. Custom Domain (optional)
 
-1. In Vercel → Domains, add `chatscream.live` and `www.chatscream.live`.
-2. Update Railway → Settings → Networking to add a custom domain for the API (e.g. `api.chatscream.live`).
+1. In Vercel â Domains, add `chatscream.live` and `www.chatscream.live`.
+2. Update Railway â Settings â Networking to add a custom domain for the API (e.g. `api.chatscream.live`).
 3. Update `VITE_API_BASE_URL` in Vercel to `https://api.chatscream.live`.
 4. Update `CORS_ORIGINS` on Railway to include your Vercel preview domains if needed.
 
@@ -138,8 +138,8 @@ Register `https://chatscream.live/oauth/callback` as an authorized redirect URI 
 
 ## 5. First-Deploy Checklist
 
-- [ ] Railway deploy succeeds — check `/api/health` returns `{"ok":true}`
-- [ ] Railway deploy succeeds — check `/api/ready` returns `{"ok":true}` (Postgres + Redis connected)
+- [ ] Railway deploy succeeds â check `/api/health` returns `{"ok":true}`
+- [ ] Railway deploy succeeds â check `/api/ready` returns `{"ok":true}` (Postgres + Redis connected)
 - [ ] Vercel build succeeds (Vite output in `dist/`)
 - [ ] Frontend loads and can reach the backend (`/api/health` call in Network tab)
 - [ ] Sign up / sign in works

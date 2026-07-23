@@ -103,7 +103,7 @@ export class StreamAnalyticsService {
   }
 
   public startTracking(streamId: string, destinations: string[]): void {
-    console.log('📊 Starting analytics tracking for stream:', streamId);
+    console.log('ð Starting analytics tracking for stream:', streamId);
 
     const analytics: StreamAnalytics = {
       streamId,
@@ -299,7 +299,7 @@ export class StreamAnalyticsService {
     const analytics = this.analytics.get(targetId);
     if (!analytics) return null;
 
-    console.log('📊 Stopping analytics tracking for stream:', targetId);
+    console.log('ð Stopping analytics tracking for stream:', targetId);
 
     analytics.endTime = new Date();
     analytics.duration = Math.floor(
@@ -402,7 +402,7 @@ Total: $${analytics.revenue.total.toFixed(2)}`
     for (const [streamId, analytics] of this.analytics) {
       if (analytics.startTime < cutoffDate) {
         this.analytics.delete(streamId);
-        console.log('🗑️ Cleared old analytics:', streamId);
+        console.log('ðï¸ Cleared old analytics:', streamId);
       }
     }
   }

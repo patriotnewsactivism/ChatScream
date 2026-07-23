@@ -125,7 +125,7 @@ const AppRouter: React.FC = () => {
             }
           />
 
-          {/* Guest camera join page — public, no auth required */}
+          {/* Guest camera join page â public, no auth required */}
           <Route path="/guest/:roomId" element={<GuestPage />} />
 
           {/* Fallback */}

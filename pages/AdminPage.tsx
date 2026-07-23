@@ -152,7 +152,7 @@ const AdminPage: React.FC = () => {
   const handleLookup = async () => {
     const email = normalizeEmail(lookupEmail);
     if (!email) return;
-    setLookupStatus('Searching…');
+    setLookupStatus('Searchingâ¦');
     setLookupResults([]);
     try {
       const users = await findUsersByEmail(email);
@@ -176,7 +176,7 @@ const AdminPage: React.FC = () => {
   };
 
   const handleGrantBeta = async (uid: string) => {
-    setLookupStatus('Applying beta access…');
+    setLookupStatus('Applying beta accessâ¦');
     try {
       await setUserAccessOverrides(uid, {
         role: 'beta_tester',
@@ -191,7 +191,7 @@ const AdminPage: React.FC = () => {
   };
 
   const handleGrantAdmin = async (uid: string) => {
-    setLookupStatus('Applying admin access…');
+    setLookupStatus('Applying admin accessâ¦');
     try {
       await setUserAdminStatus(uid, true);
       setLookupStatus('Admin access applied.');
@@ -250,7 +250,7 @@ const AdminPage: React.FC = () => {
 
         {loading && (
           <div className="p-5 border border-gray-800 rounded-xl bg-dark-800/70">
-            <p className="text-gray-300">Loading admin settings…</p>
+            <p className="text-gray-300">Loading admin settingsâ¦</p>
           </div>
         )}
 
@@ -270,7 +270,7 @@ const AdminPage: React.FC = () => {
                 </div>
                 <p className="text-sm text-gray-400">
                   These are safe to store publicly and are required to start the OAuth popup
-                  (YouTube/Facebook/Twitch). After saving, retry “Connect” in Studio → Destinations.
+                  (YouTube/Facebook/Twitch). After saving, retry âConnectâ in Studio â Destinations.
                 </p>
 
                 <div className="space-y-2">
@@ -320,7 +320,7 @@ const AdminPage: React.FC = () => {
                     placeholder="https://wtp-apps.web.app/oauth/callback"
                   />
                   <p className="text-[11px] text-gray-500">
-                    Leave blank to use this site’s default:{' '}
+                    Leave blank to use this siteâs default:{' '}
                     {typeof window === 'undefined'
                       ? ''
                       : `${window.location.origin}/oauth/callback`}
@@ -334,7 +334,7 @@ const AdminPage: React.FC = () => {
                     disabled={saving}
                     className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 font-semibold disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Save OAuth IDs'}
+                    {saving ? 'Savingâ¦' : 'Save OAuth IDs'}
                   </button>
                   {saveMessage && <span className="text-sm text-gray-300">{saveMessage}</span>}
                 </div>
@@ -379,12 +379,12 @@ const AdminPage: React.FC = () => {
                     disabled={saving}
                     className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 font-semibold disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Save Lists'}
+                    {saving ? 'Savingâ¦' : 'Save Lists'}
                   </button>
                   {saveMessage && <span className="text-sm text-gray-300">{saveMessage}</span>}
                   {accessConfig && (
                     <span className="text-xs text-gray-500">
-                      Admins: {accessConfig.admins.length} · Beta: {accessConfig.betaTesters.length}
+                      Admins: {accessConfig.admins.length} Â· Beta: {accessConfig.betaTesters.length}
                     </span>
                   )}
                 </div>

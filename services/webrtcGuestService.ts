@@ -6,10 +6,10 @@
  * using a lightweight WebSocket signaling server on the backend.
  *
  * Architecture:
- *   Streamer (host)  ←→  /ws/signal/:room  ←→  Guest (camera)
+ *   Streamer (host)  ââ  /ws/signal/:room  ââ  Guest (camera)
  *
- * Host calls: createRoom() → gets a share URL
- * Guest opens URL → GuestPage calls joinRoom() → streams camera to host
+ * Host calls: createRoom() â gets a share URL
+ * Guest opens URL â GuestPage calls joinRoom() â streams camera to host
  * Host receives the guest MediaStream via onGuestStream callback
  */
 
@@ -31,7 +31,7 @@ const ICE_SERVERS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Host side — manages a signaling room and accepts incoming guest connections
+// Host side â manages a signaling room and accepts incoming guest connections
 // ---------------------------------------------------------------------------
 
 export class GuestHostService {
@@ -148,7 +148,7 @@ export class GuestHostService {
 }
 
 // ---------------------------------------------------------------------------
-// Guest side — joins a room and streams their camera to the host
+// Guest side â joins a room and streams their camera to the host
 // ---------------------------------------------------------------------------
 
 export class GuestClientService {

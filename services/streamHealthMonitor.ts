@@ -78,7 +78,7 @@ export class StreamHealthMonitor {
       reason: string,
     ) => void,
   ): void {
-    console.log('🏥 Starting health monitoring for', destinationIds.length, 'destinations');
+    console.log('ð¥ Starting health monitoring for', destinationIds.length, 'destinations');
     this.onHealthChange = onHealthChange;
     this.onRecommendAction = onRecommendAction;
 
@@ -92,7 +92,7 @@ export class StreamHealthMonitor {
   }
 
   public stopMonitoring(): void {
-    console.log('🛑 Stopping health monitoring');
+    console.log('ð Stopping health monitoring');
     if (this.monitorInterval) {
       clearInterval(this.monitorInterval);
       this.monitorInterval = null;
@@ -246,7 +246,7 @@ export class StreamHealthMonitor {
     action: 'reconnect' | 'adjust-bitrate' | 'reduce-quality' | 'stop',
     reason: string,
   ): void {
-    console.log(`💡 Recommending action for ${destId}: ${action} (${reason})`);
+    console.log(`ð¡ Recommending action for ${destId}: ${action} (${reason})`);
     if (this.onRecommendAction) {
       this.onRecommendAction(destId, action, reason);
     }

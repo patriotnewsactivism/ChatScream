@@ -16,7 +16,7 @@ export enum LayoutMode {
   PIP = 'PIP', // Picture in Picture
   SPLIT = 'SPLIT', // Side by side
   NEWSROOM = 'NEWSROOM', // Shoulder view
-  PORTRAIT = 'PORTRAIT', // 9:16 vertical — TikTok / Instagram Reels
+  PORTRAIT = 'PORTRAIT', // 9:16 vertical â TikTok / Instagram Reels
 }
 
 export type MediaType = 'image' | 'video' | 'audio';

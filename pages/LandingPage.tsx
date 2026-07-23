@@ -90,7 +90,7 @@ const LandingPage: React.FC = () => {
           setLeaderboardLoaded(true);
         }
       } catch {
-        // Silently fail — will use fallback data
+        // Silently fail â will use fallback data
       }
     };
     fetchLeaderboard();
@@ -1222,7 +1222,7 @@ const LandingPage: React.FC = () => {
               Deployment Ready out of Houston, TX
             </h2>
             <p className="text-gray-400 text-lg max-w-3xl mx-auto">
-              Cloud resources stay linked and validated so you can focus on production testing—no
+              Cloud resources stay linked and validated so you can focus on production testingâno
               guessing whether the VM or database connections are live.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-gray-300">
@@ -1428,7 +1428,7 @@ const LandingPage: React.FC = () => {
 
           <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-gray-400 text-sm">
-              © 2025 ChatScream. Based in Houston, TX. All rights reserved.
+              Â© 2025 ChatScream. Based in Houston, TX. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <a

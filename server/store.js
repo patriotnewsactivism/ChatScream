@@ -444,7 +444,7 @@ export const getPublicProfile = (record) => ({
   photoURL: record.profile?.photoURL || '',
 });
 
-// Full profile — only for the record owner (or admin) to see, never for
+// Full profile â only for the record owner (or admin) to see, never for
 // cross-user lookups. Includes billing, connected destinations, and
 // affiliate data that getPublicProfile intentionally omits.
 export const getOwnProfile = (record) => ({
@@ -488,7 +488,7 @@ export const deleteSchedule = (id) =>
     if (state.schedules) delete state.schedules[id];
   });
 
-// ── Scenes ──────────────────────────────────────────────────────────────────
+// ââ Scenes ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export const listScenes = (userId) => {
   const all = loadState().scenes || {};
@@ -524,7 +524,7 @@ export const seedLeaderboard = () =>
       { rank: 10, username: 'TurboHostPro', screams: 156, donated: 210, weeklyGain: -3 },
     ];
   });
-// ── Leaderboard ─────────────────────────────────────────────────────────────
+// ââ Leaderboard âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 /**
  * Update (or create) a leaderboard entry when a scream donation is received.
@@ -593,7 +593,7 @@ export const resetWeeklyLeaderboard = () =>
 
 export const getWeeklyWinners = () => loadState().weeklyWinners || [];
 
-// ── Scream broadcast bridge ──────────────────────────────────────────────
+// ââ Scream broadcast bridge ââââââââââââââââââââââââââââââââââââââââââââââ
 // Set by server/index.js at startup so the Stripe webhook can push
 // real-time scream alerts to connected streamer WebSocket clients.
 let _screamBroadcaster = null;

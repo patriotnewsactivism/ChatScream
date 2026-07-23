@@ -6,7 +6,7 @@ const posts = [
     title: 'How Zero-Bandwidth Streaming Works',
     date: 'January 2025',
     category: 'Engineering',
-    summary: 'A deep dive into how ChatScream relays your stream through the cloud so your upload speed never limits your broadcast quality — even on a phone.',
+    summary: 'A deep dive into how ChatScream relays your stream through the cloud so your upload speed never limits your broadcast quality â even on a phone.',
     readTime: '5 min read',
   },
   {
@@ -20,7 +20,7 @@ const posts = [
     title: 'Mobile Studio Tips for On-The-Go Hosts',
     date: 'November 2024',
     category: 'How-To',
-    summary: 'Best practices for hosting live shows on phones and tablets — from framing and lighting to mic placement and managing chat on a small screen.',
+    summary: 'Best practices for hosting live shows on phones and tablets â from framing and lighting to mic placement and managing chat on a small screen.',
     readTime: '6 min read',
   },
 ];
@@ -60,7 +60,7 @@ const BlogPage: FC = () => {
                   to="/contact"
                   className="text-brand-400 hover:text-brand-300 font-semibold text-sm"
                 >
-                  Get notified →
+                  Get notified â
                 </Link>
               </div>
             </article>

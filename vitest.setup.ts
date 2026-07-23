@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 
-// jsdom does not implement matchMedia — polyfill it so components that query
+// jsdom does not implement matchMedia â polyfill it so components that query
 // media features (PWA install detection, responsive hooks, etc.) don't crash.
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = (query: string) =>

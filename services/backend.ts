@@ -129,7 +129,7 @@ const ensureActiveSession = (): StoredSession | null => {
   return null;
 };
 
-// Wraps a promise with a timeout — prevents Railway cold-start hangs from blocking the UI
+// Wraps a promise with a timeout â prevents Railway cold-start hangs from blocking the UI
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
   return Promise.race([
     promise,
@@ -610,7 +610,7 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
   const email = toStringValue(raw.email).trim();
   const displayName = toStringValue(raw.displayName).trim();
 
-  // Admin email override — always grant full access
+  // Admin email override â always grant full access
   const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
   const isAdmin = adminEmails.includes(email.toLowerCase());
 
@@ -1123,7 +1123,7 @@ export const applyLocalAccessOverrides = (profile: UserProfile | null): UserProf
 
 export const onAuthChange = (callback: AuthListener) => {
   authListeners.add(callback);
-  // Defer initial call — avoids firing before React mounts AuthContext
+  // Defer initial call â avoids firing before React mounts AuthContext
   const currentUser = getCurrentAuthUser();
   Promise.resolve().then(() => callback(currentUser));
   return () => {
@@ -1133,12 +1133,12 @@ export const onAuthChange = (callback: AuthListener) => {
 
 export const onAuthStateChange = onAuthChange;
 
-/** @deprecated Use `onAuthStateChange` instead — this alias exists for backward compatibility. */
+/** @deprecated Use `onAuthStateChange` instead â this alias exists for backward compatibility. */
 export const onIdTokenChange = onAuthChange;
 
 export const getCurrentSessionToken = (): string | null => getSessionToken();
 
-// ── Analytics ──────────────────────────────────────────────────────────────
+// ââ Analytics ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export interface AnalyticsOverview {
   totalCloudHours: number;
@@ -1159,7 +1159,7 @@ export const getAnalyticsOverview = async (): Promise<AnalyticsOverview | null> 
   return (result as AnalyticsOverview) || null;
 };
 
-// ── Leaderboard Stats ──────────────────────────────────────────────────────
+// ââ Leaderboard Stats ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export interface LeaderboardStats {
   streamerUid: string;
@@ -1182,7 +1182,7 @@ export const getLeaderboardStats = async (
   return (result as LeaderboardStats) || null;
 };
 
-// ── Schedules ──────────────────────────────────────────────────────────────
+// ââ Schedules ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export interface StreamSchedule {
   id: string;
@@ -1250,7 +1250,7 @@ export const deleteSchedule = async (id: string): Promise<boolean> => {
   return true;
 };
 
-// ── Platform Disconnect ────────────────────────────────────────────────────
+// ââ Platform Disconnect ââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export const disconnectPlatform = async (platform: string): Promise<void> => {
   await authRequest('/api/oauth/disconnect', { method: 'POST', body: { platform } });

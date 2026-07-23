@@ -132,10 +132,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     })();
 
-    // Safety valve — if Firebase never fires, stop blocking the UI
+    // Safety valve â if Firebase never fires, stop blocking the UI
     const loadingGuard = window.setTimeout(() => {
       if (isMounted) {
-        console.warn('[AuthContext] Firebase auth timed out — forcing loading=false');
+        console.warn('[AuthContext] Firebase auth timed out â forcing loading=false');
         setLoading(false);
       }
     }, 3000);
@@ -147,7 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearScheduledRefresh();
 
       if (backendUser) {
-        // syncAccess is fire-and-forget — never block studio loading on a server call
+        // syncAccess is fire-and-forget â never block studio loading on a server call
         syncAccess().catch((err) => console.warn('Access sync skipped:', err));
 
         try {
@@ -155,7 +155,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (!isMounted) return;
           setSessionToken(tokenResult.token);
 
-          // Profile loads in background — does not block studio rendering
+          // Profile loads in background â does not block studio rendering
           getUserProfile(backendUser.uid)
             .then((profile) => {
               if (isMounted) setUserProfile(applyLocalAccessOverrides(profile));
@@ -175,7 +175,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserProfile(null);
       }
 
-      // Always resolve — never leave the user on the loading screen
+      // Always resolve â never leave the user on the loading screen
       if (isMounted) setLoading(false);
     });
 
@@ -341,7 +341,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Auto-refresh profile when tab regains focus — handles mobile OAuth new-tab flow
+  // Auto-refresh profile when tab regains focus â handles mobile OAuth new-tab flow
   useEffect(() => {
     if (!user) return;
     let lastVisibility = document.visibilityState;
