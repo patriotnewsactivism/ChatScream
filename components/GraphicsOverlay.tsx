@@ -1,5 +1,5 @@
 /**
- * GraphicsOverlay — Custom graphics, lower-thirds, scoreboards, and timers.
+ * GraphicsOverlay â Custom graphics, lower-thirds, scoreboards, and timers.
  *
  * Provides a Switcher-style graphics system with:
  * - Scoreboard (2 teams, score + period/quarter)
@@ -23,7 +23,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ââ Types ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export interface Scoreboard {
   visible: boolean;
@@ -71,7 +71,7 @@ interface GraphicsOverlayProps {
   compact?: boolean;
 }
 
-// ── Default state ──────────────────────────────────────────────────────────
+// ââ Default state ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export const defaultGraphicsState: GraphicsState = {
   scoreboard: {
@@ -98,7 +98,7 @@ export const defaultGraphicsState: GraphicsState = {
   images: [],
 };
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ââ Component ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const GraphicsOverlay: React.FC<GraphicsOverlayProps> = ({ state, onChange, compact }) => {
   const [activeSection, setActiveSection] = useState<'scoreboard' | 'timer' | 'l3' | 'images'>('scoreboard');
@@ -404,11 +404,11 @@ const GraphicsOverlay: React.FC<GraphicsOverlayProps> = ({ state, onChange, comp
                   })
                 }
               >
-                <option value="top-left">↖ TL</option>
-                <option value="top-right">↗ TR</option>
-                <option value="bottom-left">↙ BL</option>
-                <option value="bottom-right">↘ BR</option>
-                <option value="center">⊕ CTR</option>
+                <option value="top-left">â TL</option>
+                <option value="top-right">â TR</option>
+                <option value="bottom-left">â BL</option>
+                <option value="bottom-right">â BR</option>
+                <option value="center">â CTR</option>
               </select>
               <button
                 onClick={() =>

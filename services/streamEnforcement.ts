@@ -61,7 +61,7 @@ export class StreamEnforcementService {
    * Validate streaming request against all constitutional requirements
    */
   public validateStreamRequest(context: EnforcementContext): EnforcementResult {
-    console.log('🔒 Validating stream request:', context);
+    console.log('ð Validating stream request:', context);
 
     const violations: string[] = [];
     const recommendations: string[] = [];
@@ -104,7 +104,7 @@ export class StreamEnforcementService {
       // Warning if less than 1 hour remaining
       if (hoursInfo.remaining < 1 && hoursInfo.remaining > 0) {
         recommendations.push(
-          `⚠️ Less than ${hoursInfo.remaining.toFixed(1)} hours of cloud streaming remaining`,
+          `â ï¸ Less than ${hoursInfo.remaining.toFixed(1)} hours of cloud streaming remaining`,
         );
       }
     }
@@ -139,7 +139,7 @@ export class StreamEnforcementService {
       context,
     });
 
-    console.log('🔒 Enforcement result:', result);
+    console.log('ð Enforcement result:', result);
     return result;
   }
 
@@ -152,7 +152,7 @@ export class StreamEnforcementService {
     userPlan: PlanTier,
     currentDestinations: number,
   ): EnforcementResult {
-    console.log('🔒 Enforcing destination add:', { userId, userPlan, currentDestinations });
+    console.log('ð Enforcing destination add:', { userId, userPlan, currentDestinations });
 
     const destCheck = canAddDestination(userPlan, currentDestinations + 1);
 
@@ -219,7 +219,7 @@ export class StreamEnforcementService {
 
     // Cutoff if hours exhausted
     if (remaining <= 0) {
-      console.log('🚨 CLOUD HOURS EXHAUSTED - ENFORCING CUTOFF');
+      console.log('ð¨ CLOUD HOURS EXHAUSTED - ENFORCING CUTOFF');
 
       this.logEnforcement({
         timestamp: Date.now(),
@@ -246,7 +246,7 @@ export class StreamEnforcementService {
 
     // Warning if less than 15 minutes remaining
     if (remaining < 0.25) {
-      console.log(`⚠️ Cloud hours warning: ${(remaining * 60).toFixed(0)} minutes remaining`);
+      console.log(`â ï¸ Cloud hours warning: ${(remaining * 60).toFixed(0)} minutes remaining`);
     }
 
     return {
@@ -285,7 +285,7 @@ export class StreamEnforcementService {
     }
 
     // In production, this would also write to the backend database for permanent audit trail
-    console.log('📝 Enforcement logged:', {
+    console.log('ð Enforcement logged:', {
       action: log.action,
       result: log.result,
       reason: log.reason,

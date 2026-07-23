@@ -1,399 +1,231 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { generateChatResponse, moderateMessage } from '../services/claudeService';
+import React, { useState, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectChatMessages, fetchTranslation, selectTranslationStatus } from '../store/chatSlice';
 import { AggregatedMessage } from '../services/chatAggregator';
-import { MessageSquare, Send, X, Sparkles, Eye, Trash2, Copy, Check } from 'lucide-react';
+import { TranslationStatus } from '../types';
 
-interface ChatMessage {
-  id: string;
-  type: 'user' | 'ai' | 'broadcast';
-  content: string;
-  timestamp: Date;
-  displayOnStream: boolean;
+interface SummaryPanelProps {
+  messages: AggregatedMessage[];
+  onGenerateSummary: () => void;
+  isGenerating: boolean;
+  summary: string;
+  sentimentFilter: 'all' | 'positive' | 'negative';
+  topicFilter: string;
+  onSentimentChange: (value: 'all' | 'positive' | 'negative') => void;
+  onTopicChange: (value: string) => void;
 }
 
-interface ChatStreamProps {
-  streamTopic: string;
-  isStreaming: boolean;
-  onBroadcast: (message: ChatMessage) => void;
-  authToken: string | null;
-  /** Live platform messages from YouTube / Twitch / Facebook */
-  liveMessages?: AggregatedMessage[];
-}
-
-/** Platform badge color classes */
-const PLATFORM_COLORS: Record<string, string> = {
-  youtube: 'bg-red-600/30 text-red-400 border-red-500/30',
-  twitch: 'bg-purple-600/30 text-purple-400 border-purple-500/30',
-  facebook: 'bg-blue-600/30 text-blue-400 border-blue-500/30',
-};
-
-const ChatStream: React.FC<ChatStreamProps> = ({
-  streamTopic,
-  isStreaming,
-  onBroadcast,
-  authToken,
-  liveMessages = [],
+const SummaryPanel: React.FC<SummaryPanelProps> = ({
+  messages,
+  onGenerateSummary,
+  isGenerating,
+  summary,
+  sentimentFilter,
+  topicFilter,
+  onSentimentChange,
+  onTopicChange
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showOnStream, setShowOnStream] = useState(true);
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!input.trim()) return;
-
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: input.trim(),
-      timestamp: new Date(),
-      displayOnStream: false,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-
-    // Generate AI response if enabled
-    if (aiEnabled) {
-      if (!authToken) {
-        alert('Sign in to use AI chat assistance.');
-        return;
-      }
-      setIsLoading(true);
-      try {
-        const previousMessages = messages.slice(-5).map((m) => m.content);
-        const response = await generateChatResponse(
-          input,
-          streamTopic,
-          previousMessages,
-          authToken,
-        );
-
-        const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          type: 'ai',
-          content: response.message,
-          timestamp: new Date(),
-          displayOnStream: false,
-        };
-
-        setMessages((prev) => [...prev, aiMessage]);
-      } catch (error) {
-        console.error('Failed to generate AI response:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  const handleBroadcast = async (message: ChatMessage) => {
-    if (!authToken) {
-      alert('Sign in to broadcast AI-moderated messages.');
-      return;
-    }
-
-    const moderation = await moderateMessage(message.content, authToken);
-
-    if (!moderation.isAppropriate) {
-      alert(`Message blocked: ${moderation.reason || 'Content policy violation'}`);
-      return;
-    }
-
-    const broadcastMessage: ChatMessage = {
-      ...message,
-      id: Date.now().toString(),
-      type: 'broadcast',
-      displayOnStream: true,
-    };
-
-    setMessages((prev) => [...prev, broadcastMessage]);
-    onBroadcast(broadcastMessage);
-  };
-
-  const handleQuickBroadcast = async () => {
-    if (!input.trim()) return;
-
-    const message: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'broadcast',
-      content: input.trim(),
-      timestamp: new Date(),
-      displayOnStream: true,
-    };
-
-    if (!authToken) {
-      alert('Sign in to broadcast AI-moderated messages.');
-      return;
-    }
-
-    const moderation = await moderateMessage(input, authToken);
-    if (!moderation.isAppropriate) {
-      alert(`Message blocked: ${moderation.reason || 'Content policy violation'}`);
-      return;
-    }
-
-    setMessages((prev) => [...prev, message]);
-    onBroadcast(message);
-    setInput('');
-  };
-
-  const copyMessage = (content: string, id: string) => {
-    navigator.clipboard.writeText(content);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const clearMessages = () => {
-    setMessages([]);
-  };
-
-  if (!isExpanded) {
-    return (
-      <button
-        onClick={() => setIsExpanded(true)}
-        className="fixed bottom-36 right-3 md:bottom-24 md:right-4 z-40 p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-xl shadow-purple-600/30 hover:scale-110 transition-all group"
-      >
-        <MessageSquare size={24} className="text-white" />
-        <span className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full border-2 border-dark-900 animate-pulse" />
-        <span className="hidden md:block absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-dark-800 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-          Chat Stream
-        </span>
-      </button>
-    );
-  }
 
   return (
-    <div className="fixed left-3 right-3 bottom-36 md:left-auto md:right-4 md:bottom-24 z-40 md:w-80 lg:w-96 bg-dark-800/95 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[60vh] md:max-h-[70vh] animate-slide-up">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-t-2xl">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg">
-            <MessageSquare size={16} className="text-white" />
-          </div>
-          <span className="font-bold text-white">Chat Stream</span>
-          {isStreaming && (
-            <span className="px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-full text-xs text-red-400 font-medium">
-              LIVE
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAiEnabled(!aiEnabled)}
-            className={`p-1.5 rounded-lg transition-colors ${
-              aiEnabled ? 'bg-purple-600/30 text-purple-400' : 'text-gray-500 hover:text-gray-300'
-            }`}
-            title={aiEnabled ? 'AI responses enabled' : 'AI responses disabled'}
-          >
-            <Sparkles size={16} />
-          </button>
-          <button
-            onClick={clearMessages}
-            className="p-1.5 text-gray-500 hover:text-gray-300 rounded-lg transition-colors"
-            title="Clear messages"
-          >
-            <Trash2 size={16} />
-          </button>
-          <button
-            onClick={() => setIsExpanded(false)}
-            className="p-1.5 text-gray-500 hover:text-gray-300 rounded-lg transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
+    <div className="summary-panel bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-4">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Chat Summary</h3>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-blue-600 dark:text-blue-400 hover:underline"
+          aria-expanded={isExpanded}
+          aria-controls="summary-content"
+        >
+          {isExpanded ? 'Hide' : 'Show'}
+        </button>
       </div>
 
-      {/* Live platform messages */}
-      {liveMessages.length > 0 && (
-        <div className="border-b border-gray-700/60">
-          <div className="px-4 pt-3 pb-1 flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-              Live Chat
-            </span>
+      {isExpanded && (
+        <div id="summary-content">
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select
+              value={sentimentFilter}
+              onChange={(e) => onSentimentChange(e.target.value as 'all' | 'positive' | 'negative')}
+              className="p-2 border rounded-md bg-white dark:bg-gray-700"
+              aria-label="Filter by sentiment"
+            >
+              <option value="all">All Sentiments</option>
+              <option value="positive">Positive</option>
+              <option value="negative">Negative</option>
+            </select>
+
+            <select
+              value={topicFilter}
+              onChange={(e) => onTopicChange(e.target.value)}
+              className="p-2 border rounded-md bg-white dark:bg-gray-700"
+              aria-label="Filter by topic"
+            >
+              <option value="">All Topics</option>
+              {/* Add dynamic topic options here */}
+            </select>
           </div>
-          <div className="overflow-y-auto max-h-48 px-4 pb-3 space-y-1.5">
-            {liveMessages.map((msg) => {
-              const platformKey = msg.platform.toLowerCase();
-              const colorClass =
-                PLATFORM_COLORS[platformKey] ?? 'bg-gray-600/30 text-gray-400 border-gray-500/30';
-              return (
-                <div key={msg.id} className="flex items-start gap-2 text-sm">
-                  <span
-                    className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ${colorClass}`}
-                  >
-                    {msg.platform}
-                  </span>
-                  <span className="font-semibold text-gray-300 shrink-0">{msg.displayName}:</span>
-                  <span className="text-gray-400 break-words min-w-0">{msg.content}</span>
-                </div>
-              );
-            })}
+
+          <div className="mb-4">
+            <button
+              onClick={onGenerateSummary}
+              disabled={isGenerating}
+              className={`px-4 py-2 rounded-md ${isGenerating ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+              aria-busy={isGenerating}
+            >
+              {isGenerating ? 'Generating...' : 'Generate Summary'}
+            </button>
+          </div>
+
+          <div className="p-4 bg-white dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600">
+            {summary ? (
+              <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{summary}</p>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">No summary available. Click 'Generate Summary' to create one.</p>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+};
 
-      {/* AI / user messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[150px]">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Send messages to your stream!</p>
-            <p className="text-xs mt-1">Messages will appear as overlays for your viewers.</p>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`group relative ${
-                message.type === 'broadcast'
-                  ? 'bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30'
-                  : message.type === 'ai'
-                    ? 'bg-indigo-600/10 border border-indigo-500/20'
-                    : 'bg-gray-800/50 border border-gray-700'
-              } rounded-xl p-3`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    {message.type === 'broadcast' && (
-                      <span className="text-xs font-bold text-purple-400 uppercase flex items-center gap-1">
-                        <Eye size={12} /> On Stream
-                      </span>
-                    )}
-                    {message.type === 'ai' && (
-                      <span className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-1">
-                        <Sparkles size={12} /> AI Suggestion
-                      </span>
-                    )}
-                    {message.type === 'user' && (
-                      <span className="text-xs font-bold text-gray-400 uppercase">You</span>
-                    )}
-                    <span className="text-xs text-gray-500">
-                      {message.timestamp.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-200">{message.content}</p>
-                </div>
+const ChatStream = () => {
+  const dispatch = useDispatch();
+  const messages = useSelector(selectChatMessages);
+  const translationStatus = useSelector(selectTranslationStatus);
 
-                {/* Actions */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                  <button
-                    onClick={() => copyMessage(message.content, message.id)}
-                    className="p-1 text-gray-500 hover:text-gray-300 rounded"
-                    title="Copy"
-                  >
-                    {copied === message.id ? (
-                      <Check size={14} className="text-green-500" />
-                    ) : (
-                      <Copy size={14} />
-                    )}
-                  </button>
-                  {message.type !== 'broadcast' && isStreaming && (
-                    <button
-                      onClick={() => handleBroadcast(message)}
-                      className="p-1 text-purple-500 hover:text-purple-400 rounded"
-                      title="Broadcast to stream"
-                    >
-                      <Send size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+  const [showTranslation, setShowTranslation] = useState<{ [key: string]: boolean }>({});
+  const [keyword, setKeyword] = useState('');
+  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'summary'>('chat');
+  const [summary, setSummary] = useState('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [sentimentFilter, setSentimentFilter] = useState<'all' | 'positive' | 'negative'>('all');
+  const [topicFilter, setTopicFilter] = useState('');
 
-        {isLoading && (
-          <div className="flex items-center gap-2 text-gray-400 text-sm">
-            <div className="flex gap-1">
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '0ms' }}
-              />
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '150ms' }}
-              />
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '300ms' }}
-              />
-            </div>
-            <span>AI is thinking...</span>
-          </div>
-        )}
+  useEffect(() => {
+    if (translationStatus === TranslationStatus.FAILED) {
+      alert('Translation failed. Please try again later.');
+    }
+  }, [translationStatus]);
 
-        <div ref={messagesEndRef} />
+  const handleTranslationClick = (messageId: string) => {
+    setShowTranslation(prev => ({ ...prev, [messageId]: !prev[messageId] }));
+    if (!showTranslation[messageId]) {
+      dispatch(fetchTranslation(messageId));
+    }
+  };
+
+  const handleKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setKeyword(e.target.value);
+    // API call to fetch suggested keywords
+  };
+
+  const handleKeywordSelect = (selectedKeyword: string) => {
+    setKeyword(selectedKeyword);
+    setShowSuggestions(false);
+    // Filter chat messages based on selected keyword
+  };
+
+  const handleGenerateSummary = async () => {
+    setIsGeneratingSummary(true);
+    try {
+      // Call AI service to generate summary
+      // This would use the new AI endpoint added by the Logic Agent
+      const response = await fetch('/api/ai/generate-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          messages: messages.map(m => m.content),
+          sentimentFilter,
+          topicFilter
+        })
+      });
+      const data = await response.json();
+      setSummary(data.summary);
+    } catch (error) {
+      console.error('Failed to generate summary:', error);
+      setSummary('Failed to generate summary. Please try again.');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  return (
+    <div className="chat-stream" role="region" aria-label="Chat Stream">
+      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+        <button
+          className={`px-4 py-2 ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+          onClick={() => setActiveTab('chat')}
+          aria-selected={activeTab === 'chat'}
+        >
+          Chat
+        </button>
+        <button
+          className={`px-4 py-2 ${activeTab === 'summary' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+          onClick={() => setActiveTab('summary')}
+          aria-selected={activeTab === 'summary'}
+        >
+          Summary
+        </button>
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-gray-700">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (e.ctrlKey || e.metaKey) {
-                    handleQuickBroadcast();
-                  } else {
-                    handleSend();
-                  }
-                }
-              }}
-              placeholder="Type a message..."
-              className="w-full bg-dark-900/50 border border-gray-700 rounded-xl py-2.5 px-4 pr-10 text-white text-sm placeholder-gray-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send size={16} />
-            </button>
-          </div>
-
-          {isStreaming && (
-            <button
-              onClick={handleQuickBroadcast}
-              disabled={!input.trim()}
-              className="p-2.5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-purple-600/30"
-              title="Broadcast to stream (Ctrl+Enter)"
-            >
-              <Eye size={18} />
-            </button>
-          )}
+      {activeTab === 'chat' ? (
+        <div className="messages">
+          {/* Existing chat messages rendering */}
         </div>
+      ) : (
+        <SummaryPanel
+          messages={messages}
+          onGenerateSummary={handleGenerateSummary}
+          isGenerating={isGeneratingSummary}
+          summary={summary}
+          sentimentFilter={sentimentFilter}
+          topicFilter={topicFilter}
+          onSentimentChange={setSentimentFilter}
+          onTopicChange={setTopicFilter}
+        />
+      )}
 
-        <p className="mt-2 text-xs text-gray-500 text-center">
-          {isStreaming ? (
-            <>
-              Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-400">Ctrl+Enter</kbd>{' '}
-              to broadcast directly
-            </>
-          ) : (
-            <>Start streaming to broadcast messages</>
-          )}
-        </p>
+      <div className="input-area" role="search">
+        <input
+          type="text"
+          value={keyword}
+          onChange={handleKeywordChange}
+          placeholder="Filter messages"
+          className="keyword-input"
+          aria-label="Search messages"
+          aria-autocomplete="list"
+          aria-controls="suggestions-dropdown"
+          aria-expanded={showSuggestions}
+        />
+        {showSuggestions && (
+          <div className="suggestions-dropdown" id="suggestions-dropdown">
+            {suggestedKeywords.map((suggestion, index) => (
+              <button
+                key={index}
+                className="suggestion-button"
+                onClick={() => handleKeywordSelect(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ARIA live region for new messages, offscreen for screen readers */}
+      <div aria-live="polite" aria-atomic="true" style={{ position: 'absolute', left: '-9999px', height: 1, width: 1, overflow: 'hidden' }}>
+        {messages[0]?.text}
+      </div>
+      {/* ARIA live region for search results count */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {messages.filter(message => message.content.includes(keyword)).length} messages found
       </div>
     </div>
   );

@@ -10,13 +10,13 @@ type State = {
   giveUp: boolean;
 };
 
-// ── Keys must match index.html inline script ──────────────────────────────────
+// ââ Keys must match index.html inline script ââââââââââââââââââââââââââââââââââ
 const RELOAD_COUNT_KEY = 'cs_loop_count';
 const RELOAD_TS_KEY    = 'cs_loop_ts';
 const MAX_AUTO_RELOADS = 2;
 const RELOAD_WINDOW_MS = 20_000;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const isChunkLoadError = (error: unknown): boolean => {
   const msg = error instanceof Error ? error.message : String(error ?? '');
   return (
@@ -45,7 +45,7 @@ const clearEverythingAndReload = async (): Promise<void> => {
       await Promise.all(regs.map((r) => r.unregister()));
     } catch { /* ignore */ }
   }
-  // Hard reload — force browser to fetch fresh index.html from server
+  // Hard reload â force browser to fetch fresh index.html from server
   window.location.reload();
 };
 
@@ -74,7 +74,7 @@ const bumpReloadCount = (): number => {
   }
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ââ Component âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default class ChunkErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, message: '', giveUp: false };
 
@@ -91,7 +91,7 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
     const count = getReloadCount();
 
     if (count >= MAX_AUTO_RELOADS) {
-      // Tried enough times — show manual button, stop looping
+      // Tried enough times â show manual button, stop looping
       this.setState({ giveUp: true });
       return;
     }
@@ -102,7 +102,7 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
 
   handleManualReload = (): void => {
     try {
-      // Full reset — clear both our keys and any legacy keys
+      // Full reset â clear both our keys and any legacy keys
       ['cs_loop_count','cs_loop_ts','chunk_error_reload_count','chunk_error_reload_ts','cs_sw_reload_ts']
         .forEach((k) => localStorage.removeItem(k));
     } catch { /* ignore */ }
@@ -124,7 +124,7 @@ export default class ChunkErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Auto-recovery failed — manual action required
+    // Auto-recovery failed â manual action required
     return (
       <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-dark-800 border border-gray-800 rounded-2xl p-6 space-y-4">

@@ -5,13 +5,13 @@
  * Shortcuts are disabled when focus is inside an input/textarea.
  *
  * Default bindings:
- *   Space  — toggle Go Live / End Stream
- *   M      — mute / unmute mic
- *   R      — start / stop recording
- *   C      — save clip
- *   T      — toggle auto-captions
- *   1-5    — switch scene by index
- *   F      — toggle fullscreen cam layout
+ *   Space  â toggle Go Live / End Stream
+ *   M      â mute / unmute mic
+ *   R      â start / stop recording
+ *   C      â save clip
+ *   T      â toggle auto-captions
+ *   1-5    â switch scene by index
+ *   F      â toggle fullscreen cam layout
  */
 
 import { useEffect } from 'react';

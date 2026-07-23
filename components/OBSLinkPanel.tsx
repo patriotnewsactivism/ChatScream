@@ -3,7 +3,7 @@
  * 
  * Generates a URL that streamers can paste into OBS as a Browser Source.
  * The URL loads a lightweight overlay-only view of the ChatScream canvas
- * that displays scream alerts, chat, graphics, and branding — composited
+ * that displays scream alerts, chat, graphics, and branding â composited
  * on a transparent background so it layers over the streamer's own OBS scene.
  */
 
@@ -91,7 +91,7 @@ export function OBSLinkPanel({ streamId, branding, overlayConfig }: OBSLinkPanel
         ws.close();
       };
     } catch {
-      // WebSocket not available — show as disconnected
+      // WebSocket not available â show as disconnected
     }
   }, [streamId]);
 
@@ -129,7 +129,7 @@ export function OBSLinkPanel({ streamId, branding, overlayConfig }: OBSLinkPanel
 
       <p className="text-sm text-zinc-400">
         Paste this URL into OBS as a Browser Source to overlay ChatScream alerts,
-        chat, and graphics on your stream. The background is transparent — it layers
+        chat, and graphics on your stream. The background is transparent â it layers
         over your existing OBS scene.
       </p>
 
@@ -184,11 +184,11 @@ export function OBSLinkPanel({ streamId, branding, overlayConfig }: OBSLinkPanel
           <Info className="h-3.5 w-3.5" /> OBS SETUP INSTRUCTIONS
         </div>
         <ol className="text-xs text-zinc-500 space-y-1.5 ml-5 list-decimal">
-          <li>Open OBS → add a new <strong className="text-zinc-300">Browser</strong> source</li>
+          <li>Open OBS â add a new <strong className="text-zinc-300">Browser</strong> source</li>
           <li>Paste the URL above into the URL field</li>
           <li>Set Width: <strong className="text-zinc-300">{resolution === '1080p' ? '1920' : '1280'}</strong>, Height: <strong className="text-zinc-300">{resolution === '1080p' ? '1080' : '720'}</strong></li>
           <li>Check <strong className="text-zinc-300">"Refresh browser when scene becomes active"</strong></li>
-          <li>Position the source over your camera/scene — background is transparent</li>
+          <li>Position the source over your camera/scene â background is transparent</li>
           <li>Scream alerts and chat will appear automatically during your stream</li>
         </ol>
       </div>
@@ -197,27 +197,27 @@ export function OBSLinkPanel({ streamId, branding, overlayConfig }: OBSLinkPanel
       <div className="flex flex-wrap gap-2">
         {overlayConfig.showScreamAlerts && (
           <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full border border-red-500/30">
-            🔊 Scream Alerts
+            ð Scream Alerts
           </span>
         )}
         {overlayConfig.showChat && (
           <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full border border-blue-500/30">
-            💬 Chat ({overlayConfig.chatMaxMessages} msgs)
+            ð¬ Chat ({overlayConfig.chatMaxMessages} msgs)
           </span>
         )}
         {overlayConfig.showScoreboard && (
           <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full border border-green-500/30">
-            📊 Scoreboard
+            ð Scoreboard
           </span>
         )}
         {overlayConfig.showLowerThird && (
           <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full border border-purple-500/30">
-            📝 Lower Third
+            ð Lower Third
           </span>
         )}
         {overlayConfig.showTimer && (
           <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded-full border border-orange-500/30">
-            ⏱️ Timer
+            â±ï¸ Timer
           </span>
         )}
       </div>
@@ -225,7 +225,7 @@ export function OBSLinkPanel({ streamId, branding, overlayConfig }: OBSLinkPanel
       {/* Connection status */}
       <div className="text-xs text-zinc-500 border-t border-zinc-800 pt-3">
         {obsStatus === 'connected' ? (
-          <span className="text-green-400">✓ OBS is receiving the overlay feed</span>
+          <span className="text-green-400">â OBS is receiving the overlay feed</span>
         ) : (
           <span>Add the Browser Source in OBS to connect. The status updates automatically.</span>
         )}

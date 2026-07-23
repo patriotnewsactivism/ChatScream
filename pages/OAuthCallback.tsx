@@ -40,7 +40,7 @@ const OAuthCallback: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState<string>('Completing connection...');
 
-  // Hard timeout — never spin forever if auth hangs
+  // Hard timeout â never spin forever if auth hangs
   useEffect(() => {
     loadingTimeoutRef.current = setTimeout(() => {
       if (status === 'loading') {

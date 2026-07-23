@@ -16,7 +16,7 @@ interface ProtectedRouteProps {
   children: ReactNode;
 }
 
-// Check localStorage for a stored session — if one exists and isn't expired,
+// Check localStorage for a stored session â if one exists and isn't expired,
 // we treat the user as authenticated immediately without waiting for the auth hook.
 const hasStoredSession = (): boolean => {
   try {
@@ -35,7 +35,7 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading, configError } = useAuth();
   const location = useLocation();
 
-  // If we have a stored session, render immediately — do not wait for auth hook
+  // If we have a stored session, render immediately â do not wait for auth hook
   const [sessionExists] = useState(() => hasStoredSession());
 
   // Hard fallback: after 3s, stop blocking no matter what
@@ -48,7 +48,7 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [loading, user, sessionExists]);
 
-  // Config error — show banner
+  // Config error â show banner
   if (configError) {
     return (
       <div className="min-h-screen bg-dark-900 text-white flex flex-col">
@@ -65,16 +65,16 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  // User is confirmed authenticated — render immediately
+  // User is confirmed authenticated â render immediately
   if (user) return <>{children}</>;
 
-  // We have a stored session — render immediately, auth context will catch up
+  // We have a stored session â render immediately, auth context will catch up
   if (sessionExists) return <>{children}</>;
 
-  // Still loading and haven't timed out — show spinner briefly
+  // Still loading and haven't timed out â show spinner briefly
   if (loading && !timedOut) return <AuthLoader />;
 
-  // No user, no stored session, not loading or timed out — redirect to login
+  // No user, no stored session, not loading or timed out â redirect to login
   return <Navigate to="/login" replace state={{ from: location }} />;
 };
 

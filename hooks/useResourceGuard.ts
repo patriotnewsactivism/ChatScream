@@ -1,10 +1,10 @@
 /**
- * Resource Guard — keeps the app from freezing on low-memory phones.
+ * Resource Guard â keeps the app from freezing on low-memory phones.
  *
  * Features:
  * - Monitors deviceMemory API + performance.memory (Chrome) for heap pressure
  * - Watches for frame-drops via requestAnimationFrame jank detection
- * - Drops quality tiers automatically (1080→720→480→360) before the device stalls
+ * - Drops quality tiers automatically (1080â720â480â360) before the device stalls
  * - Exposes a "danger" level (green/yellow/red) for UI indicators
  * - Provides `safeToEnable(feature)` so the app never enables something that
  *   would push memory over the edge (e.g., local recording on a 2 GB phone)
@@ -47,7 +47,7 @@ export const useResourceGuard = (enabled = true) => {
   const frameTimes = useRef<number[]>([]);
   const rafId = useRef<number>(0);
 
-  // ── FPS measurement ──────────────────────────────────────────────────────
+  // ââ FPS measurement ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!enabled) return;
 
@@ -115,16 +115,16 @@ export const useResourceGuard = (enabled = true) => {
     };
   }, [enabled]);
 
-  // ── Utility: check if it's safe to enable a feature ──────────────────────
+  // ââ Utility: check if it's safe to enable a feature ââââââââââââââââââââââ
   const safeToEnable = useCallback(
     (feature: keyof typeof FEATURE_COST_MB): boolean => {
       const costMB = FEATURE_COST_MB[feature] || 0;
       const perf = (performance as any);
       if (perf.memory) {
         const freeBytes = perf.memory.jsHeapSizeLimit - perf.memory.usedJSHeapSize;
-        return freeBytes > costMB * 1024 * 1024 * 1.5; // 1.5× safety margin
+        return freeBytes > costMB * 1024 * 1024 * 1.5; // 1.5Ã safety margin
       }
-      // Can't measure — allow if not already in danger
+      // Can't measure â allow if not already in danger
       return snapshot.level !== 'red';
     },
     [snapshot.level],

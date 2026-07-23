@@ -243,7 +243,7 @@ export const hasFeatureAccess = (
 };
 
 // Check if user can add more destinations
-// Master admin emails — full access, no plan limits
+// Master admin emails â full access, no plan limits
 export const ADMIN_EMAILS: string[] = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
 
 export const isAdminEmail = (email?: string | null): boolean =>
@@ -259,7 +259,7 @@ export const canAddDestination = (
     return {
       allowed: true,
       maxDestinations: -1,
-      message: 'Admin — unlimited destinations',
+      message: 'Admin â unlimited destinations',
     };
   }
 
@@ -377,7 +377,7 @@ export const SCREAM_TIERS: ScreamTier[] = [
     id: 'standard',
     name: 'Standard Scream',
     label: 'Scream',
-    emoji: '📢',
+    emoji: 'ð¢',
     color: '#3b82f6',
     glowColor: '#06b6d4',
     minAmount: 5,
@@ -395,7 +395,7 @@ export const SCREAM_TIERS: ScreamTier[] = [
     id: 'loud',
     name: 'Loud Scream',
     label: 'Loud Scream',
-    emoji: '🔊',
+    emoji: 'ð',
     color: '#f97316',
     glowColor: '#fbbf24',
     minAmount: 10,
@@ -413,7 +413,7 @@ export const SCREAM_TIERS: ScreamTier[] = [
     id: 'maximum',
     name: 'MAXIMUM SCREAM',
     label: 'MAXIMUM SCREAM',
-    emoji: '🔥',
+    emoji: 'ð¥',
     color: '#ef4444',
     glowColor: '#f97316',
     minAmount: 50,

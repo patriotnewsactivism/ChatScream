@@ -75,7 +75,7 @@ const VideoTransportBar: React.FC<VideoTransportBarProps> = ({
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-gray-500 animate-pulse" />
           <span className="text-xs text-gray-400">
-            {videoName ? `Loading ${videoName}…` : 'Loading video metadata…'}
+            {videoName ? `Loading ${videoName}â¦` : 'Loading video metadataâ¦'}
           </span>
         </div>
       </div>
@@ -90,7 +90,7 @@ const VideoTransportBar: React.FC<VideoTransportBarProps> = ({
       {videoName && (
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-gray-300 truncate max-w-[60%]">
-            🎬 {videoName}
+            ð¬ {videoName}
           </span>
           <button
             onClick={onStop}

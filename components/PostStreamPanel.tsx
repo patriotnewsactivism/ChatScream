@@ -1,5 +1,5 @@
 /**
- * PostStreamPanel — Stream → Content Pipeline
+ * PostStreamPanel â Stream â Content Pipeline
  *
  * After a stream ends, shows the transcript and generates
  * AI-powered articles and social media posts from the content.
@@ -68,15 +68,15 @@ const PostStreamPanel = ({
     try {
       // Build prompt based on content type
       const prompts: Record<ContentType, string> = {
-        article: `You are Don Matthews, a fearless investigative journalist with We The People News (wtpnews.org). Write a hard-hitting article based on this livestream transcript. Include specific case law citations where relevant (e.g., Glik v. Cunniffe for recording rights, Reed v. Town of Gilbert for content-based restrictions, Monell v. NYC for municipal liability). Use a passionate, constitutional-rights-focused tone. Format with: headline, byline (Don Matthews, We The People News | wtpnews.org), body paragraphs, and end with: 'Need a civil rights attorney? Find one in your state at civilrightshub.org — 1,756+ verified attorneys listed.'\n\nTranscript:\n${transcript.slice(0, 8000)}`,
+        article: `You are Don Matthews, a fearless investigative journalist with We The People News (wtpnews.org). Write a hard-hitting article based on this livestream transcript. Include specific case law citations where relevant (e.g., Glik v. Cunniffe for recording rights, Reed v. Town of Gilbert for content-based restrictions, Monell v. NYC for municipal liability). Use a passionate, constitutional-rights-focused tone. Format with: headline, byline (Don Matthews, We The People News | wtpnews.org), body paragraphs, and end with: 'Need a civil rights attorney? Find one in your state at civilrightshub.org â 1,756+ verified attorneys listed.'\n\nTranscript:\n${transcript.slice(0, 8000)}`,
         facebook: `Write a powerful Facebook post based on this livestream transcript. Keep it punchy, passionate, and focused on constitutional rights. Include: a strong hook (2 sentences before the 'see more' break), key facts, a call to action pointing to wtpnews.org, and mention 'Find a civil rights attorney in your state at civilrightshub.org'. End with hashtags: #FirstAmendment #CivilRights #WTPNews #KnowYourRights. This is for Don Matthews / We The People News.\n\nTranscript:\n${transcript.slice(0, 4000)}`,
         summary: `Summarize the key points from this livestream in bullet points. Focus on constitutional rights issues, any violations observed, and key statements made. Be concise.\n\nTranscript:\n${transcript.slice(0, 6000)}`,
       };
 
       const titles: Record<ContentType, string> = {
-        article: '📰 Article Draft',
-        facebook: '📘 Facebook Post',
-        summary: '📋 Stream Summary',
+        article: 'ð° Article Draft',
+        facebook: 'ð Facebook Post',
+        summary: 'ð Stream Summary',
       };
 
       // Try to use the backend AI endpoint
@@ -101,12 +101,12 @@ const PostStreamPanel = ({
           ...prev,
         ]);
       } else {
-        // Fallback — provide template
+        // Fallback â provide template
         const fallback = generateType === 'article'
-          ? `HEADLINE: [Your headline here]\n\nBy Don Matthews | We The People News\ndon@donmatthews.live\n\n[The AI backend is not responding — here's your transcript to work from. Copy and edit as needed.]\n\n${transcript.slice(0, 3000)}`
+          ? `HEADLINE: [Your headline here]\n\nBy Don Matthews | We The People News\ndon@donmatthews.live\n\n[The AI backend is not responding â here's your transcript to work from. Copy and edit as needed.]\n\n${transcript.slice(0, 3000)}`
           : generateType === 'facebook'
-            ? `🔴 LIVE UPDATE from We The People News\n\n${transcript.slice(0, 500)}...\n\n#FirstAmendment #CivilRights #KnowYourRights #WeThePeople`
-            : `Key Points:\n• ${transcript.slice(0, 200)}...\n\n[Full transcript available for manual editing]`;
+            ? `ð´ LIVE UPDATE from We The People News\n\n${transcript.slice(0, 500)}...\n\n#FirstAmendment #CivilRights #KnowYourRights #WeThePeople`
+            : `Key Points:\nâ¢ ${transcript.slice(0, 200)}...\n\n[Full transcript available for manual editing]`;
 
         setGeneratedContent((prev) => [
           { type: generateType, title: titles[generateType] + ' (template)', content: fallback },
@@ -156,7 +156,7 @@ const PostStreamPanel = ({
           <div>
             <h2 className="text-base font-bold text-white">Stream Recap</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              {formatDuration(streamDuration)} · {wordCount.toLocaleString()} words · {evidenceMarkers.length} markers
+              {formatDuration(streamDuration)} Â· {wordCount.toLocaleString()} words Â· {evidenceMarkers.length} markers
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white">

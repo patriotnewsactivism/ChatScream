@@ -1,9 +1,9 @@
 /**
- * ProgramPreview — Switcher-style dual-canvas multiview.
+ * ProgramPreview â Switcher-style dual-canvas multiview.
  *
  * Shows a "Preview" canvas (what you're building) and a "Program" canvas
  * (what's actually going out live). Tap/click "TAKE" or "CUT" to push
- * preview → program. Transitions: cut (instant) or mix (500 ms crossfade).
+ * preview â program. Transitions: cut (instant) or mix (500 ms crossfade).
  *
  * The Program canvas is what CanvasCompositor renders into (the stream).
  * The Preview canvas shows a second CanvasCompositor at reduced resolution
@@ -66,7 +66,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
 }) => {
   const previewCanvasRef = useRef<CanvasRef | null>(null);
 
-  // Preview state — starts matching program
+  // Preview state â starts matching program
   const [previewLayout, setPreviewLayout] = useState<LayoutMode>(programLayout);
   const [previewScene, setPreviewScene] = useState<Scene | null>(programScene);
   const [transition, setTransition] = useState<TransitionType>('cut');
@@ -78,7 +78,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
     setPreviewScene(programScene);
   }, [programLayout, programScene]);
 
-  // TAKE — push preview → program
+  // TAKE â push preview â program
   const handleTake = useCallback(() => {
     if (transitioning) return;
 
@@ -128,7 +128,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
         </div>
       </div>
 
-      {/* Transition controls — center column on desktop, horizontal strip on mobile */}
+      {/* Transition controls â center column on desktop, horizontal strip on mobile */}
       <div className={`flex ${compact ? 'flex-row justify-center' : 'flex-col justify-center'} items-center gap-2 shrink-0`}>
         <button
           onClick={handleTake}

@@ -7,7 +7,7 @@
  * Usage:
  *   const buf = new ClipBuffer(canvasStream);
  *   buf.start();
- *   // later…
+ *   // laterâ¦
  *   buf.saveClip('my-clip.webm');
  *   buf.stop();
  */

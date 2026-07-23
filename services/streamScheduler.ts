@@ -112,7 +112,7 @@ export class StreamScheduler {
       }
 
       if (minutesUntilStart <= 0 && stream.autoStart) {
-        console.log(`⏰ Auto-starting scheduled stream: ${stream.title}`);
+        console.log(`â° Auto-starting scheduled stream: ${stream.title}`);
         this.startScheduledStream(stream.id);
       }
     }
@@ -120,7 +120,7 @@ export class StreamScheduler {
 
   private sendNotification(stream: ScheduledStream, minutesBefore: number): void {
     console.log(
-      `🔔 Sending notification for stream: ${stream.title} (${minutesBefore} min before)`,
+      `ð Sending notification for stream: ${stream.title} (${minutesBefore} min before)`,
     );
     if (this.onNotification) {
       this.onNotification(stream, minutesBefore);
@@ -178,7 +178,7 @@ export class StreamScheduler {
         };
 
         this.scheduledStreams.set(stream.id, stream);
-        console.log(`📅 Scheduled stream: ${title} at ${scheduledTime.toLocaleString()}`);
+        console.log(`ð Scheduled stream: ${title} at ${scheduledTime.toLocaleString()}`);
         return { success: true, streamId: stream.id };
       }
 
@@ -211,7 +211,7 @@ export class StreamScheduler {
       if (response.success) {
         Object.assign(stream, updates);
         stream.updatedAt = new Date();
-        console.log(`✅ Updated scheduled stream: ${stream.title}`);
+        console.log(`â Updated scheduled stream: ${stream.title}`);
         return { success: true };
       }
 
@@ -242,7 +242,7 @@ export class StreamScheduler {
       if (response.success) {
         stream.status = 'cancelled';
         stream.updatedAt = new Date();
-        console.log(`❌ Cancelled scheduled stream: ${stream.title}`);
+        console.log(`â Cancelled scheduled stream: ${stream.title}`);
         return { success: true };
       }
 
@@ -269,7 +269,7 @@ export class StreamScheduler {
     }
 
     try {
-      console.log(`▶️ Starting scheduled stream: ${stream.title}`);
+      console.log(`â¶ï¸ Starting scheduled stream: ${stream.title}`);
       stream.status = 'live';
       stream.updatedAt = new Date();
 
@@ -305,7 +305,7 @@ export class StreamScheduler {
     }
 
     try {
-      console.log(`⏹️ Stopping scheduled stream: ${stream.title}`);
+      console.log(`â¹ï¸ Stopping scheduled stream: ${stream.title}`);
       stream.status = 'completed';
       stream.updatedAt = new Date();
 
@@ -398,7 +398,7 @@ export class StreamScheduler {
       }
     }
 
-    console.log(`📆 Created ${streamIds.length} recurring streams`);
+    console.log(`ð Created ${streamIds.length} recurring streams`);
     return { success: streamIds.length > 0, streamIds };
   }
 

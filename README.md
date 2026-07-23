@@ -1,22 +1,22 @@
-  <center><h1>Chat<span style="color: #38bdf8">Scream</span></h1></center>
-  
-  <p><strong>Stream Without Limits. Scream for Attention.</strong></p>
-  
-  <p>
-    <a href="#-features">Features</a> •
-    <a href="#-tech-stack">Tech Stack</a> •
-    <a href="#-quick-start">Quick Start</a> •
-    <a href="#-deployment">Deployment</a>
-  </p>
+<center><h1>Chat<span style="color: #38bdf8">Scream</span></h1></center>
 
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Stack-Vite_React_Node%20API-blue?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Deployment-AWS_EC2_ASG-orange?style=for-the-badge" />
+<p><strong>Stream Without Limits. Scream for Attention.</strong></p>
+
+<p>
+  <a href="#-features">Features</a> â¢
+  <a href="#-tech-stack">Tech Stack</a> â¢
+  <a href="#-quick-start">Quick Start</a> â¢
+  <a href="#-deployment">Deployment</a>
+</p>
+
+<img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge" />
+<img src="https://img.shields.io/badge/Stack-Vite_React_Node%20API-blue?style=for-the-badge" />
+<img src="https://img.shields.io/badge/Deployment-AWS_EC2_ASG-orange?style=for-the-badge" />
 </div>
 
 ---
 
-## 🚀 The Mission
+## ð The Mission
 
 **ChatScream** is a browser-based multi-streaming studio designed to disrupt the live-streaming market. Unlike traditional tools (OBS, Streamlabs) that rely on the user's upload speed, ChatScream offloads encoding to the cloud.
 
@@ -24,15 +24,15 @@
 - **Chat Screamer:** The USP. Donation-triggered overlays that **DEMAND** attention. The more they donate, the more obnoxious it gets.
 - **Any Device:** Go live from a phone, tablet, or potato laptop. If it has a browser, it's a studio.
 
-## ⚡ Features
+## â¡ Features
 
-### 🌩️ Cloud Power Engine
+### ð©ï¸ Cloud Power Engine
 
 - **Zero-Latency Preview:** See exactly what your viewers see.
 - **Constant Bitrate (CBR):** Our servers output 4K/60fps regardless of your local connection quality.
 - **Global Edge Network:** Ingests video from the server closest to you.
 
-### 📢 The Chat Screamer
+### ð¢ The Chat Screamer
 
 Monetize your stream with aggression.
 
@@ -40,14 +40,14 @@ Monetize your stream with aggression.
 - **Loud Scream ($10-20):** Larger overlay, louder SFX, distinct animation.
 - **MAXIMUM SCREAM ($50+):** Full screen takeover. Chaotic visuals. Intentionally obnoxious.
 
-### 🏆 Gamification
+### ð Gamification
 
 - **Weekly Leaderboards:** Tracks "Scream Quantity" rather than just dollar amounts to encourage engagement.
 - **Automatic Rewards:** Top streamers win free Professional Tier upgrades.
 
 ---
 
-## 🛠 Tech Stack
+## ð  Tech Stack
 
 **Frontend**
 
@@ -65,7 +65,7 @@ Monetize your stream with aggression.
 
 ---
 
-## 🔌 Quick Start
+## ð Quick Start
 
 ### Prerequisites
 
@@ -114,7 +114,7 @@ Monetize your stream with aggression.
 
 ---
 
-## 📦 Deployment
+## ð¦ Deployment
 
 ### 1. Build Frontend + API
 
@@ -159,3 +159,26 @@ This repo now supports Vercel SPA routes plus backend API routes in one project:
 - Backend routes are rewritten to `api/all.js`, which mounts the Express API in `server/app.js`.
 
 For this mode, keep `VITE_API_BASE_URL` empty so the frontend calls same-origin `/api/*`.
+
+---
+
+## ð New Accessibility Features
+
+### ð Customizable Font Sizes
+
+- Users can adjust the font size to improve readability.
+
+### ð High Contrast Mode
+
+- A toggle for high contrast mode to enhance visibility for users with visual impairments.
+
+### ð¤ Screen Reader Support
+
+- All interactive elements are accessible via keyboard navigation.
+- ARIA attributes are added to key elements to support screen readers.
+
+---
+
+## ð User Documentation
+
+For detailed instructions on how to use these new accessibility features, please refer to the updated user documentation.

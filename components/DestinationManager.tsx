@@ -926,7 +926,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         {showTikTokManualEntry && (
           <div className="bg-gray-800/95 p-3 rounded-lg border border-gray-600 mb-3 animate-fade-in space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-gray-200">TIKTOK LIVE — RTMP KEY</h3>
+              <h3 className="text-xs font-semibold text-gray-200">TIKTOK LIVE â RTMP KEY</h3>
               <button
                 type="button"
                 onClick={() => setShowTikTokManualEntry(false)}
@@ -943,9 +943,9 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                 rel="noopener noreferrer"
                 className="text-brand-400 underline"
               >
-                TikTok Studio → Go LIVE
+                TikTok Studio â Go LIVE
               </a>{' '}
-              → RTMP.
+              â RTMP.
             </p>
             <div className="flex gap-2">
               <input

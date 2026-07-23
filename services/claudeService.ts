@@ -31,7 +31,7 @@ const fallbackViralPackage = (topic: string): ViralStreamPackage => {
   return {
     titles: [
       `Live: ${normalized}`.slice(0, 60),
-      `Let’s talk ${normalized}`.slice(0, 60),
+      `Letâs talk ${normalized}`.slice(0, 60),
       `${normalized} (Live Q&A)`.slice(0, 60),
     ],
     descriptions: [
@@ -39,7 +39,7 @@ const fallbackViralPackage = (topic: string): ViralStreamPackage => {
         0,
         220,
       ),
-      `Streaming ${normalized} right now—tips, demos, and chat. Drop in and say hi! ${baseHashtag}`.slice(
+      `Streaming ${normalized} right nowâtips, demos, and chat. Drop in and say hi! ${baseHashtag}`.slice(
         0,
         220,
       ),

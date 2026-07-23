@@ -1,5 +1,5 @@
 /**
- * StreamScheduler — Schedule future streams with notifications.
+ * StreamScheduler â Schedule future streams with notifications.
  *
  * Mobile-friendly scheduling UI. Set date/time, title, and platform.
  * Uses browser notifications to remind when it's time to go live.
@@ -55,7 +55,7 @@ const StreamScheduler = ({ onGoLive, compact = false }: StreamSchedulerProps) =>
         // Notify when it's time
         if (minutesUntil <= stream.notifyBefore && minutesUntil > stream.notifyBefore - 1) {
           if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('🔴 Stream Reminder', {
+            new Notification('ð´ Stream Reminder', {
               body: `"${stream.title}" starts in ${Math.round(minutesUntil)} minutes!`,
               icon: '/favicon.ico',
             });
@@ -145,7 +145,7 @@ const StreamScheduler = ({ onGoLive, compact = false }: StreamSchedulerProps) =>
               <p className="text-xs font-semibold text-brand-300">{nextStream.title}</p>
               <p className="text-[10px] text-brand-400/70 mt-0.5">
                 {nextStream.scheduledAt.toLocaleDateString()} at {nextStream.scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                {' · '}{formatRelativeTime(nextStream.scheduledAt)}
+                {' Â· '}{formatRelativeTime(nextStream.scheduledAt)}
               </p>
             </div>
             <button

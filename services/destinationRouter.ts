@@ -47,10 +47,10 @@ export class DestinationRouter {
     this.userPlan = userPlan;
     this.onStatusUpdate = onStatusUpdate || null;
     this.onStats = onStats || null;
-    console.log('🔀 DestinationRouter initialized for plan:', userPlan);
+    console.log('ð DestinationRouter initialized for plan:', userPlan);
   }
   public async route(stream: MediaStream, destinations: Destination[]): Promise<void> {
-    console.log('🔀 Starting destination routing via WebSocket...');
+    console.log('ð Starting destination routing via WebSocket...');
 
     const enabled = destinations.filter((d) => d.isEnabled);
     if (enabled.length === 0) throw new Error('No destinations enabled');
@@ -69,7 +69,7 @@ export class DestinationRouter {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       wsUrl = `${protocol}//${window.location.host}`;
     }
-    console.log('🔌 Connecting WebSocket to:', wsUrl);
+    console.log('ð Connecting WebSocket to:', wsUrl);
 
     this.ws = new WebSocket(wsUrl);
 
@@ -77,7 +77,7 @@ export class DestinationRouter {
       if (!this.ws) return reject(new Error('WebSocket not initialized'));
 
       this.ws.onopen = () => {
-        console.log('🔌 Ingest WebSocket connected');
+        console.log('ð Ingest WebSocket connected');
 
         this.ws?.send(
           JSON.stringify({
@@ -95,7 +95,7 @@ export class DestinationRouter {
         this.startRecording();
 
         this.state.status = 'routing';
-        // Mark as 'connecting' — flip to 'live' only when server sends destination_connected
+        // Mark as 'connecting' â flip to 'live' only when server sends destination_connected
         enabled.forEach((d) => {
           this.state.activeConnections.set(d.id, {
             destination: d,
@@ -121,7 +121,7 @@ export class DestinationRouter {
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === 'destination_connected') {
-            // FFmpeg opened the RTMP connection — now truly live
+            // FFmpeg opened the RTMP connection â now truly live
             const conn = this.state.activeConnections.get(msg.destId);
             if (conn) {
               conn.status = 'live';
@@ -129,7 +129,7 @@ export class DestinationRouter {
               this.state.liveDestinations++;
             }
             this.updateDestinationStatus(msg.destId, 'live');
-            console.log(`✅ Destination confirmed live: ${msg.destId}`);
+            console.log(`â Destination confirmed live: ${msg.destId}`);
           } else if (msg.type === 'destination_error') {
             const conn = this.state.activeConnections.get(msg.destId);
             if (conn) {
@@ -139,7 +139,7 @@ export class DestinationRouter {
               if (conn.retryCount < conn.maxRetries && this.ws?.readyState === WebSocket.OPEN) {
                 conn.retryCount++;
                 const delay = Math.min(2000 * Math.pow(2, conn.retryCount - 1), 15000);
-                console.log(`🔄 Auto-retrying [${msg.destId}] attempt ${conn.retryCount}/${conn.maxRetries} in ${delay}ms`);
+                console.log(`ð Auto-retrying [${msg.destId}] attempt ${conn.retryCount}/${conn.maxRetries} in ${delay}ms`);
                 this.updateDestinationStatus(msg.destId, 'connecting');
                 setTimeout(() => {
                   if (this.ws?.readyState === WebSocket.OPEN && conn.status !== 'live') {
@@ -147,16 +147,16 @@ export class DestinationRouter {
                       type: 'retry_destination',
                       destId: msg.destId,
                     }));
-                    console.log(`🔄 Retry sent for [${msg.destId}]`);
+                    console.log(`ð Retry sent for [${msg.destId}]`);
                   }
                 }, delay);
               } else {
                 this.updateDestinationStatus(msg.destId, 'error');
-                console.error(`❌ Destination error [${msg.destId}]: ${msg.message} (max retries exhausted)`);
+                console.error(`â Destination error [${msg.destId}]: ${msg.message} (max retries exhausted)`);
               }
             } else {
               this.updateDestinationStatus(msg.destId, 'error');
-              console.error(`❌ Destination error [${msg.destId}]: ${msg.message}`);
+              console.error(`â Destination error [${msg.destId}]: ${msg.message}`);
             }
           } else if (msg.type === 'error') {
             console.error('Server streaming error:', msg.message);
@@ -164,7 +164,7 @@ export class DestinationRouter {
           } else if (msg.type === 'stats') {
             if (this.onStats) this.onStats({ bitrate: msg.bitrate });
           } else if (msg.type === 'destinations_updated') {
-            console.log(`🔄 Server confirmed destination update: ${msg.count} active`);
+            console.log(`ð Server confirmed destination update: ${msg.count} active`);
           }
         } catch (e) {}
       };
@@ -189,7 +189,7 @@ export class DestinationRouter {
         }
       };
       this.recorder.start(1000);
-      console.log('📼 MediaRecorder started for ingest with mimeType:', options.mimeType);
+      console.log('ð¼ MediaRecorder started for ingest with mimeType:', options.mimeType);
     } catch (e) {
       console.error('Failed to start MediaRecorder', e);
       // Fallback to default options
@@ -204,7 +204,7 @@ export class DestinationRouter {
   }
 
   public async disconnectAll(): Promise<void> {
-    console.log('🛑 Disconnecting all destinations...');
+    console.log('ð Disconnecting all destinations...');
 
     if (this.recorder && this.recorder.state !== 'inactive') {
       this.recorder.stop();
@@ -254,7 +254,7 @@ export class DestinationRouter {
 
     this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: allDestinations }));
     // Status will flip to 'live' when the server sends destination_connected after FFmpeg reconnects
-    console.log(`➕ Added destination: ${destination.name}`);
+    console.log(`â Added destination: ${destination.name}`);
   }
 
   public async removeDestination(destId: string): Promise<void> {
@@ -279,7 +279,7 @@ export class DestinationRouter {
     this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: remaining }));
     this.updateDestinationStatus(destId, 'offline');
 
-    console.log(`➖ Removed destination: ${destId}`);
+    console.log(`â Removed destination: ${destId}`);
   }
 
   private updateDestinationStatus(destId: string, status: DestinationStatus): void {

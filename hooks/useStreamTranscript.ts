@@ -1,5 +1,5 @@
 /**
- * useStreamTranscript — Accumulates auto-caption text into a full transcript.
+ * useStreamTranscript â Accumulates auto-caption text into a full transcript.
  *
  * While streaming, captures every caption chunk from useAutoCaption and builds
  * a complete transcript. When the stream ends, the transcript is available for
@@ -69,8 +69,8 @@ export const useStreamTranscript = (): StreamTranscriptResult => {
   const exportTranscript = useCallback((): string => {
     if (chunks.length === 0) return 'No transcript captured.';
 
-    const header = `STREAM TRANSCRIPT — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
-    const divider = '─'.repeat(60) + '\n';
+    const header = `STREAM TRANSCRIPT â ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+    const divider = 'â'.repeat(60) + '\n';
 
     // Group chunks into paragraphs (every ~60 seconds)
     const paragraphs: { startTime: number; text: string }[] = [];

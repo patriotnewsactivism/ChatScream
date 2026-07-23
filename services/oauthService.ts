@@ -538,7 +538,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
           console.error(`${platform} OAuth not configured. Missing client ID.`);
           if (mobileTab && !mobileTab.closed) mobileTab.close();
           alert(
-            `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client ID.`,
+            `${platform} integration is not configured yet. Open Admin Portal â OAuth IDs and paste the ${platform} client ID.`,
           );
           return;
         }
@@ -546,7 +546,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
         if (mobileTab && !mobileTab.closed) {
           mobileTab.location.href = authUrl;
         } else {
-          // Tab was blocked — last resort: navigate same tab
+          // Tab was blocked â last resort: navigate same tab
           window.location.assign(authUrl);
         }
       } catch (error) {
@@ -586,7 +586,7 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
       if (!config.clientId) {
         console.error(`${platform} OAuth not configured. Missing client ID.`);
         alert(
-          `${platform} integration is not configured yet. Open Admin Portal → OAuth IDs and paste the ${platform} client ID.`,
+          `${platform} integration is not configured yet. Open Admin Portal â OAuth IDs and paste the ${platform} client ID.`,
         );
         if (popup && !popup.closed) popup.close();
         return;
@@ -599,11 +599,11 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
         return;
       }
 
-      // Popup was blocked — try a new tab instead of hijacking the main window.
+      // Popup was blocked â try a new tab instead of hijacking the main window.
       // Same-tab navigation would kick the user out of the studio.
       const newTab = window.open(authUrl, '_blank');
       if (!newTab) {
-        // Last resort: same tab (unlikely — at least we tried)
+        // Last resort: same tab (unlikely â at least we tried)
         window.location.assign(authUrl);
       }
     } catch (error) {

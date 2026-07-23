@@ -60,22 +60,16 @@ const ChatStreamOverlay: React.FC<ChatStreamOverlayProps> = ({
   return (
     <div
       className={`absolute ${positionClasses[position]} z-30 animate-slide-up`}
-      style={{
-        animation: isVisible ? 'slideUp 0.3s ease-out, fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-out',
-      }}
+      style={{ animation: isVisible ? 'slideUp 0.3s ease-out, fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-out' }}
     >
       <div className={`${styleClasses[style]} px-6 py-4 rounded-xl shadow-2xl max-w-2xl mx-auto`}>
         <div className="flex items-center gap-2 mb-1">
           <MessageSquare size={14} className={style === 'neon' ? 'text-cyan-400' : 'text-white/70'} />
-          <span className={`text-xs font-medium uppercase tracking-wider ${
-            style === 'neon' ? 'text-cyan-400' : 'text-white/70'
-          }`}>
+          <span className={`text-xs font-medium uppercase tracking-wider ${style === 'neon' ? 'text-cyan-400' : 'text-white/70'}`}>
             Chat Stream
           </span>
         </div>
-        <p className={`font-semibold text-lg leading-snug ${
-          style === 'neon' ? 'text-cyan-100' : 'text-white'
-        }`}>
+        <p className={`font-semibold text-lg leading-snug ${style === 'neon' ? 'text-cyan-100' : 'text-white'}`}>
           {currentMessage.content}
         </p>
       </div>

@@ -1,7 +1,7 @@
 import { ApiRequestError, apiRequest } from './apiClient';
 import { getCurrentSessionToken } from './backend';
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   streamId: string;
   userId: string;
@@ -9,6 +9,8 @@ export interface ChatMessage {
   content: string;
   createdAt: Date;
   isModerated?: boolean;
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  topics?: string[];
 }
 
 interface ChatMessagePayload {
@@ -19,6 +21,8 @@ interface ChatMessagePayload {
   content?: unknown;
   createdAt?: unknown;
   isModerated?: unknown;
+  sentiment?: unknown;
+  topics?: unknown;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -37,32 +41,26 @@ const parseMessage = (payload: unknown): ChatMessage | null => {
 
   const createdAt = new Date(String(data.createdAt || Date.now()));
   return {
-    id: typeof data.id === 'string' ? data.id : `${streamId}:${createdAt.getTime()}:${userId}`,
+    id: typeof data.id === 'string' ? data.id : `${streamId}:${createdAt.getTime()}:${userId}`, 
     streamId,
     userId,
     displayName,
     content,
     createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
     isModerated: typeof data.isModerated === 'boolean' ? data.isModerated : undefined,
+    sentiment: typeof data.sentiment === 'string' ? data.sentiment as 'positive' | 'neutral' | 'negative' : undefined,
+    topics: Array.isArray(data.topics) ? data.topics.filter(t => typeof t === 'string') : undefined
   };
 };
 
 const fetchMessages = async (streamId: string, messageLimit: number): Promise<ChatMessage[]> => {
-  const response = await apiRequest<unknown>(
-    `/api/chat/messages?streamId=${encodeURIComponent(streamId)}&limit=${messageLimit}`,
-    {
-      method: 'GET',
-      token: getToken(),
-    },
-  );
+  const response = await apiRequest<unknown>(`/api/chat/messages?streamId=${encodeURIComponent(streamId)}&limit=${messageLimit}`, {
+    method: 'GET',
+    token: getToken(),
+  });
 
-  const payload =
-    response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
-  const list = Array.isArray(payload.messages)
-    ? payload.messages
-    : Array.isArray(response)
-      ? response
-      : [];
+  const payload = response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
+  const list = Array.isArray(payload.messages) ? payload.messages : Array.isArray(response) ? response : [];
 
   return list
     .map((entry) => parseMessage(entry))
@@ -136,8 +134,7 @@ export async function sendChatMessage(
     },
   });
 
-  const payload =
-    response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
+  const payload = response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
   const id = payload.id;
   return typeof id === 'string' ? id : `${streamId}:${Date.now()}`;
 }
@@ -146,3 +143,5 @@ export async function sendChatMessage(
 export function generateStreamId(userId: string): string {
   return `${userId}_${Date.now()}`;
 }
+
+export type { ChatMessage };

@@ -94,14 +94,14 @@ export class BitrateAdaptationEngine {
   public start(): void {
     if (!this.config.enabled) return;
 
-    console.log('🔄 Starting bitrate adaptation engine');
+    console.log('ð Starting bitrate adaptation engine');
     this.adaptationInterval = window.setInterval(() => {
       this.adaptBitrate();
     }, 2000);
   }
 
   public stop(): void {
-    console.log('🛑 Stopping bitrate adaptation engine');
+    console.log('ð Stopping bitrate adaptation engine');
     if (this.adaptationInterval) {
       clearInterval(this.adaptationInterval);
       this.adaptationInterval = null;
@@ -202,7 +202,7 @@ export class BitrateAdaptationEngine {
 
     const newProfile = this.selectProfile(this.currentBitrate);
     if (newProfile.name !== this.currentProfile.name) {
-      console.log(`📊 Quality changed: ${this.currentProfile.name} → ${newProfile.name}`);
+      console.log(`ð Quality changed: ${this.currentProfile.name} â ${newProfile.name}`);
       this.currentProfile = newProfile;
       if (this.onQualityChange) {
         this.onQualityChange(newProfile);
@@ -210,7 +210,7 @@ export class BitrateAdaptationEngine {
     }
 
     console.log(
-      `🔄 Bitrate adapted: ${this.currentBitrate} kbps (target: ${this.targetBitrate} kbps)`,
+      `ð Bitrate adapted: ${this.currentBitrate} kbps (target: ${this.targetBitrate} kbps)`,
     );
 
     if (this.onBitrateChange) {
@@ -252,7 +252,7 @@ export class BitrateAdaptationEngine {
     this.targetBitrate = bitrate;
     this.currentProfile = this.selectProfile(bitrate);
 
-    console.log(`🎯 Manual bitrate set: ${bitrate} kbps`);
+    console.log(`ð¯ Manual bitrate set: ${bitrate} kbps`);
 
     if (this.onBitrateChange) {
       this.onBitrateChange(this.currentBitrate, this.currentProfile);
@@ -262,18 +262,18 @@ export class BitrateAdaptationEngine {
   public enableAdaptation(): void {
     this.config.enabled = true;
     this.start();
-    console.log('✅ Bitrate adaptation enabled');
+    console.log('â Bitrate adaptation enabled');
   }
 
   public disableAdaptation(): void {
     this.config.enabled = false;
     this.stop();
-    console.log('⏸️ Bitrate adaptation disabled');
+    console.log('â¸ï¸ Bitrate adaptation disabled');
   }
 
   public updateConfig(config: Partial<AdaptationConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('⚙️ Adaptation config updated');
+    console.log('âï¸ Adaptation config updated');
   }
 
   public getConfig(): AdaptationConfig {

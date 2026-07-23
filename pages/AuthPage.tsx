@@ -266,7 +266,7 @@ const AuthPage: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="â¢â¢â¢â¢â¢â¢â¢â¢"
                     required
                     minLength={6}
                     className="w-full bg-dark-900/50 border border-gray-700 rounded-xl py-3 pl-10 pr-12 text-white placeholder-gray-500 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all"

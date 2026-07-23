@@ -187,7 +187,7 @@ export const playScreamSound = (tier: ScreamTier, customSound?: string | null): 
     const audio = new Audio(soundUrl);
     audio.volume = volume;
     audio.play().catch(() => {
-      // File doesn't exist — fall back to synthesised tone
+      // File doesn't exist â fall back to synthesised tone
       const toneMap: Record<string, [number, number, number]> = {
         standard: [880, volume * 0.5, 0.6],   // A5 short ding
         loud:     [660, volume * 0.7, 1.0],   // E5 medium ding

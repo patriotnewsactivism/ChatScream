@@ -2,10 +2,10 @@
 // Manages cloud VM streaming time allocation per subscription tier.
 //
 // INFRASTRUCTURE STATUS:
-// ✅ Client-side service: Complete — session management, cost estimation, status tracking
-// ✅ Server API routes: Complete — /api/cloud-streaming/* endpoints in server/app.js
-// ✅ Streaming pipeline: Complete — dual-pipeline (local/cloud) with watermark for free tier
-// ⏳ EC2 Backend: NOT YET DEPLOYED — server routes return mock/seeded data
+// â Client-side service: Complete â session management, cost estimation, status tracking
+// â Server API routes: Complete â /api/cloud-streaming/* endpoints in server/app.js
+// â Streaming pipeline: Complete â dual-pipeline (local/cloud) with watermark for free tier
+// â³ EC2 Backend: NOT YET DEPLOYED â server routes return mock/seeded data
 //
 // TO COMPLETE CLOUD STREAMING:
 // 1. Provision EC2 instances (GPU-capable, e.g. g4dn.xlarge) with OBS or ffmpeg relay

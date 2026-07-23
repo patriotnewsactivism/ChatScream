@@ -58,7 +58,7 @@ export class RTMPSender {
       onStats,
     );
 
-    console.log('⚙️ Enhanced RTMPSender initialized:', {
+    console.log('âï¸ Enhanced RTMPSender initialized:', {
       mode: config.streamingMode,
       plan: config.userPlan,
     });
@@ -74,11 +74,11 @@ export class RTMPSender {
     this.destinations = destinations.filter((d) => d.isEnabled);
 
     if (this.destinations.length === 0) {
-      console.log('🚫 No enabled destinations to connect to.');
+      console.log('ð« No enabled destinations to connect to.');
       return;
     }
 
-    console.log(`📡 Attempting to connect to ${this.destinations.length} destinations...`);
+    console.log(`ð¡ Attempting to connect to ${this.destinations.length} destinations...`);
 
     try {
       // Step 1: Validate stream request with enforcement
@@ -108,7 +108,7 @@ export class RTMPSender {
 
       if (split.rejected.length > 0) {
         console.warn(
-          `⚠️ ${split.rejected.length} destinations rejected:`,
+          `â ï¸ ${split.rejected.length} destinations rejected:`,
           split.rejected.map((d) => d.name),
         );
 
@@ -154,10 +154,10 @@ export class RTMPSender {
         this.startCloudMonitoring();
       }
 
-      console.log(`🟢 Successfully went live to ${split.allowed.length} destinations.`);
+      console.log(`ð¢ Successfully went live to ${split.allowed.length} destinations.`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Connection failed:', errorMessage);
+      console.error('â Connection failed:', errorMessage);
       captureException(new Error(errorMessage), {
         stage: 'connect',
         destinations: this.destinations.length,
@@ -168,7 +168,7 @@ export class RTMPSender {
       // Only mark destinations that haven't already been confirmed live as error
       // This preserves the state of destinations that are already streaming successfully
       this.destinations.forEach((dest) => {
-        // Don't clobber 'live' destinations — the pipeline error may be for a different destination
+        // Don't clobber 'live' destinations â the pipeline error may be for a different destination
         this.statusUpdater(dest.id, dest.status === 'live' ? 'live' : 'error');
       });
 
@@ -180,7 +180,7 @@ export class RTMPSender {
    * Disconnect from all destinations
    */
   public async disconnect(): Promise<void> {
-    console.log('🔴 Disconnecting from all destinations...');
+    console.log('ð´ Disconnecting from all destinations...');
 
     // Stop monitoring
     if (this.monitoringInterval) {
@@ -209,14 +209,14 @@ export class RTMPSender {
 
     this.destinations = [];
 
-    console.log('✅ Disconnected successfully.');
+    console.log('â Disconnected successfully.');
   }
 
   /**
    * Update stream metadata
    */
   public updateMetadata(config: StreamConfig): void {
-    console.log('📝 Metadata updated:', config);
+    console.log('ð Metadata updated:', config);
     // This would update platform-specific metadata via APIs
   }
 
@@ -249,7 +249,7 @@ export class RTMPSender {
     await this.router.addDestination(destination);
     this.destinations.push(destination);
 
-    console.log(`✅ Added destination: ${destination.name}`);
+    console.log(`â Added destination: ${destination.name}`);
   }
 
   /**
@@ -259,7 +259,7 @@ export class RTMPSender {
     await this.router.removeDestination(destId);
     this.destinations = this.destinations.filter((d) => d.id !== destId);
 
-    console.log(`✅ Removed destination: ${destId}`);
+    console.log(`â Removed destination: ${destId}`);
   }
 
   /**
@@ -288,11 +288,11 @@ export class RTMPSender {
    * Handle pipeline state changes
    */
   private handlePipelineStateChange(state: PipelineState): void {
-    console.log('🔄 Pipeline state changed:', state.status);
+    console.log('ð Pipeline state changed:', state.status);
 
     // Handle errors
     if (state.status === 'error' && state.error) {
-      console.error('❌ Pipeline error:', state.error);
+      console.error('â Pipeline error:', state.error);
       captureException(new Error(state.error), {
         stage: 'pipeline',
         userId: this.config.userId,
@@ -319,7 +319,7 @@ export class RTMPSender {
       );
 
       if (cutoffCheck.shouldCutoff) {
-        console.log('🚨 CLOUD HOURS EXHAUSTED - AUTOMATIC CUTOFF');
+        console.log('ð¨ CLOUD HOURS EXHAUSTED - AUTOMATIC CUTOFF');
         this.disconnect();
 
         // Notify user
@@ -327,7 +327,7 @@ export class RTMPSender {
       } else if (cutoffCheck.timeRemaining < 0.25 && cutoffCheck.timeRemaining > 0) {
         // Warning at 15 minutes remaining
         const minutesLeft = Math.floor(cutoffCheck.timeRemaining * 60);
-        console.log(`⚠️ ${minutesLeft} minutes of cloud streaming remaining`);
+        console.log(`â ï¸ ${minutesLeft} minutes of cloud streaming remaining`);
       }
     }, 30000);
   }
@@ -336,14 +336,14 @@ export class RTMPSender {
    * Log enforcement result
    */
   private logEnforcementResult(result: EnforcementResult): void {
-    console.log('🔒 Enforcement Result:', {
+    console.log('ð Enforcement Result:', {
       allowed: result.allowed,
       reason: result.reason,
       enforcement: result.enforcement,
     });
 
     if (result.recommendations && result.recommendations.length > 0) {
-      console.log('💡 Recommendations:', result.recommendations);
+      console.log('ð¡ Recommendations:', result.recommendations);
     }
   }
 
@@ -352,6 +352,6 @@ export class RTMPSender {
    */
   public updateConfig(config: Partial<RTMPSenderConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('🔄 Configuration updated:', this.config);
+    console.log('ð Configuration updated:', this.config);
   }
 }

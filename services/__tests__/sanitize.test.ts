@@ -261,7 +261,7 @@ describe('sanitizeJson', () => {
   });
 
   it('returns the parsed value even if the type differs from fallback', () => {
-    // The function does not enforce type checking — just parses or falls back
+    // The function does not enforce type checking â just parses or falls back
     const result = sanitizeJson('42', 'fallback');
     expect(result).toBe(42);
   });

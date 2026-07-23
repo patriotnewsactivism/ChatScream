@@ -123,7 +123,7 @@ const GuestPage: React.FC = () => {
       {/* Status */}
       <p className="text-sm text-gray-400 mb-6">
         {status === 'idle' && `Room: ${roomId}`}
-        {status === 'connecting' && 'Connecting to stream…'}
+        {status === 'connecting' && 'Connecting to streamâ¦'}
         {status === 'live' && 'You are live as a guest camera'}
         {status === 'left' && 'You have left the stream'}
         {status === 'error' && `Error: ${errorMsg}`}

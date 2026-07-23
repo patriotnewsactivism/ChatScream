@@ -51,7 +51,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
     videoGainRef.current.connect(dest);
 
     setCombinedStreamState(dest.stream);
-    console.log('🔈 Audio Pipeline Initialized');
+    console.log('ð Audio Pipeline Initialized');
   }, []);
 
   // Sync Volumes

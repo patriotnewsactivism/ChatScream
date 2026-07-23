@@ -67,7 +67,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
   useEffect(() => {
     const sceneId = activeScene?.id || null;
     if (lastSceneIdRef.current !== null && lastSceneIdRef.current !== sceneId) {
-      // Scene changed — start cross-fade
+      // Scene changed â start cross-fade
       transitionAlphaRef.current = 0;
       let progress = 0;
       const transitionDuration = 400; // ms
@@ -656,7 +656,7 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`🎶 ${nowPlaying}`, npx + 40, npy + 20);
+        ctx.fillText(`ð¶ ${nowPlaying}`, npx + 40, npy + 20);
         ctx.restore();
       }
 

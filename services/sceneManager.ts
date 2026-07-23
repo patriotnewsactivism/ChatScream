@@ -81,7 +81,7 @@ const DEFAULT_TRANSITION: SceneTransition = {
 const SCENES_STORAGE_KEY = 'chatscream_scenes_v1';
 const ACTIVE_SCENE_STORAGE_KEY = 'chatscream_active_scene_v1';
 
-/** Serialize a scene for localStorage — omit live MediaStream references */
+/** Serialize a scene for localStorage â omit live MediaStream references */
 const serializeScene = (scene: Scene): object => ({
   ...scene,
   sources: scene.sources.map((s) => ({ ...s, mediaStream: undefined })),
@@ -137,7 +137,7 @@ export class SceneManager {
         this.scenes.set(scene.id, scene);
       }
       this.activeSceneId = localStorage.getItem(ACTIVE_SCENE_STORAGE_KEY) || null;
-      console.log(`🎬 Restored ${this.scenes.size} scenes from storage`);
+      console.log(`ð¬ Restored ${this.scenes.size} scenes from storage`);
       return true;
     } catch (err) {
       console.warn('[SceneManager] Failed to load scenes from storage:', err);
@@ -193,7 +193,7 @@ export class SceneManager {
     this.scenes.set(screenScene.id, screenScene);
     this.scenes.set(pipScene.id, pipScene);
 
-    console.log('🎬 Initialized default scenes');
+    console.log('ð¬ Initialized default scenes');
     this.persistToStorage();
   }
 
@@ -216,7 +216,7 @@ export class SceneManager {
         this.cameras.set(camera.id, camera);
       }
 
-      console.log(`📹 Found ${this.cameras.size} cameras`);
+      console.log(`ð¹ Found ${this.cameras.size} cameras`);
       return Array.from(this.cameras.values());
     } catch (error) {
       console.error('Failed to enumerate cameras:', error);
@@ -280,7 +280,7 @@ export class SceneManager {
       scene.sources.push(source);
       scene.updatedAt = new Date();
 
-      console.log(`📹 Added camera source to scene ${sceneId}`);
+      console.log(`ð¹ Added camera source to scene ${sceneId}`);
       return { success: true, sourceId };
     } catch (error) {
       console.error('Failed to add camera source:', error);
@@ -336,7 +336,7 @@ export class SceneManager {
       scene.sources.push(source);
       scene.updatedAt = new Date();
 
-      console.log(`🖥️ Added screen source to scene ${sceneId}`);
+      console.log(`ð¥ï¸ Added screen source to scene ${sceneId}`);
       return { success: true, sourceId };
     } catch (error) {
       console.error('Failed to add screen source:', error);
@@ -388,7 +388,7 @@ export class SceneManager {
     scene.sources.push(source);
     scene.updatedAt = new Date();
 
-    console.log(`🎥 Added media source to scene ${sceneId}`);
+    console.log(`ð¥ Added media source to scene ${sceneId}`);
     return { success: true, sourceId };
   }
 
@@ -408,7 +408,7 @@ export class SceneManager {
     scene.updatedAt = new Date();
     this.persistToStorage();
 
-    console.log(`🗑️ Removed source ${sourceId} from scene ${sceneId}`);
+    console.log(`ðï¸ Removed source ${sourceId} from scene ${sceneId}`);
     return true;
   }
 
@@ -460,7 +460,7 @@ export class SceneManager {
       }
     }
 
-    console.log(`🎬 Switching to scene: ${scene.name}`);
+    console.log(`ð¬ Switching to scene: ${scene.name}`);
 
     const effectiveTransition = transition || scene.transitions || DEFAULT_TRANSITION;
     await this.applyTransition(effectiveTransition);
@@ -498,7 +498,7 @@ export class SceneManager {
 
     this.scenes.set(sceneId, scene);
     this.persistToStorage();
-    console.log(`🎬 Created scene: ${name}`);
+    console.log(`ð¬ Created scene: ${name}`);
     return scene;
   }
 
@@ -519,7 +519,7 @@ export class SceneManager {
 
     this.scenes.delete(sceneId);
     this.persistToStorage();
-    console.log(`🗑️ Deleted scene: ${scene.name}`);
+    console.log(`ðï¸ Deleted scene: ${scene.name}`);
     return true;
   }
 

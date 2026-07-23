@@ -108,7 +108,7 @@ const BackendStatusCard: React.FC = () => {
         ))}
         {checking && (
           <div className="p-3 rounded-lg bg-dark-900 border border-gray-700 text-sm text-gray-300">
-            Checking…
+            Checkingâ¦
           </div>
         )}
       </div>

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
 
-    <!-- Cache busting + stale chunk prevention — runs before React mounts -->
+    <!-- Cache busting + stale chunk prevention â runs before React mounts -->
     <script>
     (function(){
       'use strict';
@@ -15,7 +15,7 @@
       var LOOP_WINDOW   = 20000;
       var MAX_LOOPS     = 3;
 
-      // ── Loop-break: if we've reloaded too many times, show a recovery UI ──
+      // ââ Loop-break: if we've reloaded too many times, show a recovery UI ââ
       function getLoopCount() {
         try {
           var ts = parseInt(localStorage.getItem(LS_LOOP_TS) || '0', 10);
@@ -65,7 +65,7 @@
         return;
       }
 
-      // ── Unregister any old service workers silently ────────────────────
+      // ââ Unregister any old service workers silently ââââââââââââââââââââ
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(regs) {
           regs.forEach(function(r) { r.unregister(); });
@@ -87,7 +87,7 @@
         });
       }
 
-      // ── Clear any stale caches ─────────────────────────────────────────
+      // ââ Clear any stale caches âââââââââââââââââââââââââââââââââââââââââ
       if ('caches' in window) {
         caches.keys().then(function(names) {
           names.forEach(function(n) { caches.delete(n); });
@@ -99,7 +99,7 @@
 
     <!-- SEO Meta Tags -->
     <title>ChatScream - Unlimited Local Streaming. Scream for Attention.</title>
-    <meta name="description" content="Unlimited local device streaming from phone, tablet, or desktop—plus optional cloud streaming. Donation-triggered 'Screams' that take over the screen. Stream to YouTube, Facebook, Twitch & more." />
+    <meta name="description" content="Unlimited local device streaming from phone, tablet, or desktopâplus optional cloud streaming. Donation-triggered 'Screams' that take over the screen. Stream to YouTube, Facebook, Twitch & more." />
     <meta name="keywords" content="live streaming, local device streaming, mobile streaming studio, cloud streaming, donation alerts, chat screamer, stream overlay, multi-platform streaming, RTMP streaming, viewer engagement, stream donations" />
     <meta name="author" content="ChatScream" />
     <meta name="robots" content="index, follow" />

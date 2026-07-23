@@ -1,5 +1,5 @@
 /**
- * EvidenceMarkerPanel — UI for dropping and managing evidence markers during a stream.
+ * EvidenceMarkerPanel â UI for dropping and managing evidence markers during a stream.
  *
  * Shows quick-tap buttons for common marker types + custom marker input.
  * Displays marker timeline and export button.

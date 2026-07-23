@@ -224,7 +224,7 @@ const AnalyticsDashboard: React.FC = () => {
                       {session.startedAt ? formatDate(session.startedAt) : 'Unknown'}
                     </p>
                     <p className="text-sm text-gray-400">
-                      {session.platforms?.join(', ') || 'No platforms'} â€¢{' '}
+                      {session.platforms?.join(', ') || 'No platforms'} Ã¢â¬Â¢{' '}
                       {session.layout || 'Default layout'}
                     </p>
                   </div>

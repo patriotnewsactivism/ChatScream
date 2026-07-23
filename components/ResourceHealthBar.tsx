@@ -1,5 +1,5 @@
 /**
- * ResourceHealthBar — small indicator showing device health during streaming.
+ * ResourceHealthBar â small indicator showing device health during streaming.
  *
  * Shows a colored pill: green (good), yellow (caution), red (danger).
  * Expands on tap to show FPS, memory, recommended quality, and warnings.
@@ -62,7 +62,7 @@ const ResourceHealthBar: React.FC<Props> = ({ snapshot, compact }) => {
           {snapshot.warnings.length > 0 && (
             <div className="pt-1 space-y-0.5">
               {snapshot.warnings.map((w, i) => (
-                <p key={i} className={`text-[10px] ${c.text}`}>⚠ {w}</p>
+                <p key={i} className={`text-[10px] ${c.text}`}>â  {w}</p>
               ))}
             </div>
           )}

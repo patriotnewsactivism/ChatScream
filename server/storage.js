@@ -47,7 +47,7 @@ const getS3Client = async () => {
       config.forcePathStyle = true; // Required for R2 and most S3-compatible services
     }
     s3Client = new S3Client(config);
-    console.log(`📦 S3 storage initialized (bucket: ${S3_BUCKET}, region: ${S3_REGION})`);
+    console.log(`ð¦ S3 storage initialized (bucket: ${S3_BUCKET}, region: ${S3_REGION})`);
     return s3Client;
   } catch (error) {
     console.error('Failed to initialize S3 client:', error);

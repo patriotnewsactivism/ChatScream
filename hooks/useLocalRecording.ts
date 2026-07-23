@@ -1,9 +1,9 @@
 /**
- * useLocalRecording — safe, chunked local recording for phones.
+ * useLocalRecording â safe, chunked local recording for phones.
  *
  * Key safety features for mobile:
  * - Segments recording into chunks (default 30 s) so a crash never loses everything
- * - Monitors memory via ResourceGuard — pauses recording at red level
+ * - Monitors memory via ResourceGuard â pauses recording at red level
  * - Automatically drops to lower bitrate if FPS falls below threshold
  * - Uses IndexedDB for chunk storage so RAM stays low
  * - Final export stitches chunks into a single .webm download
@@ -151,7 +151,7 @@ export const useLocalRecording = (
     }
   }, [resourceLevel, state.isRecording, state.isPaused]);
 
-  // ── Start ────────────────────────────────────────────────────────────────
+  // ââ Start ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const startRecording = useCallback(
     (stream: MediaStream) => {
       const effectiveQ: Exclude<RecordingQuality, 'auto'> =
@@ -219,7 +219,7 @@ export const useLocalRecording = (
     [quality, resourceLevel, mimeType, segmentDurationMs, maxDurationMs, persistChunk],
   );
 
-  // ── Stop + Download ──────────────────────────────────────────────────────
+  // ââ Stop + Download ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
@@ -247,7 +247,7 @@ export const useLocalRecording = (
     setState((prev) => ({ ...prev, isRecording: false, isPaused: false }));
   }, [mimeType]);
 
-  // ── Pause / Resume ───────────────────────────────────────────────────────
+  // ââ Pause / Resume âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const togglePause = useCallback(() => {
     const recorder = recorderRef.current;
     if (!recorder) return;
