@@ -1660,7 +1660,7 @@ app.get(
     const provider = String(req.params.provider || '')
       .trim()
       .toLowerCase();
-    if (!['google', 'facebook'].includes(provider)) {
+    if (!['google', 'facebook', 'twitch', 'tiktok'].includes(provider)) {
       res.status(400).json({ message: `${provider} sign-in is not available yet.` });
       return;
     }
@@ -1690,6 +1690,43 @@ app.get(
       authUrl.searchParams.set('redirect_uri', redirectUri);
       authUrl.searchParams.set('response_type', 'code');
       authUrl.searchParams.set('scope', 'public_profile,email');
+      authUrl.searchParams.set('state', state);
+      return res.redirect(302, authUrl.toString());
+    }
+
+    if (provider === 'twitch') {
+      const twitchClientId = String(process.env.TWITCH_CLIENT_ID || '').trim();
+      if (!twitchClientId) {
+        res
+          .status(500)
+          .json({ message: 'Twitch sign-in is not configured. Set TWITCH_CLIENT_ID.' });
+        return;
+      }
+      const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/twitch/callback`;
+      const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
+      authUrl.searchParams.set('client_id', twitchClientId);
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'user:read:email channel:read:stream_key channel:manage:broadcast');
+      authUrl.searchParams.set('force_verify', 'true');
+      authUrl.searchParams.set('state', state);
+      return res.redirect(302, authUrl.toString());
+    }
+
+    if (provider === 'tiktok') {
+      const tiktokClientKey = String(process.env.TIKTOK_CLIENT_KEY || '').trim();
+      if (!tiktokClientKey) {
+        res
+          .status(500)
+          .json({ message: 'TikTok sign-in is not configured. Set TIKTOK_CLIENT_KEY.' });
+        return;
+      }
+      const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/tiktok/callback`;
+      const authUrl = new URL('https://www.tiktok.com/v2/auth/authorize/');
+      authUrl.searchParams.set('client_key', tiktokClientKey);
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'user.info.basic,live.room.manage,video.upload');
       authUrl.searchParams.set('state', state);
       return res.redirect(302, authUrl.toString());
     }
