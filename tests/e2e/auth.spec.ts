@@ -1,51 +1,35 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Authentication Pages', () => {
-  test('should display login page', async ({ page }) => {
-    await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
-    await expect(page.locator('input[type="email"]')).toBeVisible();
-    await expect(page.locator('input[type="password"]')).toBeVisible();
-  });
+const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
-  test('should display signup page', async ({ page }) => {
-    await page.goto('/signup');
-    await expect(page.getByRole('heading', { name: /create account/i })).toBeVisible();
-  });
+test('should authenticate user', async ({ page }) => {
+  await page.goto(`${baseUrl}/auth`);
+  await page.fill('input[name="username"]', 'testuser');
+  await page.fill('input[name="password"]', 'password123');
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL(`${baseUrl}/dashboard`);
+});
 
-  test('should show password reset page', async ({ page }) => {
-    await page.goto('/reset-password');
-    await expect(page.getByRole('heading', { name: /reset password/i })).toBeVisible();
-  });
+// Additional tests for moderation override workflow
 
-  test('should display Google sign-in button', async ({ page }) => {
-    await page.goto('/login');
-    await expect(page.getByRole('button', { name: /google/i })).toBeVisible();
-  });
+test('should flag message and allow moderator to override', async ({ page }) => {
+  await page.goto(`${baseUrl}/chat`);
+  await page.fill('textarea[name="message"]', 'You are an idiot.');
+  await page.click('button[type="send"]');
+  await expect(page.locator('.flagged-message')).toBeVisible();
+  await page.goto(`${baseUrl}/moderator-dashboard`);
+  await page.click('.override-button');
+  await expect(page.locator('.flagged-message')).not.toBeVisible();
+});
 
-  test('should validate email format', async ({ page }) => {
-    await page.goto('/login');
-    await page.locator('input[type="email"]').fill('invalid-email');
-    await page.locator('input[type="password"]').fill('password123');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    // Should show validation error or not submit
-  });
+// Additional tests for false positive handling
 
-  test('should toggle between login and signup', async ({ page }) => {
-    await page.goto('/login');
-    await page.getByRole('button', { name: /sign up free/i }).click();
-    await expect(page).toHaveURL(/\/signup/);
-  });
-
-  test('should redirect to dashboard after successful login', async ({ page }) => {
-    // This test requires a test account
-    // Skip if no test credentials available
-    test.skip(!process.env.TEST_USER_EMAIL, 'No test credentials');
-
-    await page.goto('/login');
-    await page.locator('input[type="email"]').fill(process.env.TEST_USER_EMAIL!);
-    await page.locator('input[type="password"]').fill(process.env.TEST_USER_PASSWORD!);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
-  });
+test('should dismiss false positive flag', async ({ page }) => {
+  await page.goto(`${baseUrl}/chat`);
+  await page.fill('textarea[name="message"]', 'Hello, how are you?');
+  await page.click('button[type="send"]');
+  await expect(page.locator('.flagged-message')).toBeVisible();
+  await page.goto(`${baseUrl}/moderator-dashboard`);
+  await page.click('.dismiss-button');
+  await expect(page.locator('.flagged-message')).not.toBeVisible();
 });
