@@ -1,0 +1,1 @@
+/* Proposed React version of ChatInput.vue */
