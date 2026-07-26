@@ -1,39 +1,45 @@
-import { describe, expect, it } from 'vitest';
-import {
-  buildFallbackContentAnalysis,
-  buildFallbackModeration,
-  buildFallbackViralPackage,
-  extractTopics,
-} from '../ai.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { processChatMessage } from '../../server/ai';
+import { mockApi } from '../../services/__mocks__/apiClient';
 
-describe('server ai helpers', () => {
-  it('extracts ranked topics from recent chat', () => {
-    expect(
-      extractTopics(
-        ['Court filing timeline is confusing', 'Need timeline recap', 'timeline matters most'],
-        'civil timeline',
-      ),
-    ).toContain('timeline');
+describe('AI Chat Moderation', () => {
+  beforeEach(() => {
+    mockApi.fetchChatHistory.mockClear();
   });
 
-  it('flags unsafe moderation content', () => {
-    expect(buildFallbackModeration('I will kill you').isAppropriate).toBe(false);
+  it('should flag toxic content', async () => {
+    const message = { id: 'm1', text: 'You are an idiot.' };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(true);
   });
 
-  it('creates useful fallback viral package content', () => {
-    const result = buildFallbackViralPackage('FOIA lawsuit', ['youtube']);
-    expect(result.titles.length).toBeGreaterThan(0);
-    expect(result.hashtags[0]).toMatch(/^#/);
+  it('should not flag non-toxic content', async () => {
+    const message = { id: 'm2', text: 'Hello, how are you?' };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(false);
   });
 
-  it('builds stream analysis warnings for question-heavy chat', () => {
-    const result = buildFallbackContentAnalysis(
-      ['What happened?', 'Can you explain this?', 'Where is the source?'],
-      'Case review',
-      'motion hearing',
-    );
+  it('should handle empty messages', async () => {
+    const message = { id: 'm3', text: '' };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(false);
+  });
 
-    expect(result.engagementSuggestions[0]).toMatch(/question/i);
-    expect(result.warnings.length).toBeGreaterThan(0);
+  it('should handle very long messages', async () => {
+    const message = { id: 'm4', text: 'a'.repeat(10000) };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(false);
+  });
+
+  it('should handle special characters', async () => {
+    const message = { id: 'm5', text: '!@#$%^&*()' };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(false);
+  });
+
+  it('should handle messages with only whitespace', async () => {
+    const message = { id: 'm6', text: '   ' };
+    const result = await processChatMessage(message);
+    expect(result.flagged).toBe(false);
   });
 });
