@@ -7,12 +7,15 @@ export const useMobileLayout = () => {
   const [isLandscape, setIsLandscape] = useState(false);
   const [isCompactLandscape, setIsCompactLandscape] = useState(false);
   const [mobileTip, setMobileTip] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
       const landscapeViewport = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
       setIsLandscape(landscapeViewport);
       setIsCompactLandscape(landscapeViewport && window.innerHeight < 500);
+      // Mobile detection: consider width < 480px as mobile
+      setIsMobile(window.innerWidth < 480);
     };
 
     handleResize();
@@ -33,5 +36,6 @@ export const useMobileLayout = () => {
     isCompactLandscape,
     mobileTip,
     setMobileTip,
+    isMobile,
   };
 };
