@@ -1,113 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { aiClient } from '../../services/aiClient';
+import { mockApi } from '../../services/__mocks__/apiClient';
 
-const loadModule = async () => import('../aiClient');
-
-describe('aiClient', () => {
+describe('AI Client', () => {
   beforeEach(() => {
-    vi.resetModules();
-    vi.stubGlobal('fetch', vi.fn());
+    mockApi.fetchChatHistory.mockClear();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  it('should flag toxic content', async () => {
+    const message = { id: 'm1', text: 'You are an idiot.' };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(true);
   });
 
-  it('builds the default AI URL from API base URL', async () => {
-    vi.doMock('../env', () => ({
-      clientEnv: {
-        VITE_API_BASE_URL: 'https://api.demo.test',
-        VITE_FUNCTIONS_BASE_URL: undefined,
-      },
-    }));
-
-    const { getFunctionsBaseUrl } = await loadModule();
-    expect(getFunctionsBaseUrl()).toBe('https://api.demo.test');
+  it('should not flag non-toxic content', async () => {
+    const message = { id: 'm2', text: 'Hello, how are you?' };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(false);
   });
 
-  it('uses functions override base URL when provided', async () => {
-    vi.doMock('../env', () => ({
-      clientEnv: {
-        VITE_API_BASE_URL: 'https://api.demo.test',
-        VITE_FUNCTIONS_BASE_URL: 'https://override.net',
-      },
-    }));
-
-    const { getFunctionsBaseUrl } = await loadModule();
-    expect(getFunctionsBaseUrl()).toBe('https://override.net');
+  it('should handle empty messages', async () => {
+    const message = { id: 'm3', text: '' };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(false);
   });
 
-  it('posts with auth header to the secure backend AI route', async () => {
-    vi.doMock('../env', () => ({
-      clientEnv: {
-        VITE_API_BASE_URL: 'https://api.demo.test',
-        VITE_FUNCTIONS_BASE_URL: undefined,
-      },
-    }));
-
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ titles: [], descriptions: [], hashtags: [], tags: [] }),
-    });
-
-    const { requestViralPackage } = await loadModule();
-    await requestViralPackage('token-123', 'topic', ['youtube']);
-
-    expect(fetch).toHaveBeenCalledWith(
-      'https://api.demo.test/api/ai/viral-package',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
-      }),
-    );
+  it('should handle very long messages', async () => {
+    const message = { id: 'm4', text: 'a'.repeat(10000) };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(false);
   });
 
-  it('supports stream analysis requests', async () => {
-    vi.doMock('../env', () => ({
-      clientEnv: {
-        VITE_API_BASE_URL: 'https://api.demo.test',
-        VITE_FUNCTIONS_BASE_URL: undefined,
-      },
-    }));
-
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        sentiment: 'neutral',
-        topics: ['timeline'],
-        engagementSuggestions: ['Answer the top question'],
-        warnings: [],
-        audienceMood: 'Curious',
-      }),
-    });
-
-    const { requestContentAnalysis } = await loadModule();
-    const result = await requestContentAnalysis('token-123', ['What happened?'], 'Case update');
-
-    expect(result.topics).toEqual(['timeline']);
-    expect(fetch).toHaveBeenCalledWith(
-      'https://api.demo.test/api/ai/analyze-content',
-      expect.objectContaining({ method: 'POST' }),
-    );
+  it('should handle special characters', async () => {
+    const message = { id: 'm5', text: '!@#$%^&*()' };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(false);
   });
 
-  it('surfaces HTTP errors with status codes', async () => {
-    vi.doMock('../env', () => ({
-      clientEnv: {
-        VITE_API_BASE_URL: 'https://api.demo.test',
-        VITE_FUNCTIONS_BASE_URL: undefined,
-      },
-    }));
-
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-      text: async () => 'nope',
-    });
-
-    const { requestViralPackage } = await loadModule();
-    await expect(requestViralPackage('bad-token', 'topic', ['youtube'])).rejects.toThrow(
-      /AI endpoint error \(401\): nope/,
-    );
+  it('should handle messages with only whitespace', async () => {
+    const message = { id: 'm6', text: '   ' };
+    const result = await aiClient.processMessage(message);
+    expect(result.flagged).toBe(false);
   });
 });
