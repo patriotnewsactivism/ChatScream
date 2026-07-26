@@ -13,10 +13,16 @@ export enum Platform {
 export enum LayoutMode {
   FULL_CAM = 'FULL_CAM',
   FULL_SCREEN = 'FULL_SCREEN',
-  PIP = 'PIP', // Picture in Picture
-  SPLIT = 'SPLIT', // Side by side
-  NEWSROOM = 'NEWSROOM', // Shoulder view
-  PORTRAIT = 'PORTRAIT', // 9:16 vertical — TikTok / Instagram Reels
+  PIP = 'PIP',
+  SPLIT = 'SPLIT',
+  NEWSROOM = 'NEWSROOM',
+  PORTRAIT = 'PORTRAIT',
+}
+
+export enum OnlineStatus {
+  ONLINE = 'online',
+  IDLE = 'idle',
+  OFFLINE = 'offline',
 }
 
 export type MediaType = 'image' | 'video' | 'audio';
@@ -24,16 +30,14 @@ export type MediaType = 'image' | 'video' | 'audio';
 export interface Destination {
   id: string;
   platform: Platform;
-  name: string; // e.g., "Personal YouTube", "Business YouTube"
+  name: string;
   streamKey: string;
   serverUrl?: string;
   authType: 'manual' | 'oauth';
-  oauthTokenId?: string; // reference to stored token
+  oauthTokenId?: string;
   isEnabled: boolean;
   status: 'offline' | 'connecting' | 'live' | 'error';
-  /** YouTube: liveChatId for the active broadcast (used by ChatAggregator) */
   liveChatId?: string;
-  /** Facebook: live video ID returned by the live_videos API (used for comment polling) */
   liveVideoId?: string;
 }
 
@@ -51,11 +55,11 @@ export interface MediaAsset {
 
 export interface SceneSource {
   id: string;
-  assetId?: string; // Reference to MediaAsset if applicable
+  assetId?: string;
   type: 'camera' | 'screen' | 'image' | 'video' | 'text';
-  url?: string; // For images/videos
-  x: number; // 0-1280 (or relative 0-1)
-  y: number; // 0-720
+  url?: string;
+  x: number;
+  y: number;
   width: number;
   height: number;
   zIndex: number;
@@ -90,9 +94,8 @@ export interface AppState {
   streamDuration: number;
 }
 
-// Audio Mixer Types
 export interface AudioLevels {
-  mic: number; // 0-1 from analyser
+  mic: number;
   music: number;
   video: number;
 }
@@ -106,7 +109,6 @@ export interface AudioConfig {
   isVideoMuted: boolean;
 }
 
-// AI Moderation Types
 export interface ModerationResult {
   isAllowed: boolean;
   toxicityScore: number;
@@ -122,15 +124,13 @@ export interface ContentAnalysis {
   warnings: string[];
 }
 
-// Voice/TTS Types
 export interface VoiceConfig {
   voiceId: string;
-  rate: number; // 0.5 - 2.0
-  pitch: number; // 0.5 - 2.0
-  volume: number; // 0 - 1
+  rate: number;
+  pitch: number;
+  volume: number;
 }
 
-// Chat Screamer Types
 export type ScreamTier = 'standard' | 'loud' | 'maximum';
 
 export interface ScreamDonation {
@@ -145,7 +145,6 @@ export interface ScreamDonation {
   displayed: boolean;
 }
 
-// Mobile/Device Types
 export interface DeviceCapabilities {
   isMobile: boolean;
   isTouchDevice: boolean;
@@ -155,7 +154,6 @@ export interface DeviceCapabilities {
   supportsScreenShare: boolean;
 }
 
-// Stream Session Types
 export interface StreamSession {
   id: string;
   userId: string;
@@ -166,7 +164,6 @@ export interface StreamSession {
   mode: 'local' | 'cloud';
 }
 
-// Chat Message Types
 export interface ChatMessage {
   id: string;
   streamId: string;
@@ -175,4 +172,12 @@ export interface ChatMessage {
   content: string;
   createdAt: Date;
   moderation?: ModerationResult;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: string;
+  onlineStatus?: OnlineStatus;
+  accessibilitySettings?: any;
 }
