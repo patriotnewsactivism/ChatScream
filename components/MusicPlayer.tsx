@@ -32,6 +32,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
+  const [highContrastMode, setHighContrastMode] = useState(false);
 
   useEffect(() => {
     if (onAudioInit) onAudioInit(audioRef.current);
@@ -85,8 +86,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     setIsPlaying(true);
   };
 
+  const toggleHighContrastMode = () => {
+    setHighContrastMode(!highContrastMode);
+  };
+
   return (
-    <div className="bg-dark-800 rounded-xl border border-gray-700 overflow-hidden flex flex-col h-full shadow-2xl">
+    <div className={`bg-dark-800 rounded-xl border border-gray-700 overflow-hidden flex flex-col h-full shadow-2xl ${highContrastMode ? 'high-contrast' : ''}`}>
       <div className="p-4 bg-dark-700 border-b border-gray-600 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
@@ -103,6 +108,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             </p>
           </div>
         </div>
+        <button
+          onClick={toggleHighContrastMode}
+          className="text-gray-400 hover:text-white transition-colors"
+          aria-pressed={highContrastMode}
+        >
+          {highContrastMode ? 'Disable High Contrast' : 'Enable High Contrast'}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
