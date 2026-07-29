@@ -126,12 +126,25 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     return canAddDestination(userPlan, destinations.length, userEmail);
   }, [userPlan, destinations.length, userEmail]);
 
+  // Track OAuth credential status for better error messaging
+  const [oauthDiagnostics, setOauthDiagnostics] = useState({
+    youtube: { configured: false, missingSecret: false },
+    facebook: { configured: false, missingSecret: false },
+    twitch: { configured: false, missingSecret: false },
+    tiktok: { configured: false, missingSecret: false },
+  });
+
   useEffect(() => {
     const loadCapabilities = async () => {
       try {
         const capabilities = await getBackendCapabilities();
         setOauthCapability(capabilities.streamKeyPlatforms);
+        // Store diagnostic info for UI messaging
+        if (capabilities.oauthDiagnostics) {
+          setOauthDiagnostics(capabilities.oauthDiagnostics);
+        }
       } catch {
+        // On error, assume all platforms are available but will fail on connect
         setOauthCapability({ youtube: true, facebook: true, twitch: true, tiktok: true });
       }
     };
@@ -479,12 +492,13 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       } else if (option.oauthPlatform === 'twitch') {
         if (isPlatformConnected('twitch')) {
           try {
-            const data = await apiRequest<{ streamKey?: string; serverUrl?: string }>(
-              '/api/destinations/twitch/stream-key',
-              {
-                headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
-              },
-            );
+            const data = await apiRequest<{
+              streamKey?: string;
+              serverUrl?: string;
+              message?: string;
+            }>('/api/destinations/twitch/stream-key', {
+              headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
+            });
             if (data.streamKey) {
               onAddDestination(
                 createOAuthDestination(Platform.TWITCH, {
@@ -493,10 +507,14 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                   serverUrl: data.serverUrl,
                 }),
               );
+            } else if (data.message) {
+              safeAlert(data.message);
             }
-          } catch {
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : null;
             safeAlert(
-              'Twitch stream key retrieval failed. Confirm Twitch OAuth is connected and TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are configured server-side.',
+              msg ||
+                'Twitch stream key retrieval failed. Confirm Twitch OAuth is connected and TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are configured server-side.',
             );
           }
         } else handleConnectOAuth('twitch');
@@ -778,10 +796,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-sm">{option.label}</span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
-                          Coming Soon
+                          Setup Required
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        {oauthDiagnostics[option.oauthPlatform as keyof typeof oauthDiagnostics]
+                          ?.missingSecret
+                          ? `${option.label} client ID found but server secret is missing. Configure backend secrets.`
+                          : `${option.label} OAuth credentials not configured. Contact admin.`}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -802,10 +825,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-sm">{option.label}</span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-semibold">
-                          Coming Soon
+                          Setup Required
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 leading-relaxed">{option.description}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        {oauthDiagnostics[option.oauthPlatform as keyof typeof oauthDiagnostics]
+                          ?.missingSecret
+                          ? `${option.label} client ID configured but server secret missing.`
+                          : `${option.label} OAuth not fully configured.`}
+                      </p>
                     </div>
                   </div>
                 ))}

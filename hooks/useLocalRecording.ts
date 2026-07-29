@@ -36,8 +36,10 @@ const QUALITY_BITRATES: Record<Exclude<RecordingQuality, 'auto'>, number> = {
   low: 800_000, // 800 kbps
 };
 
-const pickMimeType = (): string => {
-  if (typeof MediaRecorder === 'undefined') return 'video/webm';
+const pickMimeType = (): string | null => {
+  if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') {
+    return null;
+  }
   const preferred = [
     // Prefer MP4 (H.264+AAC) for broad device compatibility
     'video/mp4;codecs=h264,aac',
@@ -78,7 +80,7 @@ export const useLocalRecording = (
     quality = 'auto',
     segmentDurationMs = 30_000,
     maxDurationMs = 4 * 60 * 60 * 1000,
-    mimeType = pickMimeType(),
+    mimeType = pickMimeType() ?? 'video/webm',
   } = config;
 
   const [state, setState] = useState<RecordingState>({

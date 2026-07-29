@@ -644,15 +644,39 @@ const getBackendCapabilities = () => {
   ).trim();
   const tiktokClientSecret = String(process.env.TIKTOK_CLIENT_SECRET || '').trim();
 
+  // NOTE: We check ALL credentials to determine capability. This helps the UI show
+  // the correct state. When credentials are missing, OAuth will still appear but
+  // will fail with clear error messages when actually attempting to connect.
+  const hasFullYouTube = Boolean(youtubeClientId && youtubeClientSecret);
+  const hasFullFacebook = Boolean(facebookAppId && facebookAppSecret);
+  const hasFullTwitch = Boolean(twitchClientId && twitchClientSecret);
+  const hasFullTikTok = Boolean(tiktokClientKey && tiktokClientSecret);
+
   return {
     authProviders: {
       google: Boolean(googleClientId && googleClientSecret && authStateSecret),
     },
     streamKeyPlatforms: {
-      youtube: Boolean(youtubeClientId && youtubeClientSecret),
-      facebook: Boolean(facebookAppId && facebookAppSecret),
-      twitch: Boolean(twitchClientId && twitchClientSecret),
-      tiktok: Boolean(tiktokClientKey && tiktokClientSecret),
+      youtube: hasFullYouTube,
+      facebook: hasFullFacebook,
+      twitch: hasFullTwitch,
+      tiktok: hasFullTikTok,
+    },
+    // Diagnostic info for admin UI - shows what's configured vs what's missing
+    oauthDiagnostics: {
+      youtube: {
+        configured: hasFullYouTube,
+        missingSecret: !!youtubeClientId && !youtubeClientSecret,
+      },
+      facebook: {
+        configured: hasFullFacebook,
+        missingSecret: !!facebookAppId && !facebookAppSecret,
+      },
+      twitch: { configured: hasFullTwitch, missingSecret: !!twitchClientId && !twitchClientSecret },
+      tiktok: {
+        configured: hasFullTikTok,
+        missingSecret: !!tiktokClientKey && !tiktokClientSecret,
+      },
     },
   };
 };
@@ -2687,7 +2711,8 @@ app.post(
       } catch (error) {
         console.error('YouTube OAuth failed:', error?.message || error, error?.body || '');
         const detail = error?.message || error?.statusMessage || String(error);
-        res.status(error?.statusCode || 500).json({
+        const statusCode = error?.status || error?.statusCode || 500;
+        res.status(statusCode).json({
           message: `YouTube connection failed: ${detail}`,
           detail: String(detail),
         });
@@ -3861,6 +3886,73 @@ app.post(
     });
 
     res.json({ url: session.url, sessionId: session.id });
+  }),
+);
+
+// POST /api/scream/trigger — verify Stripe payment then record scream alert
+app.post(
+  '/api/scream/trigger',
+  asyncHandler(async (req, res) => {
+    const streamerUid = String(req.body?.streamerUid || '').trim();
+    const donorName = String(req.body?.donorName || 'Anonymous').trim();
+    const amount = Number(req.body?.amount || 0);
+    const message = String(req.body?.message || '').trim();
+    const sessionId = String(req.body?.sessionId || '').trim();
+
+    if (!streamerUid || amount < 5 || !sessionId) {
+      return res.status(400).json({ message: 'Invalid or missing scream session data.' });
+    }
+
+    const sdk = await stripe();
+    if (!sdk) {
+      return res.status(503).json({ message: 'Payment verification service unavailable.' });
+    }
+
+    let session;
+    try {
+      session = await sdk.checkout.sessions.retrieve(sessionId);
+    } catch {
+      return res.status(400).json({ message: 'Invalid Stripe session ID provided.' });
+    }
+
+    if (session.payment_status !== 'paid' || session.metadata?.type !== 'chatscream') {
+      return res.status(400).json({ message: 'Payment verification failed or session unpaid.' });
+    }
+
+    const state = loadState();
+    if (!state.screamHistory) state.screamHistory = [];
+    if (state.screamHistory.some((s) => s.stripeSessionId === sessionId)) {
+      return res.status(409).json({ message: 'Scream alert already processed for this session.' });
+    }
+
+    const screamRecord = {
+      id: randomUUID(),
+      streamerUid,
+      donorName,
+      amount,
+      message,
+      stripeSessionId: sessionId,
+      createdAt: nowIso(),
+    };
+
+    state.screamHistory.push(screamRecord);
+    updateLeaderboardEntry(streamerUid, amount);
+    flushState();
+
+    addChatMessage({
+      id: randomUUID(),
+      userId: 'system',
+      username: 'ChatScream',
+      text: `🔥 ${donorName} sent a $${amount.toFixed(2)} ChatScream: "${message}"`,
+      isScream: true,
+      screamTier: amount >= 50 ? 'maximum' : amount >= 10 ? 'loud' : 'normal',
+      donorName,
+      amount,
+      createdAt: nowIso(),
+      roomId: streamerUid,
+    });
+
+    res.json({ success: true, screamId: screamRecord.id });
   }),
 );
 app.post(

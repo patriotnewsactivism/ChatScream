@@ -36,12 +36,17 @@ const buildResetUrl = (rawToken) => {
   const configured = String(
     process.env.PASSWORD_RESET_URL || process.env.APP_BASE_URL || '',
   ).trim();
-  if (!configured) {
-    return `/reset-password/confirm?token=${encodeURIComponent(rawToken)}`;
+  const baseUrl = configured.replace(/\/+$/, '');
+
+  if (!baseUrl) {
+    return `/reset-password?token=${encodeURIComponent(rawToken)}`;
   }
-  const url = new URL(configured);
-  url.searchParams.set('token', rawToken);
-  return url.toString();
+
+  if (baseUrl.includes('/reset-password')) {
+    return `${baseUrl}?token=${encodeURIComponent(rawToken)}`;
+  }
+
+  return `${baseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
 };
 
 const createRateLimiter = (store, windowMs, maxRequests) => (key) => {

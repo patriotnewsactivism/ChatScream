@@ -416,7 +416,28 @@ const App: FC = () => {
   };
 
   const handleMediaDelete = async (id: string) => {
-    // Clear active states if this asset is currently playing/showing
+    // If it's a local object URL, reset active state before revoking to prevent stale playback
+    const localUrl = localObjectUrlsRef.current.get(id);
+    if (localUrl) {
+      if (activeVideoId === id) {
+        setActiveVideoId(null);
+        setActiveVideoUrl(null);
+      }
+      if (activeImageId === id) {
+        setActiveImageId(null);
+        setActiveImageUrl(null);
+      }
+      if (activeAudioId === id) {
+        setActiveAudioId(null);
+      }
+      URL.revokeObjectURL(localUrl);
+      localObjectUrlsRef.current.delete(id);
+      setAssets((prev) => prev.filter((a) => a.id !== id));
+      setMediaError(null);
+      return;
+    }
+
+    // Clear active states for server-side assets
     if (activeVideoId === id) {
       setActiveVideoUrl(null);
       setActiveVideoId(null);
@@ -427,16 +448,6 @@ const App: FC = () => {
     }
     if (activeAudioId === id) {
       setActiveAudioId(null);
-    }
-
-    // If it's a local object URL, just revoke and remove — no server call
-    const localUrl = localObjectUrlsRef.current.get(id);
-    if (localUrl) {
-      URL.revokeObjectURL(localUrl);
-      localObjectUrlsRef.current.delete(id);
-      setAssets((prev) => prev.filter((a) => a.id !== id));
-      setMediaError(null);
-      return;
     }
 
     try {
@@ -675,7 +686,9 @@ const App: FC = () => {
       if (captionsOn) streamTranscript.clearTranscript();
 
       // Start live chat aggregation — fetch credentials from server
-      const facebookDest = destinations.find((d) => d.platform === Platform.FACEBOOK && d.isEnabled);
+      const facebookDest = destinations.find(
+        (d) => d.platform === Platform.FACEBOOK && d.isEnabled,
+      );
       const facebookLiveVideoId = facebookDest?.liveVideoId || '';
       const params = facebookLiveVideoId
         ? `?facebookLiveVideoId=${encodeURIComponent(facebookLiveVideoId)}`
@@ -805,10 +818,7 @@ const App: FC = () => {
         mirrorCamera={isMirrored}
       />
       {/* HTML/CSS Scream Overlay over multiview */}
-      <ScreamOverlay
-        alert={activeScream}
-        onDismiss={() => setActiveScream(null)}
-      />
+      <ScreamOverlay alert={activeScream} onDismiss={() => setActiveScream(null)} />
       {/* Quick controls bar (below multiview) */}
       <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
         <button
@@ -916,10 +926,7 @@ const App: FC = () => {
       />
 
       {/* HTML/CSS Scream Overlay (replaces canvas-based rendering) */}
-      <ScreamOverlay
-        alert={activeScream}
-        onDismiss={() => setActiveScream(null)}
-      />
+      <ScreamOverlay alert={activeScream} onDismiss={() => setActiveScream(null)} />
 
       {/* Legal citation lower-third overlay */}
       {activeCitation && (
@@ -1100,12 +1107,21 @@ const App: FC = () => {
           <h3 className="text-lg font-bold">Stop Recording?</h3>
         </div>
         <div className="text-sm text-gray-400 mb-4 space-y-1">
-          <p>Duration: <span className="text-white font-mono">
-            {Math.floor(localRecording.duration / 60).toString().padStart(2, '0')}:
-            {(localRecording.duration % 60).toString().padStart(2, '0')}
-          </span></p>
-          <p>File size: <span className="text-white">{localRecording.totalSizeMB} MB</span></p>
-          <p>Quality: <span className="text-white uppercase">{localRecording.currentQuality}</span></p>
+          <p>
+            Duration:{' '}
+            <span className="text-white font-mono">
+              {Math.floor(localRecording.duration / 60)
+                .toString()
+                .padStart(2, '0')}
+              :{(localRecording.duration % 60).toString().padStart(2, '0')}
+            </span>
+          </p>
+          <p>
+            File size: <span className="text-white">{localRecording.totalSizeMB} MB</span>
+          </p>
+          <p>
+            Quality: <span className="text-white uppercase">{localRecording.currentQuality}</span>
+          </p>
           <p className="pt-2 text-yellow-400">The recording will download to your device.</p>
         </div>
         <div className="flex gap-2 justify-end">
@@ -1502,34 +1518,36 @@ const App: FC = () => {
               )}
               {appState.isStreaming && destinations.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  {destinations.filter((d) => d.isEnabled).map((d) => (
-                    <div
-                      key={d.id}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[9px] font-bold ${
-                        d.status === 'live'
-                          ? 'bg-green-900/40 border-green-500/40 text-green-300'
-                          : d.status === 'connecting'
-                          ? 'bg-yellow-900/40 border-yellow-500/40 text-yellow-300'
-                          : d.status === 'error'
-                          ? 'bg-red-900/40 border-red-500/40 text-red-300'
-                          : 'bg-gray-800 border-gray-700 text-gray-500'
-                      }`}
-                      title={`${d.platform}${d.name ? ` — ${d.name}` : ''}: ${d.status}`}
-                    >
+                  {destinations
+                    .filter((d) => d.isEnabled)
+                    .map((d) => (
                       <div
-                        className={`w-1.5 h-1.5 rounded-full ${
+                        key={d.id}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[9px] font-bold ${
                           d.status === 'live'
-                            ? 'bg-green-400'
+                            ? 'bg-green-900/40 border-green-500/40 text-green-300'
                             : d.status === 'connecting'
-                            ? 'bg-yellow-400 animate-pulse'
-                            : d.status === 'error'
-                            ? 'bg-red-400'
-                            : 'bg-gray-600'
+                              ? 'bg-yellow-900/40 border-yellow-500/40 text-yellow-300'
+                              : d.status === 'error'
+                                ? 'bg-red-900/40 border-red-500/40 text-red-300'
+                                : 'bg-gray-800 border-gray-700 text-gray-500'
                         }`}
-                      />
-                      {d.platform}
-                    </div>
-                  ))}
+                        title={`${d.platform}${d.name ? ` — ${d.name}` : ''}: ${d.status}`}
+                      >
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            d.status === 'live'
+                              ? 'bg-green-400'
+                              : d.status === 'connecting'
+                                ? 'bg-yellow-400 animate-pulse'
+                                : d.status === 'error'
+                                  ? 'bg-red-400'
+                                  : 'bg-gray-600'
+                          }`}
+                        />
+                        {d.platform}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
