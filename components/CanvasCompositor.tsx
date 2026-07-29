@@ -294,7 +294,8 @@ const CanvasCompositor = forwardRef<CanvasRef, CanvasCompositorProps>((props, re
         ctx.clip();
 
         // Mirror the camera feed if enabled (horizontal flip)
-        if (mirrorCamera && video === camVideoRef.current) {
+        const currentMirrorCamera = propsRef.current?.mirrorCamera ?? false;
+        if (currentMirrorCamera && video === camVideoRef.current) {
           ctx.translate(x + targetW, 0);
           ctx.scale(-1, 1);
           ctx.drawImage(video, offsetX, y + offsetY, drawnW, drawnH);
