@@ -1,18 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { MessageSquare } from 'react-feather';
-import { BroadcastMessage } from '../types';
+import React, { useState, useEffect } from 'react';
+import { MessageSquare } from 'lucide-react';
+
+interface BroadcastMessage {
+  id: string;
+  content: string;
+  timestamp: Date;
+}
 
 interface ChatStreamOverlayProps {
   messages: BroadcastMessage[];
-  position?: 'top' | 'center' | 'bottom';
   style?: 'default' | 'minimal' | 'gradient' | 'neon';
-  duration?: number;
+  position?: 'bottom' | 'center' | 'top';
+  duration?: number; // ms to display each message
 }
 
 const ChatStreamOverlay: React.FC<ChatStreamOverlayProps> = ({
   messages,
-  position = 'bottom',
   style = 'default',
+  position = 'bottom',
   duration = 5000,
 }) => {
   const [currentMessage, setCurrentMessage] = useState<BroadcastMessage | null>(null);
@@ -40,9 +45,9 @@ const ChatStreamOverlay: React.FC<ChatStreamOverlayProps> = ({
   if (!currentMessage || !isVisible) return null;
 
   const positionClasses = {
-    bottom: 'bottom-4 left-3 right-3 sm:left-4 sm:right-4',
-    center: 'top-1/2 left-3 right-3 sm:left-4 sm:right-4 -translate-y-1/2',
-    top: 'top-4 left-3 right-3 sm:left-4 sm:right-4',
+    bottom: 'bottom-8 left-4 right-4',
+    center: 'top-1/2 left-4 right-4 -translate-y-1/2',
+    top: 'top-8 left-4 right-4',
   };
 
   const styleClasses = {
@@ -54,24 +59,34 @@ const ChatStreamOverlay: React.FC<ChatStreamOverlayProps> = ({
 
   return (
     <div
-      className={`absolute ${positionClasses[position]} z-30`}
-      style={{ animation: isVisible ? 'slideUp 0.3s ease-out, fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-out' }}
+      className={`absolute ${positionClasses[position]} z-30 animate-slide-up`}
+      style={{
+        animation: isVisible
+          ? 'slideUp 0.3s ease-out, fadeIn 0.3s ease-out'
+          : 'fadeOut 0.3s ease-out',
+      }}
     >
-      <div className={`${styleClasses[style]} px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl max-w-2xl mx-auto`}>
+      <div className={`${styleClasses[style]} px-6 py-4 rounded-xl shadow-2xl max-w-2xl mx-auto`}>
         <div className="flex items-center gap-2 mb-1">
-          <MessageSquare size={14} className={style === 'neon' ? 'text-cyan-400' : 'text-white/70'} />
-          <span className={`text-xs font-medium uppercase tracking-wider ${style === 'neon' ? 'text-cyan-400' : 'text-white/70'}`}>
+          <MessageSquare
+            size={14}
+            className={style === 'neon' ? 'text-cyan-400' : 'text-white/70'}
+          />
+          <span
+            className={`text-xs font-medium uppercase tracking-wider ${
+              style === 'neon' ? 'text-cyan-400' : 'text-white/70'
+            }`}
+          >
             Chat Stream
           </span>
         </div>
-        <p className={`font-semibold text-base sm:text-lg leading-snug ${style === 'neon' ? 'text-cyan-100' : 'text-white'}`}>
+        <p
+          className={`font-semibold text-lg leading-snug ${
+            style === 'neon' ? 'text-cyan-100' : 'text-white'
+          }`}
+        >
           {currentMessage.content}
         </p>
-        {currentMessage.isToxic && (
-          <div className="toxic-warning">
-            <span>Toxic Content Detected</span>
-          </div>
-        )}
       </div>
     </div>
   );

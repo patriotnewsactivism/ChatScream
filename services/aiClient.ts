@@ -111,22 +111,3 @@ export const requestContentAnalysis = (
     streamTitle,
     streamTopic,
   });
-
-export interface ChatSummaryResponse {
-  summary: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
-  topics: string[];
-}
-
-export const requestChatSummary = (
-  authToken: string,
-  chatMessages: string[],
-  filters?: {
-    sentiment?: 'positive' | 'negative';
-    topic?: string;
-  }
-): Promise<ChatSummaryResponse> =>
-  request('/api/ai/chat-summary', authToken, 'POST', {
-    chatMessages,
-    filters,
-  });

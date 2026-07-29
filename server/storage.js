@@ -94,7 +94,7 @@ export const uploadFile = async (file, baseUrl = '') => {
       }
 
       const publicUrl = S3_PUBLIC_URL
-        ? `${S3_PUBLIC_URL.replace(//$/, '')}/${key}`
+        ? `${S3_PUBLIC_URL.replace(/\/+$/, '')}/${key}`
         : `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
 
       return { url: publicUrl, key, storage: 's3' };
