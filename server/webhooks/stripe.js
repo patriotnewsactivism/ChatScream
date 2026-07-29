@@ -196,6 +196,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
       flushState();
     } catch (error) {
       console.error('[Stripe Webhook] Failed to process scream payment:', error);
+      throw error; // Propagate so Stripe retries the delivery
     }
     return; // Don't process as subscription
   }
