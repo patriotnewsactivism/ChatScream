@@ -39,6 +39,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "/api/all?path=:path*"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/all"
+    },
+    {
       "source": "/((?!api|assets|sw.js|manifest.json|favicon|icons).*)",
       "destination": "/index.html"
     }
