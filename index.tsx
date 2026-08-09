@@ -17,6 +17,8 @@ const CreatorDashboard = lazy(() => import('./pages/CreatorDashboard'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'));
 const GuestPage = lazy(() => import('./pages/GuestPage'));
+const ScreamPage = lazy(() => import('./pages/ScreamPage'));
+const ThankYouPage = lazy(() => import('./pages/ThankYouPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
@@ -127,6 +129,10 @@ const AppRouter: React.FC = () => {
 
           {/* Guest camera join page — public, no auth required */}
           <Route path="/guest/:roomId" element={<GuestPage />} />
+
+          {/* ChatScream viewer donation page and post-checkout confirmation — public */}
+          <Route path="/scream/:streamerUid" element={<ScreamPage />} />
+          <Route path="/thank-you" element={<ThankYouPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<NotFoundPage />} />
