@@ -1,7 +1,8 @@
 # ChatScream — Post-Login Feature Audit & TODO
 
-> **Created:** 2026-06-25  
-> **Status:** Active — Methodical fix-list after full codebase deep-dive  
+> **Created:** 2026-06-25
+> **Last audited:** 2026-08-09 — re-verified every item against the actual code (not just prior notes) and fixed what was found broken.
+> **Status:** Active — Methodical fix-list after full codebase deep-dive
 > **Goal:** Make every promised feature actually work end-to-end from the studio UI
 
 ---
@@ -17,140 +18,180 @@
 
 ---
 
-## 1. 🔴 STREAMING TO YOUTUBE — Broken End-to-End
+## 2026-08-09 session — what changed
 
-The #1 promised feature. OAuth connects, but the "Go Live" button doesn't reliably push video to YouTube.
+Re-verified this whole document against `server/index.js`, `server/app.js`,
+`services/destinationRouter.ts`, and `services/oauthService.ts`. Most of
+Sections 1–3 below were already fixed in earlier work but never checked off
+here — corrected that. Two real bugs were found and fixed:
 
-### Root Causes
-
-- **DestinationManager calls `/api/destinations/twitch/stream-key`** — this endpoint **does not exist** on the server. The server only has `/api/oauth/stream-key` (which works for YouTube only).
-- **DestinationRouter sends WebM chunks via WebSocket to FFmpeg** — the server spawns FFmpeg to re-encode and push RTMP. This works **only if FFmpeg is installed on the server host**. Railway/Cloud Run containers do not include FFmpeg by default.
-- **No validation that FFmpeg exists** — `spawn('ffmpeg', args)` silently fails on hosts without it. No user-facing error.
-- **MediaRecorder codec mismatch** — Browser records WebM (VP8/VP9+Opus), FFmpeg re-encodes to H.264+AAC for RTMP. The `-re` (read at native rate) flag on pipe input causes buffering/timing issues with live WebSocket ingest.
-- **No server URL defaults** — YouTube requires `rtmp://a.rtmp.youtube.com/live2/` but when a destination is added via OAuth, the `serverUrl` comes from the API's `ingestUrl`. If empty, nothing connects.
-- **WebSocket connects to wrong URL in production** — `destinationRouter.ts` converts the API base URL to `wss://` for the ingest WebSocket, but Vercel (frontend host) doesn't handle WebSocket. The backend (Railway) does, but the URL resolution may not match.
-
-### Fixes
-
-- [x] 🔴 **Add FFmpeg to Docker/deployment** — Include `ffmpeg` in the Dockerfile and Railway nixpacks config
-- [x] 🔴 **Validate FFmpeg availability on server startup** — Check `which ffmpeg` at boot and log a clear error if missing
-- [x] 🔴 **Fix FFmpeg args for WebSocket ingest** — Remove `-re` flag (causes timing drift on pipe input), add `-fflags +nobuffer -flags low_delay` for low-latency live ingest
-- [x] 🔴 **Default RTMP server URLs per platform** — If `serverUrl` is empty, auto-fill the standard RTMP ingest URL for each platform (YouTube, Facebook, Twitch, etc.)
-- [x] 🔴 **Show user-facing error when FFmpeg spawn fails** — Catch `proc.on('error')` and send actionable WebSocket error message back to client
-- [x] 🟡 **WebSocket URL resolution** — Ensure `destinationRouter.ts` always connects to the API server (Railway/Cloud Run), never to the Vercel frontend origin
-
----
-
-## 2. 🔴 STREAMING TO FACEBOOK — Missing Flow
-
-- [x] 🔴 **Facebook "Create Live" returns `streamUrl` but no `streamKey`** — (Verified: `DestinationManager.tsx` already parses this into `serverUrl` and `streamKey`).
-- [ ] 🔴 **Facebook tokens expire quickly** — No auto-refresh for Facebook tokens. YouTube has `refreshStoredYouTubeAccessToken`, but Facebook has nothing equivalent.
-- [x] 🟡 **Facebook Page selection** — (Verified: Picker UI already exists and prompts user for Pages vs Personal Profile).
-
----
-
-## 3. 🔴 STREAMING TO TWITCH — Missing Backend Endpoint
-
-- [x] 🔴 **`/api/destinations/twitch/stream-key` does not exist** — (Verified: It does exist and works properly).
-- [x] 🔴 **Implement Twitch stream key retrieval** — (Verified: Uses Twitch Helix API).
-- [ ] 🟡 **Twitch ingest URL auto-detection** — Use Twitch Ingests API to find the nearest RTMP server rather than requiring manual entry
+- **`retry_destination` was a no-op.** `destinationRouter.ts` sends
+  `{type: 'retry_destination', destId}` after a destination errors, but
+  `server/index.js` never handled that message type — a failed destination
+  could never recover without the user removing and re-adding it (which used
+  to restart *every* destination, see next point).
+- **One shared FFmpeg process for all destinations.** `server/index.js`
+  multiplexed every RTMP output through a single `ffmpeg` invocation. A bad
+  stream key on one platform, or any hot-swap of destinations, could take
+  down (or glitch) the connection to every other platform. Refactored to one
+  FFmpeg process per destination, diffed on `update_destinations` so only
+  what actually changed respawns, with the WebM init segment cached so a
+  destination added or retried mid-stream still gets a decodable stream.
+- **`destinationRouter.removeDestination` dropped the `id`/`platform`/`name`
+  fields** when sending the updated destination list to the server — only
+  `serverUrl`/`streamKey` were included. Harmless under the old shared-process
+  design, but would have broken destination identification under the new
+  per-destination design. Fixed to match `addDestination`'s payload shape.
+- **Cloud Streaming (VM-based) UI overstatement.** The landing page's "Cloud
+  Power" section and the dashboard's "Cloud VM hours" tile presented an
+  EC2-backed, always-on cloud encoding feature as if it were live (0%
+  bandwidth, 4K, global edge network). The backend for it is mock-only (see
+  §11) and no UI component even calls it. Reworked both to honest "Coming
+  Soon" framing — the feature is still on the roadmap and actively wanted,
+  just not implemented yet.
 
 ---
 
-## 4. 🔴 ONE-CLICK "GO LIVE" FLOW — Disconnected Pipeline
+## 1. 🔴 STREAMING TO YOUTUBE — Working
 
-The promised "simple button click initiates connections" doesn't work because the pipeline is fragmented.
+The #1 promised feature. OAuth connects and "Go Live" pushes video to YouTube.
 
-- [x] 🔴 **Wire one-click flow: OAuth → Stream Key → Destination → Go Live** — (Verified: DestinationManager fetches keys when adding destination, and handleBroadcast uses them automatically).
-- [x] 🔴 **Pre-flight validation before Go Live** — Added destination checks and error reporting before starting `RTMPSender`.
-- [ ] 🟡 **Destination status indicators** — Currently destinations show 'offline'/'connecting'/'live'/'error' but the status is set optimistically with a `setTimeout(1500)` — no real confirmation from FFmpeg/RTMP that the connection succeeded
-- [ ] 🟡 **Error recovery** — If one destination fails, the entire FFmpeg process dies. Implement per-destination FFmpeg processes or use tee muxer for independent streams
+- [x] 🔴 **FFmpeg in Docker/deployment** — Included in the Dockerfile and Railway nixpacks config.
+- [x] 🔴 **Validate FFmpeg availability on server startup** — `checkFfmpeg()` in `server/index.js` logs a clear warning if missing.
+- [x] 🔴 **FFmpeg args for WebSocket ingest** — No `-re` flag; `-fflags +nobuffer+flush_packets -flags low_delay` for low-latency live ingest.
+- [x] 🔴 **Default RTMP server URLs per platform** — `DEFAULT_RTMP_URLS` in `server/index.js` fills in the standard ingest URL when `serverUrl` is empty.
+- [x] 🔴 **User-facing error when FFmpeg spawn fails** — `proc.on('error')` sends an actionable `destination_error` back to the client.
+- [x] 🟡 **WebSocket URL resolution** — `destinationRouter.ts` always connects to the API server (via `getApiBaseUrl()`), never the frontend origin.
 
 ---
 
-## 5. 🟡 RECORDING / SAVING PRODUCTION — Quality Issues
+## 2. 🔴 STREAMING TO FACEBOOK — Working
 
-- [ ] 🟡 **Recording uses `useLocalRecording` hook with browser MediaRecorder** — Output quality is limited by browser codec support. VP8/WebM is the most common fallback. Many browsers don't support H.264 in MediaRecorder.
-- [ ] 🟡 **No server-side recording** — The `RecordingManager` service class exists but is **never used** in `App.tsx`. All recording is client-side only.
-- [ ] 🟡 **Recording download is auto-triggered** — When recording stops, it immediately triggers a browser download. No preview, no confirmation, no choice of format/quality.
-- [ ] 🟡 **No recording quality settings UI** — `useLocalRecording` accepts quality config but the UI has no settings panel for it.
-- [ ] 🟡 **Large recordings crash mobile** — Even with chunking/IndexedDB, stitching all chunks into a single Blob for download can OOM on phones. Need streaming download or server-side assembly.
-- [ ] 🟢 **MP4 preference not working** — `pickMimeType()` tries MP4 first but most browsers don't support `video/mp4` in MediaRecorder. Result is always WebM. Consider using `mp4-muxer` or `@aspect-build/mp4-muxer` for proper MP4 output.
+- [x] 🔴 **Facebook "Create Live" returns `streamUrl` but no `streamKey`** — `DestinationManager.tsx` parses this into `serverUrl`/`streamKey`.
+- [x] 🔴 **Facebook tokens auto-refresh** — `refreshFacebookTokenIfNeeded()` in `server/app.js` extends the token before any Graph API call needs it (create-live, pages list, ingest config).
+- [x] 🟡 **Facebook Page selection** — Picker UI prompts for Pages vs Personal Profile.
+
+---
+
+## 3. 🔴 STREAMING TO TWITCH — Working
+
+- [x] 🔴 **`/api/destinations/twitch/stream-key`** — Implemented, refreshes the Twitch token if it's within 5 minutes of expiry, then calls the Helix API.
+- [x] 🟡 **Twitch ingest URL auto-detection** — Queries `https://ingest.twitch.tv/ingests` for the lowest-priority server and falls back to `rtmp://live.twitch.tv/app` if that lookup fails.
+
+---
+
+## 4. 🔴 ONE-CLICK "GO LIVE" FLOW — Working, now more resilient
+
+- [x] 🔴 **Wire one-click flow: OAuth → Stream Key → Destination → Go Live** — `DestinationManager` fetches keys when adding a destination; `handleBroadcast` uses them automatically.
+- [x] 🔴 **Pre-flight validation before Go Live** — Destination checks and error reporting before starting the router.
+- [x] 🟡 **Destination status indicators** — `destination_connected`/`destination_error` events come from real FFmpeg stderr parsing per destination, not an optimistic timer.
+- [x] 🟡 **Error recovery** — Fixed 2026-08-09: one FFmpeg process per destination (see session notes above). A dead stream key on Twitch no longer disturbs YouTube/Facebook, and `retry_destination` actually retries now.
+
+---
+
+## 5. 🟡 RECORDING / SAVING PRODUCTION — Quality Issues (open)
+
+- [ ] 🟡 **Recording uses `useLocalRecording` hook with browser MediaRecorder** — Output quality is limited by browser codec support. VP8/WebM is the most common fallback.
+- [ ] 🟡 **No server-side recording** — `RecordingManager` service class exists but is not used in `App.tsx`. All recording is client-side only.
+- [ ] 🟡 **Recording download is auto-triggered** — No preview, no confirmation, no choice of format/quality.
+- [ ] 🟡 **No recording quality settings UI**.
+- [ ] 🟡 **Large recordings can crash mobile** — Stitching chunked IndexedDB blobs into one Blob for download can OOM on phones.
+- [ ] 🟢 **MP4 preference not working** — `pickMimeType()` tries MP4 first but most browsers don't support `video/mp4` in `MediaRecorder`.
 
 ---
 
 ## 6. 🟡 OAUTH SETUP & CONFIGURATION
 
-- [ ] 🟡 **OAuth client IDs must be configured via Admin Portal** — New users have no idea where to get or paste client IDs. Need guided setup or pre-configured defaults for the hosted version.
-- [ ] 🟡 **OAuth redirect URI mismatch** — Frontend uses `window.location.origin + '/oauth/callback'` but some server routes use `/api/auth/oauth/google/callback`. These are two completely different flows (frontend popup vs server-side redirect). The dual-path creates confusion.
-- [ ] 🟡 **OAuth popup blocked on mobile** — `initiateOAuth()` opens a popup, which is blocked by default on mobile browsers. The fallback opens a new tab, which loses the postMessage connection.
-- [ ] 🟢 **TikTok OAuth incomplete** — Only `user.info.basic` scope requested. TikTok LIVE requires `live.room.manage` scope + approved live access.
+- [ ] 🟡 **OAuth client IDs must be configured via Admin Portal** — New users have no guided setup or pre-configured defaults for the hosted version.
+- [x] 🟡 **OAuth redirect URI consistency** — `oauthService.ts` always derives `redirect_uri` from `window.location.origin`, so it matches whichever domain the user is on.
+- [x] 🟡 **OAuth popup blocked on mobile** — Mobile skips the popup entirely and opens a new tab synchronously on the user gesture; desktop uses a centered popup.
+- [/] 🟢 **TikTok OAuth** — Requests `live.room.manage` + `video.upload` scopes correctly, but TikTok LIVE access still requires TikTok's own partner/API approval process before those scopes actually grant streaming rights. This is an external approval gate, not something fixable in this codebase alone.
 
 ---
 
-## 7. 🟡 CANVAS COMPOSITOR & VIDEO QUALITY
+## 7. 🟡 CANVAS COMPOSITOR & VIDEO QUALITY (open)
 
-- [ ] 🟡 **Canvas is hardcoded to 1280×720** — No option for 1080p output. The canvas, watermark, and all layout calculations assume 720p.
-- [ ] 🟡 **Canvas captureStream FPS not configurable** — `canvas.captureStream(30)` is hardcoded. Should match recording/streaming settings.
-- [ ] 🟢 **No GPU acceleration** — Canvas 2D rendering loop uses `requestAnimationFrame` with CPU-bound `drawImage`. For complex scenes with overlays/graphics, this drops frames on mobile.
-
----
-
-## 8. 🟡 SCENE MANAGEMENT
-
-- [ ] 🟡 **Scenes are not persisted** — Scene configurations exist in-memory only. Refreshing the page loses all scene setups.
-- [ ] 🟡 **Scene transitions** — No cross-fade, cut, or transition effects between scenes. Just an instant swap.
-- [ ] 🟢 **Scene presets** — No built-in presets for common layouts (interview, gaming, presentation).
+- [ ] 🟡 **Canvas is hardcoded to 1280×720** — No 1080p output option.
+- [ ] 🟡 **Canvas captureStream FPS not configurable** — `canvas.captureStream(30)` is hardcoded.
+- [ ] 🟢 **No GPU acceleration** — CPU-bound `drawImage` loop drops frames on mobile with complex overlays.
 
 ---
 
-## 9. 🟡 CHAT / CHAT SCREAMER
+## 8. 🟡 SCENE MANAGEMENT (open)
 
-- [ ] 🟡 **Chat aggregation only works with manual API polling** — `chatAggregator.ts` exists but isn't integrated with live platform chats (YouTube Live Chat API, Twitch IRC, etc.)
-- [ ] 🟡 **Scream donations are demo-only** — `ScreamDonation` component triggers demo alerts but has no real Stripe payment flow connected for viewer donations
-- [ ] 🟢 **Chat overlay on stream** — `ChatStreamOverlay.tsx` exists but the integration with the canvas compositor to actually render chat on the output stream is unclear
-
----
-
-## 10. 🟡 POST-STREAM ANALYTICS
-
-- [ ] 🟡 **PostStreamPanel shows transcript and evidence markers** — But actual stream analytics (viewer count, engagement, chat volume) are empty because there's no live data feed from platforms
-- [ ] 🟡 **StreamAnalyticsDashboard** — Relies on `streamAnalytics.ts` which tracks local metrics only. No YouTube Analytics API or Twitch analytics integration
-- [ ] 🟢 **Analytics data not persisted** — All analytics are lost on page refresh
+- [ ] 🟡 **Scenes are not persisted** — In-memory only; refresh loses all scene setups.
+- [ ] 🟡 **Scene transitions** — No cross-fade/cut effects, just an instant swap.
+- [ ] 🟢 **Scene presets** — No built-in layout presets.
 
 ---
 
-## 11. 🟢 CLOUD STREAMING (VM-BASED)
+## 9. 🟡 CHAT / CHAT SCREAMER (open)
 
-- [ ] 🟢 **Entire cloud streaming backend is mock** — As stated in `cloudStreamingService.ts` header: "EC2 Backend: NOT YET DEPLOYED — server routes return mock/seeded data"
-- [ ] 🟢 **Cloud streaming session start/end APIs return mock data** — Works for UI display but doesn't actually provision any cloud resources
-- [ ] 🟢 **Cost estimation is local-only** — Uses hardcoded rates, no real AWS pricing API integration
-
----
-
-## 12. 🟢 ADDITIONAL GAPS
-
-- [ ] 🟢 **Stream scheduler** — `StreamScheduler` component + `streamScheduler.ts` service exist but scheduling doesn't auto-trigger a stream start
-- [ ] 🟢 **Bitrate adaptation** — `bitrateAdaptation.ts` is fully implemented but never wired into the streaming pipeline
-- [ ] 🟢 **Stream health monitor** — `streamHealthMonitor.ts` exists but isn't displayed in the studio UI during streaming
-- [ ] 🟢 **WebRTC guest cameras** — `webrtcGuestService.ts` creates signaling rooms but the guest video feed isn't composited into the canvas output
-- [ ] 🟢 **Music player audio routing** — MusicPlayer plays audio but the audio pipeline integration depends on `useAudioPipeline` receiving the `musicElement` ref correctly — needs verification
-- [ ] 🟢 **Keyboard shortcuts** — Defined in `useKeyboardShortcuts` but some mappings (e.g., fullscreen = toggleCamera) are incorrect
+- [ ] 🟡 **Chat aggregation only works with manual API polling** — `chatAggregator.ts` isn't integrated with live platform chats (YouTube Live Chat API, Twitch IRC, etc.).
+- [ ] 🟡 **Scream donations are demo-only** — No real Stripe payment flow connected for viewer donations.
+- [ ] 🟢 **Chat overlay on stream** — Integration between `ChatStreamOverlay.tsx` and the canvas compositor is unclear.
 
 ---
 
-## Fix Priority Order
+## 10. 🟡 POST-STREAM ANALYTICS (open)
 
-1. **FFmpeg in deployment** — Nothing works without it
-2. **Fix FFmpeg args** — Remove `-re`, add low-latency flags
-3. **Default RTMP URLs** — So YouTube/Facebook destinations have valid server URLs
-4. **Twitch stream key endpoint** — Implement `/api/destinations/twitch/stream-key`
-5. **Facebook stream URL handling** — Parse `stream_url` into `serverUrl` + `streamKey`
-6. **Pre-flight validation** — Check destinations before Go Live
-7. **One-click Go Live flow** — Auto-fetch stream keys, validate, then start
-8. **Recording quality** — MP4 output, quality settings UI
-9. **WebSocket URL fix** — Ensure production connects to correct backend
-10. **User-facing errors** — Replace silent failures with actionable messages
+- [ ] 🟡 **PostStreamPanel** shows transcript/evidence markers, but real engagement analytics are empty — no live data feed from platforms.
+- [ ] 🟡 **StreamAnalyticsDashboard** — Local metrics only; no YouTube Analytics/Twitch analytics integration.
+- [ ] 🟢 **Analytics data not persisted** — Lost on page refresh.
+
+---
+
+## 11. 🟢 CLOUD STREAMING (VM-based) — Not implemented, actively wanted
+
+This is a separate feature from the multi-destination relay in §1–4 above
+(which *is* real and working): an always-on, browser-independent cloud
+encoding session (EC2-backed) so a stream can keep running without a live
+browser tab, with true zero-bandwidth encoding.
+
+- [ ] 🟢 **Entire cloud streaming backend is mock** — `cloudStreamingService.ts` and the `/api/cloud-streaming/*` routes in `server/app.js` return seeded/mock data; no EC2 instance is ever provisioned. Neither is currently wired into any UI component (`cloudStreamingService.ts` and `services/streamEnforcement.ts` are unused today), so this poses no risk of a user hitting a fake "live" cloud session — but the UI previously implied otherwise (fixed 2026-08-09, see session notes).
+- [ ] 🟢 **Cloud streaming session start/end APIs return mock data** — Works for UI display but doesn't provision any cloud resources.
+- [ ] 🟢 **Cost estimation is local-only** — Hardcoded rates, no real AWS pricing API integration.
+
+**Status:** This is a real roadmap item the team is adamantly working toward,
+not abandoned — it's just not ready. The landing page and dashboard now say
+so explicitly ("Coming Soon" badges) instead of claiming it works today.
+
+---
+
+## 12. 🟢 ADDITIONAL GAPS (open)
+
+- [ ] 🟢 **Stream scheduler** — `StreamScheduler`/`streamScheduler.ts` exist but scheduling doesn't auto-trigger a stream start.
+- [ ] 🟢 **Bitrate adaptation** — `bitrateAdaptation.ts` is fully implemented but never wired into the streaming pipeline.
+- [ ] 🟢 **Stream health monitor** — `streamHealthMonitor.ts` exists but isn't displayed in the studio UI during streaming.
+- [ ] 🟢 **WebRTC guest cameras** — `webrtcGuestService.ts` creates signaling rooms but the guest video feed isn't composited into the canvas output.
+- [ ] 🟢 **Music player audio routing** — Needs verification that `useAudioPipeline` receives the `musicElement` ref correctly.
+- [ ] 🟢 **Keyboard shortcuts** — Some mappings (e.g. fullscreen = toggleCamera) are incorrect.
+
+---
+
+## 13. ⚠️ Known test-suite gap (unrelated to streaming, flagged for visibility)
+
+Running `npx vitest run` currently fails ~33 of 44 test files with module
+resolution errors — they import packages that were never added to
+`package.json` (`@reduxjs/toolkit`, `react-redux`, `@testing-library/dom`,
+`@testing-library/react-hooks`, plus a few source modules like
+`chatFiltersSlice`/`chatHelpers` that don't exist). This looks like leftover
+scaffolding from an abandoned Redux migration / caption feature branch that
+got merged in a broken state. `typecheck`, `build`, and the server/OAuth
+tests that do run (80 tests, all green) are unaffected. Worth a dedicated
+cleanup pass, but out of scope for the streaming work in this session.
+
+---
+
+## Fix Priority Order (remaining)
+
+1. **Stripe-backed viewer donations** — the Chat Screamer USP has no real payment flow.
+2. **Live chat integration** — YouTube Live Chat API / Twitch IRC, so Screams can trigger from real chat.
+3. **Server-side recording** — wire up `RecordingManager`, add quality settings UI.
+4. **Scene persistence** — save scene configs so refresh doesn't wipe them.
+5. **Cloud Streaming (VM-based)** — build the real EC2-backed encoding path; currently mock-only and clearly labeled "Coming Soon" in the UI.
+6. **1080p canvas output** — lift the 720p hardcode.
+7. **Test suite dependency cleanup** — restore or remove the ~33 broken test files.
 
 ---
 

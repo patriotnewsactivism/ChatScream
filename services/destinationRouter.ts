@@ -272,8 +272,11 @@ export class DestinationRouter {
     }
 
     const remaining = Array.from(this.state.activeConnections.values()).map((c) => ({
+      id: c.destination.id,
       serverUrl: c.destination.serverUrl,
       streamKey: c.destination.streamKey,
+      platform: c.destination.platform,
+      name: c.destination.name,
     }));
 
     this.ws.send(JSON.stringify({ type: 'update_destinations', destinations: remaining }));

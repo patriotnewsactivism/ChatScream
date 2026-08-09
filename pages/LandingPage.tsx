@@ -178,7 +178,7 @@ const LandingPage: React.FC = () => {
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
               <a href="#cloud-power" className="text-gray-300 hover:text-white transition-colors">
-                Cloud Power
+                Roadmap
               </a>
               <a href="#chat-screamer" className="text-gray-300 hover:text-white transition-colors">
                 Chat Screamer
@@ -260,7 +260,7 @@ const LandingPage: React.FC = () => {
                 className="block text-gray-300 hover:text-white py-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Cloud Power
+                Roadmap
               </a>
               <a
                 href="#chat-screamer"
@@ -368,7 +368,7 @@ const LandingPage: React.FC = () => {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600/20 border border-brand-500/30 rounded-full text-brand-400 text-sm font-medium mb-6 animate-fade-in">
               <Zap size={16} />
-              <span>Zero Bandwidth Streaming - Your Upload, Our Power!</span>
+              <span>One Studio. Every Platform. Live.</span>
             </div>
 
             {/* Headline */}
@@ -381,10 +381,9 @@ const LandingPage: React.FC = () => {
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-8">
-              Go live with <strong className="text-white">unlimited local device streaming</strong>{' '}
-              from your phone, tablet, or desktop. Upgrade anytime for{' '}
-              <strong className="text-brand-400">cloud-powered streaming</strong> that uses ZERO of
-              your bandwidth. Let viewers send donation-triggered{' '}
+              Go live from your phone, tablet, or desktop and reach{' '}
+              <strong className="text-white">YouTube, Twitch, Facebook, and more — simultaneously</strong>{' '}
+              from a single browser tab. Let viewers send donation-triggered{' '}
               <strong className="text-white">"Screams"</strong> that take over the screen for
               maximum engagement!
             </p>
@@ -413,20 +412,25 @@ const LandingPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Zero Bandwidth Callout */}
+            {/* Feature Callouts */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
               <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-xl">
                 <WifiOff size={24} className="text-green-400" />
                 <div className="text-left">
-                  <div className="font-bold text-green-400">Zero Bandwidth</div>
-                  <div className="text-xs text-gray-400">Stream uses our servers, not yours</div>
+                  <div className="font-bold text-green-400">Multi-Platform Relay</div>
+                  <div className="text-xs text-gray-400">Upload once, we fan it out to every destination</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl">
                 <Cloud size={24} className="text-purple-400" />
                 <div className="text-left">
-                  <div className="font-bold text-purple-400">Cloud Powered</div>
-                  <div className="text-xs text-gray-400">Constant high-bitrate CBR streaming</div>
+                  <div className="font-bold text-purple-400 flex items-center gap-1.5">
+                    Cloud-Powered Encoding
+                    <span className="text-[10px] font-bold uppercase tracking-wide bg-purple-500/30 text-purple-200 px-1.5 py-0.5 rounded">
+                      Coming Soon
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-400">Zero-bandwidth streaming — in active development</div>
                 </div>
               </div>
             </div>
@@ -626,20 +630,21 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Cloud Power Section */}
+      {/* Cloud Power Section — roadmap, not yet shipped */}
       <section id="cloud-power" className="py-20 md:py-32 bg-dark-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 rounded-full text-cyan-400 text-sm font-medium mb-6">
               <Cloud size={16} />
-              <span>The Cloud Engine</span>
+              <span>On the Roadmap — Coming Soon</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               Your Stream, <span className="text-cyan-400">Our Servers</span>
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Upload your content to our cloud. We handle the heavy lifting with constant,
-              high-bitrate streaming - regardless of YOUR internet connection.
+              We're actively building always-on cloud encoding: upload once and let our
+              infrastructure handle constant, high-bitrate streaming regardless of your internet
+              connection. Not live yet — here's what we're building toward.
             </p>
           </div>
 
@@ -683,21 +688,24 @@ const LandingPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Stats */}
+                {/* Target Stats — goals for the cloud engine, not current numbers */}
                 <div className="mt-8 grid grid-cols-3 gap-4">
                   <div className="text-center p-3 bg-dark-900/50 rounded-xl">
-                    <div className="text-2xl font-bold text-cyan-400">0%</div>
+                    <div className="text-2xl font-bold text-cyan-400">0%*</div>
                     <div className="text-xs text-gray-500">Your Bandwidth</div>
                   </div>
                   <div className="text-center p-3 bg-dark-900/50 rounded-xl">
-                    <div className="text-2xl font-bold text-green-400">8 Mbps</div>
+                    <div className="text-2xl font-bold text-green-400">8 Mbps*</div>
                     <div className="text-xs text-gray-500">Constant CBR</div>
                   </div>
                   <div className="text-center p-3 bg-dark-900/50 rounded-xl">
-                    <div className="text-2xl font-bold text-purple-400">4K</div>
+                    <div className="text-2xl font-bold text-purple-400">4K*</div>
                     <div className="text-xs text-gray-500">Max Quality</div>
                   </div>
                 </div>
+                <p className="mt-3 text-center text-[11px] text-gray-500">
+                  * Target specs for the cloud engine currently in development
+                </p>
               </div>
             </div>
 
@@ -708,21 +716,21 @@ const LandingPage: React.FC = () => {
                   icon: HardDrive,
                   title: 'Cloud Storage Integration',
                   description:
-                    'Connect Google Drive, OneDrive, or Dropbox. Stream directly from your cloud files.',
+                    'Connect Google Drive, OneDrive, or Dropbox and stream directly from your cloud files.',
                   color: 'from-blue-500 to-cyan-500',
                 },
                 {
                   icon: WifiOff,
                   title: 'Zero-Bandwidth Promise',
                   description:
-                    'Upload once, stream forever. Your home internet is never the bottleneck.',
+                    'Upload once, stream forever — your home internet will never be the bottleneck.',
                   color: 'from-green-500 to-emerald-500',
                 },
                 {
                   icon: Zap,
                   title: 'Constant High-Bitrate',
                   description:
-                    'Our servers output constant bitrate (CBR) streams regardless of your connection quality.',
+                    'Our servers will output constant bitrate (CBR) streams regardless of your connection quality.',
                   color: 'from-yellow-500 to-orange-500',
                 },
                 {
@@ -738,12 +746,17 @@ const LandingPage: React.FC = () => {
                   className="flex gap-4 p-4 bg-dark-800/50 rounded-xl border border-gray-800 hover:border-gray-700 transition-all"
                 >
                   <div
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center flex-shrink-0`}
+                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center flex-shrink-0 opacity-80`}
                   >
                     <feature.icon size={24} className="text-white" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-white mb-1">{feature.title}</h3>
+                    <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+                      {feature.title}
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded">
+                        Coming Soon
+                      </span>
+                    </h3>
                     <p className="text-gray-400 text-sm">{feature.description}</p>
                   </div>
                 </div>
@@ -1179,7 +1192,7 @@ const LandingPage: React.FC = () => {
                 name: 'Sarah Creates',
                 role: 'YouTube Creator',
                 quote:
-                  "Zero bandwidth streaming changed everything. I was dropping frames before, now it's crystal clear 4K every time.",
+                  'Going live to YouTube, Twitch, and Facebook at once from one browser tab changed everything. No more juggling separate setups per platform.',
                 rating: 5,
               },
               {
@@ -1357,7 +1370,7 @@ const LandingPage: React.FC = () => {
               <ul className="space-y-2 text-gray-400 text-sm">
                 <li>
                   <a href="#cloud-power" className="hover:text-white transition-colors">
-                    Cloud Power
+                    Roadmap
                   </a>
                 </li>
                 <li>
