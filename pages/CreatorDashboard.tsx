@@ -48,6 +48,14 @@ const CreatorDashboard: React.FC = () => {
   const plan = userProfile?.subscription?.plan || 'free';
   const planLabel = getPlanById(plan)?.name || 'Free';
   const referralCode = userProfile?.affiliate?.code || '';
+  const screamLink =
+    typeof window === 'undefined' || !userProfile?.uid
+      ? ''
+      : `${window.location.origin}/scream/${encodeURIComponent(userProfile.uid)}${
+          userProfile.displayName
+            ? `?name=${encodeURIComponent(userProfile.displayName)}`
+            : ''
+        }`;
   const referralLink =
     typeof window === 'undefined' || !referralCode
       ? ''
@@ -262,14 +270,36 @@ const CreatorDashboard: React.FC = () => {
               <span className="text-sm font-semibold">Payouts & monetization</span>
             </div>
             <p className="text-sm text-gray-300">
-              Keep your chatscreamers configured and monitor how you get paid out.
+              Share your ChatScream link below so viewers can pay to trigger alerts.
             </p>
+            <a href="#chatscream-link" className="text-xs text-emerald-300 underline">
+              Get your ChatScream link
+            </a>
+          </div>
+        </div>
+
+        <div
+          id="chatscream-link"
+          className="p-5 border border-gray-800 rounded-xl bg-dark-800/70 space-y-3"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold">Your ChatScream Link</h2>
+              <p className="text-sm text-gray-400">
+                Share this with viewers so they can send paid screams straight to your stream.
+              </p>
+            </div>
             <button
-              onClick={() => navigate('/studio#monetization')}
-              className="text-xs text-emerald-300 underline"
+              onClick={() => copyToClipboard(screamLink)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-brand-500 text-sm font-semibold disabled:opacity-60"
+              disabled={!screamLink}
             >
-              Review payout settings
+              <Copy size={16} /> Copy
             </button>
+          </div>
+
+          <div className="px-3 py-2 rounded-lg bg-dark-900 border border-gray-700 text-sm text-white break-all">
+            {screamLink || 'Generating…'}
           </div>
         </div>
 

@@ -50,6 +50,23 @@ here — corrected that. Two real bugs were found and fixed:
   Soon" framing — the feature is still on the roadmap and actively wanted,
   just not implemented yet.
 
+**Second pass, same day — the Chat Screamer (donation) pipeline:**
+
+- **Scream alerts never reached the actual broadcast.** `App.tsx` hardcoded
+  `activeScream={null}` into both canvas render paths, so the working
+  canvas-drawing code for donation alerts in `CanvasCompositor.tsx` never
+  received real data — alerts only ever appeared in the streamer's own
+  browser (a separate HTML/CSS `ScreamOverlay`), never in the pixels
+  actually sent to YouTube/Twitch/Facebook. Fixed by wiring the real
+  `activeScream` state through.
+- **No public page for viewers to actually pay.** `ScreamDonation.tsx` is a
+  complete, real Stripe Checkout flow calling a working backend
+  (`/api/billing/chatscream` → webhook → WebSocket broadcast), but no route
+  ever rendered it. Added `/scream/:streamerUid` and `/thank-you` pages, plus
+  a "Your ChatScream Link" card on the dashboard so streamers can find it.
+
+See §9 for full details.
+
 ---
 
 ## 1. 🔴 STREAMING TO YOUTUBE — Working
@@ -125,11 +142,19 @@ The #1 promised feature. OAuth connects and "Go Live" pushes video to YouTube.
 
 ---
 
-## 9. 🟡 CHAT / CHAT SCREAMER (open)
+## 9. 🟡 CHAT / CHAT SCREAMER
 
-- [ ] 🟡 **Chat aggregation only works with manual API polling** — `chatAggregator.ts` isn't integrated with live platform chats (YouTube Live Chat API, Twitch IRC, etc.).
-- [ ] 🟡 **Scream donations are demo-only** — No real Stripe payment flow connected for viewer donations.
-- [ ] 🟢 **Chat overlay on stream** — Integration between `ChatStreamOverlay.tsx` and the canvas compositor is unclear.
+The Chat Screamer donation pipeline was **not demo-only** — it was real
+end-to-end (Stripe Checkout → webhook → leaderboard → WebSocket broadcast)
+but disconnected at both ends: nothing let a viewer reach the payment form,
+and the alert never made it into the actual broadcast frame. Fixed
+2026-08-09.
+
+- [x] 🔴 **Scream alerts never appeared in the actual stream** — `App.tsx` hardcoded `activeScream={null}` when rendering both `CanvasCompositor` and `ProgramPreview`'s program canvas, so the alert only ever showed in the streamer's local browser (`ScreamOverlay`, an HTML/CSS layer) and never in the pixels `canvas.captureStream()` sends to YouTube/Twitch/Facebook. `CanvasCompositor` already had working canvas-drawing code for `activeScream` (tier styling, shake/explode effects, donor/message text) — it just never received real data. Fixed by passing the real `activeScream` state through both render paths.
+- [x] 🔴 **No public page for viewers to actually send a scream** — `components/ScreamDonation.tsx` is a fully built Stripe Checkout flow that calls a real, working backend (`POST /api/billing/chatscream` → `checkout.session.completed` webhook → `broadcastScreamAlert` → `/ws/scream/:uid`), but it was never rendered by any route. Added a public `/scream/:streamerUid` page (`pages/ScreamPage.tsx`) and a `/thank-you` post-checkout confirmation page (`pages/ThankYouPage.tsx`, matching the `successUrl` `ScreamDonation` already builds). Added a "Your ChatScream Link" card to the creator dashboard so streamers can find and copy their link (mirrors the existing referral-link card).
+- [ ] 🟡 **Chat aggregation only works with manual API polling** — `chatAggregator.ts` isn't integrated with live platform chats (YouTube Live Chat API, Twitch IRC, etc.), so a scream can only be triggered by paying through the new `/scream/:uid` page, not by typing in platform chat.
+- [ ] 🟢 **Chat overlay on stream** — Integration between `ChatStreamOverlay.tsx` (regular chat, not screams) and the canvas compositor is still unclear/unverified.
+- [ ] 🟢 **No Stripe Connect payout flow** — Donation money currently flows into the platform's own Stripe account; there's no per-streamer Connect onboarding, so streamers aren't actually paid out from these donations yet. This is a substantial feature on its own (KYC, account links, transfers) and wasn't attempted here.
 
 ---
 
@@ -185,8 +210,8 @@ cleanup pass, but out of scope for the streaming work in this session.
 
 ## Fix Priority Order (remaining)
 
-1. **Stripe-backed viewer donations** — the Chat Screamer USP has no real payment flow.
-2. **Live chat integration** — YouTube Live Chat API / Twitch IRC, so Screams can trigger from real chat.
+1. **Stripe Connect payouts** — streamers aren't actually paid from ChatScream donations yet; the money has nowhere to go but the platform account.
+2. **Live chat integration** — YouTube Live Chat API / Twitch IRC, so Screams can trigger from real chat, not just the `/scream/:uid` payment page.
 3. **Server-side recording** — wire up `RecordingManager`, add quality settings UI.
 4. **Scene persistence** — save scene configs so refresh doesn't wipe them.
 5. **Cloud Streaming (VM-based)** — build the real EC2-backed encoding path; currently mock-only and clearly labeled "Coming Soon" in the UI.

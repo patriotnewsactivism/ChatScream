@@ -809,7 +809,7 @@ const App: FC = () => {
         videoVolume={videoVolume}
         branding={branding}
         showWatermark={userProfile?.subscription?.plan === 'free'}
-        activeScream={null}
+        activeScream={activeScream}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         onTake={handleMultiviewTake}
         programCanvasRef={canvasRef}
@@ -918,7 +918,7 @@ const App: FC = () => {
         branding={branding}
         showWatermark={userProfile?.subscription?.plan === 'free'}
         activeScene={activeScene}
-        activeScream={null}
+        activeScream={activeScream}
         nowPlaying={assets.find((a) => a.id === activeAudioId)?.name}
         graphics={graphicsState}
         mirrorCamera={isMirrored}
