@@ -33,13 +33,6 @@ import {
   StreamSchedule,
 } from '../services/backend';
 
-const planMinutes: Record<string, number> = {
-  free: 0,
-  pro: 600,
-  expert: 600,
-  enterprise: 3000,
-};
-
 const CreatorDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { userProfile, logout, sessionToken, refreshProfile } = useAuth();
@@ -53,7 +46,6 @@ const CreatorDashboard: React.FC = () => {
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [disconnectError, setDisconnectError] = useState('');
   const plan = userProfile?.subscription?.plan || 'free';
-  const includedMinutes = planMinutes[plan] ?? 0;
   const planLabel = getPlanById(plan)?.name || 'Free';
   const referralCode = userProfile?.affiliate?.code || '';
   const referralLink =
@@ -232,22 +224,21 @@ const CreatorDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl border border-gray-800 bg-dark-800/70">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-400">Cloud VM hours</span>
+              <span className="text-sm text-gray-400 flex items-center gap-1.5">
+                Cloud VM hours
+                <span className="text-[10px] font-bold uppercase tracking-wide bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded">
+                  Coming Soon
+                </span>
+              </span>
               <Gauge size={16} className="text-brand-400" />
             </div>
-            <p className="text-3xl font-bold">
-              {analytics
-                ? analytics.totalCloudHours.toFixed(1)
-                : `${(includedMinutes / 60).toFixed(0)}`}{' '}
-              hrs
-            </p>
+            <p className="text-3xl font-bold text-gray-500">Not yet live</p>
             <p className="text-xs text-gray-400">
-              {analytics
-                ? `${analytics.totalStreams} total stream${analytics.totalStreams !== 1 ? 's' : ''}`
-                : `Included with your ${planLabel} plan`}
+              Always-on cloud encoding is in active development — your {planLabel} plan will
+              include it once it ships.
             </p>
             <p className="text-[11px] text-gray-500 mt-2">
-              Free: 0, $19: 3 hours, $29: 10 hours, $59: 50 hours.
+              Planned allotments — Free: 0, $19: 3 hrs, $29: 10 hrs, $59: 50 hrs.
             </p>
           </div>
           <div className="p-4 rounded-xl border border-gray-800 bg-dark-800/70 space-y-2">
@@ -545,8 +536,8 @@ const CreatorDashboard: React.FC = () => {
                   Upgrade your plan
                 </p>
                 <p className="text-sm text-gray-300 mb-3">
-                  Unlock cloud streaming, more destinations, and advanced screams with{' '}
-                  {nextPlan.name}.
+                  Unlock more destinations and advanced screams with {nextPlan.name}. Cloud
+                  streaming is on the roadmap and not yet available.
                 </p>
                 {upgradeError && <p className="text-xs text-red-400 mb-2">{upgradeError}</p>}
                 <button

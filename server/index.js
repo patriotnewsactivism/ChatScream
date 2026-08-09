@@ -99,20 +99,31 @@ wss.on('connection', (ws, req) => {
     return; // Don't fall through to the RTMP ingest handler
   }
 
-  // ── RTMP ingest handler (original) ───────────────────────────────────────
+  // ── RTMP ingest handler (per-destination FFmpeg processes) ────────────────
+  // Each destination gets its own FFmpeg process reading the same incoming
+  // browser byte stream. This isolates failures: a bad stream key on one
+  // platform no longer kills the connection to the others, and a single
+  // destination can be retried/hot-swapped without disturbing the rest.
   if (!url.startsWith('/ws/signal')) {
     console.log('🔌 New ingest WebSocket connection');
 
-    let ffmpeg = null;
+    /** @type {Map<string, import('node:child_process').ChildProcess>} */
+    const procs = new Map();
+    /** @type {Map<string, object>} */
+    const destinationsById = new Map();
+    // Set of destIds whose process is being torn down intentionally
+    // (remove/update/retry) so their 'close' handler doesn't report a spurious error.
+    const intentionalKills = new Set();
+    // First binary chunk received contains the WebM init segment (EBML header +
+    // tracks). Cached so processes spawned after streaming has begun (a newly
+    // added destination, or a retry) still get a decodable stream.
+    let initSegmentChunk = null;
+
     let bytesReceived = 0;
     let lastStatsTime = Date.now();
-    let activeDestinations = [];
-    // Buffer incoming stream chunks while FFmpeg restarts after a destination update
-    let pendingBuffer = [];
-    let isRestarting = false;
 
     const statsInterval = setInterval(() => {
-      if (ffmpeg && bytesReceived > 0) {
+      if (procs.size > 0 && bytesReceived > 0) {
         const now = Date.now();
         const dt = (now - lastStatsTime) / 1000;
         const bitrateKbps = Math.round((bytesReceived * 8) / dt / 1000);
@@ -144,107 +155,82 @@ wss.on('connection', (ws, req) => {
       return '';
     };
 
-    const buildFfmpegArgs = (destinations) => {
-      const args = [
-        // No -re flag — we receive chunks in real-time from WebSocket,
-        // -re would throttle pipe input and cause buffering/drift
-        '-fflags',
-        '+nobuffer+flush_packets',
-        '-flags',
-        'low_delay',
-        '-i',
-        'pipe:0',
-        '-c:v',
-        'libx264',
-        '-preset',
-        'veryfast',
-        '-tune',
-        'zerolatency',
-        '-g',
-        '60',
-        '-b:v',
-        '4500k',
-        '-maxrate',
-        '4500k',
-        '-bufsize',
-        '9000k',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '128k',
-        '-ar',
-        '44100',
-      ];
-      destinations.forEach((d) => {
-        const serverUrl = resolveServerUrl(d);
-        if (!serverUrl) {
-          console.warn(`⚠️ Skipping destination with no server URL:`, d);
-          return;
-        }
-        const url = serverUrl.endsWith('/') ? serverUrl : serverUrl + '/';
-        const key = (d.streamKey || '').trim();
-        args.push('-f', 'flv', `${url}${key}`);
-      });
-      return args;
-    };
+    const buildSingleDestArgs = (outputUrl) => [
+      // No -re flag — we receive chunks in real-time from WebSocket,
+      // -re would throttle pipe input and cause buffering/drift
+      '-fflags',
+      '+nobuffer+flush_packets',
+      '-flags',
+      'low_delay',
+      '-i',
+      'pipe:0',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-tune',
+      'zerolatency',
+      '-g',
+      '60',
+      '-b:v',
+      '4500k',
+      '-maxrate',
+      '4500k',
+      '-bufsize',
+      '9000k',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-ar',
+      '44100',
+      '-f',
+      'flv',
+      outputUrl,
+    ];
 
     /**
-     * Build a map of RTMP URL → destination for FFmpeg stderr correlation.
-     * FFmpeg prints the output URL in stderr lines like:
-     *   "Opening 'rtmp://...' for writing"  → connection attempt
-     *   "Output #0, flv, to 'rtmp://...'"   → mux opened (connected)
-     *   "Connection refused" / "Connection timed out" → error
-     * We key by the full output URL (serverUrl + streamKey) to map back to dest IDs.
+     * Spawn (or respawn) the FFmpeg process for a single destination. Killing
+     * one destination's process never touches the others.
      */
-    const buildDestinationUrlMap = (destinations) => {
-      const map = new Map(); // rtmpUrl → destination
-      for (const d of destinations) {
-        const serverUrl = resolveServerUrl(d);
-        if (!serverUrl) continue;
-        const base = serverUrl.endsWith('/') ? serverUrl : serverUrl + '/';
-        const key = (d.streamKey || '').trim();
-        map.set(`${base}${key}`, d);
-      }
-      return map;
-    };
-
-    const spawnFfmpeg = (destinations) => {
-      if (destinations.length === 0) {
-        ws.send(JSON.stringify({ type: 'error', message: 'No valid destinations to stream to.' }));
-        return;
-      }
-      const args = buildFfmpegArgs(destinations);
-      // Check if any actual output destinations were added to the args
-      const hasOutputs = args.some((a) => a.startsWith('rtmp') || a.startsWith('rtmps'));
-      if (!hasOutputs) {
+    const spawnDestination = (dest) => {
+      const serverUrl = resolveServerUrl(dest);
+      if (!serverUrl) {
+        console.warn('⚠️ Skipping destination with no server URL:', dest);
         ws.send(
           JSON.stringify({
-            type: 'error',
-            message:
-              'No destinations have valid RTMP URLs. Check your stream key and server URL settings.',
+            type: 'destination_error',
+            destId: dest.id,
+            message: 'No RTMP server URL configured for this destination.',
           }),
         );
         return;
       }
-      console.log('🚀 Spawning FFmpeg for', destinations.length, 'destination(s)');
-      console.log('   Args:', args.join(' '));
-      const proc = spawn('ffmpeg', args);
-      const destUrlMap = buildDestinationUrlMap(destinations);
+      const base = serverUrl.endsWith('/') ? serverUrl : serverUrl + '/';
+      const outputUrl = `${base}${(dest.streamKey || '').trim()}`;
+
+      // Tear down any existing process for this destination first.
+      const existing = procs.get(dest.id);
+      if (existing) {
+        intentionalKills.add(dest.id);
+        existing.stdin.end();
+        existing.kill();
+      }
+
+      console.log(`🚀 Spawning FFmpeg for destination [${dest.id}] ${dest.platform || dest.name || ''}`);
+      const proc = spawn('ffmpeg', buildSingleDestArgs(outputUrl));
 
       proc.on('error', (err) => {
-        console.error('Failed to start FFmpeg process:', err);
+        console.error(`Failed to start FFmpeg for [${dest.id}]:`, err);
         const hint =
           err.code === 'ENOENT'
             ? 'FFmpeg is not installed on this server. Install FFmpeg to enable streaming.'
             : `FFmpeg failed to start: ${err.message}`;
-        ws.send(JSON.stringify({ type: 'error', message: hint }));
-        // Mark all destinations as errored
-        for (const d of destinations) {
-          ws.send(JSON.stringify({ type: 'destination_error', destId: d.id, message: hint }));
-        }
+        ws.send(JSON.stringify({ type: 'destination_error', destId: dest.id, message: hint }));
       });
 
-      // Parse FFmpeg stderr for per-destination connection events
+      // Parse FFmpeg stderr for connection state — everything here pertains
+      // to this one destination, so no URL correlation is needed anymore.
       let stderrBuffer = '';
       proc.stderr.on('data', (data) => {
         stderrBuffer += data.toString();
@@ -254,72 +240,60 @@ wss.on('connection', (ws, req) => {
         for (const rawLine of lines) {
           const line = rawLine.trim();
           if (!line) continue;
-          console.log(`[FFmpeg] ${line}`);
+          console.log(`[FFmpeg:${dest.id}] ${line}`);
 
-          // Match output URL in stderr — FFmpeg prints: Output #N, flv, to 'URL'
-          const outputMatch = line.match(/Output #\d+[^']*to '([^']+)'/i);
-          if (outputMatch) {
-            const rtmpUrl = outputMatch[1];
-            // Find which destination this URL corresponds to
-            for (const [mapUrl, dest] of destUrlMap) {
-              if (rtmpUrl.includes(mapUrl) || mapUrl.includes(rtmpUrl)) {
-                ws.send(JSON.stringify({ type: 'destination_connected', destId: dest.id }));
-                break;
-              }
-            }
+          if (/Output #\d+[^']*to '[^']+'/i.test(line)) {
+            ws.send(JSON.stringify({ type: 'destination_connected', destId: dest.id }));
             continue;
           }
 
-          // Match connection errors: look for lines containing a known RTMP URL and an error keyword
           const errorKeywords =
             /connection refused|connection timed out|connection reset|no route to host|failed to connect|invalid data|authentication failed|refused|403|401|stream key|forbidden/i;
           if (errorKeywords.test(line)) {
-            // Try to identify which destination errored by URL match in the line
-            let matched = false;
-            for (const [mapUrl, dest] of destUrlMap) {
-              const urlFragment = mapUrl.split('/').slice(0, 3).join('/'); // rtmp://host
-              if (line.includes(urlFragment) || line.includes(dest.streamKey || '')) {
-                ws.send(
-                  JSON.stringify({ type: 'destination_error', destId: dest.id, message: line }),
-                );
-                matched = true;
-                break;
-              }
-            }
-            // If we can't pin it to a destination, send a generic error
-            if (!matched) {
-              ws.send(JSON.stringify({ type: 'error', message: line }));
-            }
+            ws.send(JSON.stringify({ type: 'destination_error', destId: dest.id, message: line }));
           }
         }
       });
 
       proc.on('close', (code) => {
-        // Flush remaining stderr
-        if (stderrBuffer.trim()) console.log(`[FFmpeg] ${stderrBuffer.trim()}`);
+        if (stderrBuffer.trim()) console.log(`[FFmpeg:${dest.id}] ${stderrBuffer.trim()}`);
         stderrBuffer = '';
 
-        console.log(`FFmpeg process closed with code ${code}`);
-        if (code !== 0 && code !== null && !isRestarting) {
-          const msg = `FFmpeg exited unexpectedly (code ${code}). Check stream keys and RTMP URLs.`;
-          ws.send(JSON.stringify({ type: 'error', message: msg }));
-          // Mark all as errored on unexpected exit
-          for (const d of destinations) {
-            ws.send(JSON.stringify({ type: 'destination_error', destId: d.id, message: msg }));
-          }
+        // Only remove from the map if this is still the current process for
+        // the destination (avoids a stale close racing a fresh respawn).
+        if (procs.get(dest.id) === proc) procs.delete(dest.id);
+
+        const wasIntentional = intentionalKills.delete(dest.id);
+        console.log(`FFmpeg [${dest.id}] closed with code ${code}${wasIntentional ? ' (intentional)' : ''}`);
+        if (code !== 0 && code !== null && !wasIntentional) {
+          ws.send(
+            JSON.stringify({
+              type: 'destination_error',
+              destId: dest.id,
+              message: `Stream to this destination dropped (FFmpeg exited with code ${code}). Check the stream key and RTMP URL.`,
+            }),
+          );
         }
       });
 
-      // Flush buffered chunks into the new process
-      if (pendingBuffer.length > 0) {
-        for (const chunk of pendingBuffer) {
-          if (proc.stdin.writable) proc.stdin.write(chunk);
-        }
-        pendingBuffer = [];
+      // Prime a process that's joining an already-running stream (added
+      // later, or retried) with the cached WebM init segment so it has a
+      // decodable header before live chunks start arriving.
+      if (initSegmentChunk && proc.stdin.writable) {
+        proc.stdin.write(initSegmentChunk);
       }
 
-      ffmpeg = proc;
-      isRestarting = false;
+      procs.set(dest.id, proc);
+    };
+
+    const removeDestination = (destId) => {
+      const proc = procs.get(destId);
+      destinationsById.delete(destId);
+      if (proc) {
+        intentionalKills.add(destId);
+        proc.stdin.end();
+        proc.kill();
+      }
     };
 
     ws.on('message', (data, isBinary) => {
@@ -328,41 +302,51 @@ wss.on('connection', (ws, req) => {
           const msg = JSON.parse(data.toString());
 
           if (msg.type === 'start') {
-            activeDestinations = msg.destinations || [];
-            if (ffmpeg) {
-              ffmpeg.stdin.end();
-              ffmpeg.kill();
+            const destinations = msg.destinations || [];
+            if (destinations.length === 0) {
+              ws.send(
+                JSON.stringify({ type: 'error', message: 'No valid destinations to stream to.' }),
+              );
             }
-            spawnFfmpeg(activeDestinations);
+            for (const d of destinations) {
+              destinationsById.set(d.id, d);
+              spawnDestination(d);
+            }
           } else if (msg.type === 'update_destinations') {
-            // Hot-swap destinations: restart FFmpeg with updated list
-            activeDestinations = msg.destinations || [];
-            console.log('🔄 Updating destinations:', activeDestinations.length);
+            // Diff against the current set — only spawn/kill what actually
+            // changed, instead of restarting every destination on any edit.
+            const next = msg.destinations || [];
+            const nextIds = new Set(next.map((d) => d.id));
 
-            isRestarting = true;
-            if (ffmpeg) {
-              ffmpeg.stdin.end();
-              ffmpeg.kill();
-              ffmpeg = null;
+            for (const existingId of Array.from(destinationsById.keys())) {
+              if (!nextIds.has(existingId)) removeDestination(existingId);
             }
-            // Brief pause lets the old process fully die before restarting
-            setTimeout(() => spawnFfmpeg(activeDestinations), 500);
-            ws.send(
-              JSON.stringify({ type: 'destinations_updated', count: activeDestinations.length }),
-            );
+
+            for (const d of next) {
+              const prev = destinationsById.get(d.id);
+              const changed =
+                !prev || prev.streamKey !== d.streamKey || prev.serverUrl !== d.serverUrl;
+              destinationsById.set(d.id, d);
+              if (changed) spawnDestination(d);
+            }
+
+            console.log('🔄 Updated destinations:', destinationsById.size);
+            ws.send(JSON.stringify({ type: 'destinations_updated', count: destinationsById.size }));
+          } else if (msg.type === 'retry_destination') {
+            const dest = destinationsById.get(msg.destId);
+            if (dest) {
+              console.log(`🔁 Retrying destination [${dest.id}]`);
+              spawnDestination(dest);
+            }
           }
         } catch (e) {
           console.error('Failed to parse WS command', e);
         }
       } else {
         bytesReceived += data.length;
-        if (isRestarting) {
-          // Buffer up to 5 MB during restart to avoid losing frames
-          if (pendingBuffer.reduce((s, b) => s + b.length, 0) < 5 * 1024 * 1024) {
-            pendingBuffer.push(data);
-          }
-        } else if (ffmpeg && ffmpeg.stdin.writable) {
-          ffmpeg.stdin.write(data);
+        if (!initSegmentChunk) initSegmentChunk = data;
+        for (const proc of procs.values()) {
+          if (proc.stdin.writable) proc.stdin.write(data);
         }
       }
     });
@@ -370,12 +354,13 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
       console.log('🔌 Ingest WebSocket connection closed');
       clearInterval(statsInterval);
-      if (ffmpeg) {
-        ffmpeg.stdin.end();
-        ffmpeg.kill();
-        ffmpeg = null;
+      for (const [destId, proc] of procs) {
+        intentionalKills.add(destId);
+        proc.stdin.end();
+        proc.kill();
       }
-      pendingBuffer = [];
+      procs.clear();
+      destinationsById.clear();
     });
   } // end of RTMP ingest handler
 });
