@@ -2,6 +2,12 @@
 
 This guide walks you through configuring OAuth credentials for YouTube, Facebook, and Twitch streaming.
 
+> This guide assumes your app backend (`server/index.js`) is already deployed
+> somewhere that can hold a persistent process and WebSocket connections —
+> Vercel's serverless functions can't. If you don't have that yet, see
+> `infrastructure/aws/app-backend/README.md` for a ready-to-run AWS EC2 setup,
+> or deploy `server/index.js` to Render/Fly.io/a VPS/your host of choice.
+
 ## 🎯 Prerequisites
 
 1. **Sign in to ChatScream** - You need an admin account (or use email/password signup)

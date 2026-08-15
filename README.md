@@ -122,23 +122,27 @@ Monetize your stream with aggression.
 npm run build
 ```
 
-### 2. Deploy Stream Workers (AWS Autoscaling)
+### 2. Deploy the App/API Backend — required for streaming to actually work
+
+`server/index.js` is a real, persistent Node process: it holds the WebSocket
+connection that receives your broadcast and spawns the `ffmpeg` processes
+that push RTMP to YouTube/Facebook/Twitch. It needs a host that can run a
+long-lived process — Railway, Render, Fly.io, a VPS, or AWS EC2/ECS all work.
+
+For AWS specifically, `infrastructure/aws/app-backend/` has a ready-to-run
+EC2 deployment (Docker Compose + Caddy for automatic HTTPS):
 
 ```bash
-export AWS_REGION=us-east-1
-export VPC_ID=vpc-xxxxxxx
-export SUBNET_IDS=subnet-aaaaaaa,subnet-bbbbbbb
-export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
-
-./infrastructure/aws/deploy-stream-fleet.sh
+cp infrastructure/aws/app-backend/.env.aws.app.example infrastructure/aws/app-backend/.env.aws.app
+# edit it, then:
+./infrastructure/aws/app-backend/deploy-app-backend.sh
 ```
 
-### 3. Deploy App/API Container
+Full steps (SSH in, configure `.env`, first-boot DB setup): see
+`infrastructure/aws/app-backend/README.md`.
 
-Deploy `server/index.js` and `dist/` with your preferred AWS runtime (ECS/Fargate, EC2, or another container platform).
-
-For auth/session storage, this app defaults to managed identity mode (`IDENTITY_STORAGE_MODE=managed`).
-Configure:
+Wherever it runs, for auth/session storage this app defaults to managed
+identity mode (`IDENTITY_STORAGE_MODE=managed`). Configure:
 
 - `POSTGRES_URL` (+ `POSTGRES_SSL=true` in production)
 - `REDIS_URL` (+ `REDIS_TLS=true` in production)
@@ -151,11 +155,39 @@ If you already have local users in `server/data/runtime.json`, migrate them once
 POSTGRES_URL=postgres://... npm run migrate:users
 ```
 
-### 4. Vercel Single-Project Deploy (Frontend + API)
+OAuth (required for the "Connect YouTube/Facebook/Twitch" buttons to do
+anything) needs real platform app credentials — see
+`ADMIN_OAUTH_SETUP_GUIDE.md`.
 
-This repo now supports Vercel SPA routes plus backend API routes in one project:
+### 3. Vercel — frontend, and optionally REST-only API
 
-- Frontend routes (`/login`, `/signup`, `/dashboard`) are rewritten to `index.html`.
-- Backend routes are rewritten to `api/all.js`, which mounts the Express API in `server/app.js`.
+- **Frontend:** deploy this repo to Vercel as normal. Point
+  `VITE_API_BASE_URL` at your app backend's URL from step 2
+  (e.g. `https://api.yourdomain.com`).
+- **Single-project mode:** `vercel.json` also rewrites `/api/*` to
+  `api/all.js`, which mounts the same Express app (`server/app.js`) as a
+  Vercel serverless function. This works for stateless REST calls (login,
+  OAuth config, fetching a stream key) if you'd rather not run a separate
+  backend for those. **It cannot replace step 2** — Vercel's serverless
+  functions can't hold the WebSocket connection or spawn the FFmpeg
+  processes that actually push video to a platform, so live streaming still
+  needs a real backend host regardless of this mode. Keep `VITE_API_BASE_URL`
+  empty only if you're intentionally running everything through this mode
+  for the non-streaming parts of the app.
 
-For this mode, keep `VITE_API_BASE_URL` empty so the frontend calls same-origin `/api/*`.
+### 4. Stream Worker Fleet (AWS Autoscaling) — optional, not built yet
+
+```bash
+export AWS_REGION=us-east-1
+export VPC_ID=vpc-xxxxxxx
+export SUBNET_IDS=subnet-aaaaaaa,subnet-bbbbbbb
+export INSTANCE_PROFILE_NAME=ChatScreamStreamWorkerProfile
+
+./infrastructure/aws/deploy-stream-fleet.sh
+```
+
+This provisions infrastructure for the **Cloud Streaming (VM-based)**
+feature — always-on, browser-independent encoding sessions. It's on the
+roadmap but not wired into the app yet (see `TODO.md` §11). Skip this unless
+you're actively building that feature; it does nothing for YouTube/Facebook
+streaming, which only needs step 2.
