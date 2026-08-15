@@ -588,7 +588,7 @@ const specialAffiliateCodes: Record<string, AffiliateCode> = {
 
 const fallbackProfileFromUser = (user: AuthUser): UserProfile => {
   const email = (user.email || '').trim().toLowerCase();
-  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org', 'patriotnewsactivism@gmail.com'];
   const isAdmin = adminEmails.includes(email);
   return {
     uid: user.uid,
@@ -622,7 +622,7 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
   const displayName = toStringValue(raw.displayName).trim();
 
   // Admin email override — always grant full access
-  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org', 'patriotnewsactivism@gmail.com'];
   const isAdmin = adminEmails.includes(email.toLowerCase());
 
   return {

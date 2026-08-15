@@ -18,6 +18,15 @@ const DATA_FILE = path.join(DATA_DIR, 'runtime.json');
 const nowIso = () => new Date().toISOString();
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
 const normalizeCode = (value = '') => value.trim().toUpperCase();
+
+// Root admins — always treated as admin regardless of what's persisted in
+// the `access` config (which lives in a local file/tmp dir, not the durable
+// Postgres store, and can be wiped or start fresh on a new deployment).
+const ROOT_ADMIN_EMAILS = [
+  'mreardon@wtpnews.org',
+  'don@donmatthews.live',
+  'patriotnewsactivism@gmail.com',
+];
 const parseBoolean = (value) =>
   ['1', 'true', 'yes', 'on'].includes(
     String(value || '')
@@ -158,7 +167,7 @@ const baseState = () => ({
   referrals: [],
   config: {
     access: {
-      admins: ['mreardon@wtpnews.org', 'don@donmatthews.live'],
+      admins: [...ROOT_ADMIN_EMAILS],
       betaTesters: [],
       adminUids: [],
       betaTesterUids: [],
@@ -628,9 +637,12 @@ export const applyAccessOverrides = (profile) => {
   if (!profile || typeof profile !== 'object') return profile;
 
   const accessConfig = getConfig('access') || {};
-  const adminEmails = Array.isArray(accessConfig.admins)
+  const configuredAdminEmails = Array.isArray(accessConfig.admins)
     ? accessConfig.admins.map((value) => normalizeEmail(value)).filter(Boolean)
     : [];
+  const adminEmails = [
+    ...new Set([...configuredAdminEmails, ...ROOT_ADMIN_EMAILS.map(normalizeEmail)]),
+  ];
   const betaEmails = Array.isArray(accessConfig.betaTesters)
     ? accessConfig.betaTesters.map((value) => normalizeEmail(value)).filter(Boolean)
     : [];
