@@ -1,5 +1,10 @@
 # ChatScream AWS Streaming Infrastructure
 
+> **Looking to make YouTube/Facebook/Twitch streaming actually work?** You
+> want `infrastructure/aws/app-backend/` instead — this document is for the
+> separate, not-yet-built Cloud Streaming (VM-based) worker fleet. See
+> `infrastructure/README.md` for how the two relate.
+
 This stack deploys FFmpeg-ready streaming workers on AWS with autoscaling.
 
 ## What This Provides

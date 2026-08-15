@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	# Caddy issues and renews a Let's Encrypt certificate automatically for
+	# $DOMAIN, and reverse_proxy forwards WebSocket upgrade requests
+	# (the RTMP ingest socket, /ws/scream/*, /ws/signal/*) transparently —
+	# no special config needed for that.
+	reverse_proxy app:8787
+}
