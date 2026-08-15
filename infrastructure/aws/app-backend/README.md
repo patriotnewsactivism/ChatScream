@@ -100,6 +100,20 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## Troubleshooting
 
+- **`deploy-app-backend.sh` fails with `InvalidParameterValue` / unsupported
+  instance type for the AZ** — not every instance type is offered in every
+  Availability Zone for every account. If `SUBNET_ID` lands in an AZ that
+  doesn't have `INSTANCE_TYPE` available, pick a different subnet (a
+  different AZ in the same VPC) in `.env.aws.app` and re-run.
+- **SSH connection times out right after the script finishes** — this is
+  usually just impatience, not a failure. `run-instances` returning and the
+  instance reaching AWS's "running" state both happen well before the OS has
+  finished booting and `sshd` is actually accepting connections — for a
+  fresh Ubuntu instance, budget 1–2 minutes, not seconds. If it's still
+  refused after a few minutes, check `aws ec2 get-console-output
+  --instance-id <id>` for a boot failure, and confirm the security group
+  actually has the port 22 rule (re-running the script when a security group
+  already existed does not re-add rules to it).
 - **OAuth connect still fails after this** — double check the redirect URI
   registered in the Google/Facebook app console matches
   `VITE_OAUTH_REDIRECT_URI` in `.env` exactly (including `https://` and no
