@@ -89,20 +89,35 @@ if [[ -n "$EXISTING_INSTANCE_ID" && "$EXISTING_INSTANCE_ID" != "None" ]]; then
 fi
 
 # ── Resolve a Ubuntu 22.04 AMI via SSM if not pinned ─────────────────────────
+# Try gp3 first, fall back to gp2 — some regions/partitions haven't published
+# a gp3 parameter for every Ubuntu release yet (mirrors deploy-stream-fleet.sh).
 if [[ -z "$AMI_ID" ]]; then
-  SSM_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+  ARCH="amd64"
   if [[ "$INSTANCE_TYPE" == t4g* || "$INSTANCE_TYPE" == c7g* || "$INSTANCE_TYPE" == m7g* ]]; then
-    SSM_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
+    ARCH="arm64"
   fi
-  AMI_ID="$(
-    aws ssm get-parameter \
-      --region "$AWS_REGION" \
-      --name "$SSM_PARAM" \
-      --query 'Parameter.Value' \
-      --output text
-  )"
-  if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-    echo "[ERR] Could not resolve a Ubuntu AMI from SSM for instance type $INSTANCE_TYPE in $AWS_REGION."
+
+  SSM_AMI_PARAMS=(
+    "/aws/service/canonical/ubuntu/server/22.04/stable/current/${ARCH}/hvm/ebs-gp3/ami-id"
+    "/aws/service/canonical/ubuntu/server/22.04/stable/current/${ARCH}/hvm/ebs-gp2/ami-id"
+  )
+
+  for ssm_param in "${SSM_AMI_PARAMS[@]}"; do
+    maybe_ami="$(
+      aws ssm get-parameter \
+        --region "$AWS_REGION" \
+        --name "$ssm_param" \
+        --query 'Parameter.Value' \
+        --output text 2>/dev/null || true
+    )"
+    if [[ -n "$maybe_ami" && "$maybe_ami" != "None" ]]; then
+      AMI_ID="$maybe_ami"
+      break
+    fi
+  done
+
+  if [[ -z "$AMI_ID" ]]; then
+    echo "[ERR] Could not resolve a Ubuntu 22.04 AMI from SSM for arch $ARCH in $AWS_REGION."
     exit 1
   fi
 fi
@@ -135,7 +150,7 @@ if [[ -z "$SECURITY_GROUP_ID" ]]; then
       --ip-permissions \
       '[
         {"IpProtocol":"tcp","FromPort":22,"ToPort":22,"IpRanges":[{"CidrIp":"0.0.0.0/0","Description":"SSH (restrict this to your IP in production)"}]},
-        {"IpProtocol":"tcp","FromPort":80,"ToPort":80,"IpRanges":[{"CidrIp":"0.0.0.0/0","Description":"HTTP (Let'\''s Encrypt ACME challenge + redirect to HTTPS)"}]},
+        {"IpProtocol":"tcp","FromPort":80,"ToPort":80,"IpRanges":[{"CidrIp":"0.0.0.0/0","Description":"HTTP (ACME challenge + redirect to HTTPS)"}]},
         {"IpProtocol":"tcp","FromPort":443,"ToPort":443,"IpRanges":[{"CidrIp":"0.0.0.0/0","Description":"HTTPS + WSS (API, OAuth, RTMP relay ingest)"}]}
       ]' >/dev/null
   fi
