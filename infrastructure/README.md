@@ -1,23 +1,34 @@
 # ChatScream Infrastructure
 
-AWS is the primary deployment path for ChatScream cloud streaming and autoscaled FFmpeg workers.
+This directory has **two separate, unrelated AWS deployments** — pick the
+right one, they don't substitute for each other.
 
-## Recommended Stack (Low Cost + Scalable)
+## 1. App backend — start here
 
-- API and app container: AWS ECS/Fargate or EC2 + Docker.
-- Stream workers: EC2 Auto Scaling Group (`infrastructure/aws/deploy-stream-fleet.sh`).
-- Media ingest/egress: Nginx RTMP + FFmpeg on worker nodes.
-- Payments/auth data: existing app API + Stripe + local/runtime store.
+`infrastructure/aws/app-backend/` — a single EC2 instance running the actual
+ChatScream server (auth, OAuth token exchange, and the WebSocket RTMP relay
+that pushes to YouTube/Facebook/Twitch). **This is required for streaming to
+work at all.** See `infrastructure/aws/app-backend/README.md`.
 
-## AWS Quick Start
+```bash
+cp infrastructure/aws/app-backend/.env.aws.app.example infrastructure/aws/app-backend/.env.aws.app
+# edit it, then:
+./infrastructure/aws/app-backend/deploy-app-backend.sh
+```
 
-1. Configure AWS credentials and region.
-2. Create `infrastructure/aws/.env.aws` from `infrastructure/aws/.env.aws.example`.
-3. Deploy worker autoscaling fleet:
-   `./infrastructure/aws/deploy-stream-fleet.sh`
-   or on Windows PowerShell:
-   `powershell -ExecutionPolicy Bypass -File .\infrastructure\aws\deploy-stream-fleet.ps1`
-4. Follow endpoint output for RTMP ingest + HLS playback.
+## 2. Stream worker fleet — optional, not built yet
 
-Full guide:
-`infrastructure/aws/README.md`
+`infrastructure/aws/deploy-stream-fleet.sh` — an autoscaling fleet of
+standalone Nginx-RTMP/FFmpeg EC2 workers for the **Cloud Streaming
+(VM-based)** feature: always-on, browser-independent encoding sessions. This
+is on the roadmap but not implemented yet (see `TODO.md` §11) — the app
+doesn't call any of this today. Deploying it will not make YouTube/Facebook
+streaming work; only the app backend above does that.
+
+```bash
+cp infrastructure/aws/.env.aws.example infrastructure/aws/.env.aws
+# edit it, then:
+./infrastructure/aws/deploy-stream-fleet.sh
+```
+
+Full guide: `infrastructure/aws/README.md`
