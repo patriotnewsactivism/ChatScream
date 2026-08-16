@@ -847,30 +847,59 @@ const buildYouTubeApiUrl = (pathName, query = {}) => {
   return url.toString();
 };
 
+// YouTube's Live Streaming API (liveStreams/liveBroadcasts) is documented by Google as
+// occasionally returning transient 5xx errors (commonly surfaced as a generic
+// "Internal error encountered." / status INTERNAL) that succeed on a plain retry.
+// Google's own API guidance recommends exponential backoff for these. Only retry
+// on 5xx (server-side/transient) -- never on 4xx (auth/permission/bad-request), which
+// won't be fixed by retrying and should fail fast.
+const YOUTUBE_RETRYABLE_STATUS = new Set([500, 502, 503, 504]);
+const YOUTUBE_MAX_ATTEMPTS = 3;
+const YOUTUBE_RETRY_BASE_DELAY_MS = 400;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const youtubeApiRequest = async ({ accessToken, pathName, method = 'GET', query, body }) => {
   if (!accessToken) {
     throw createHttpError(401, 'Missing YouTube access token. Reconnect your account.');
   }
 
-  const response = await fetch(buildYouTubeApiUrl(pathName, query), {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const payload = await parseJsonResponse(response);
+  let lastError;
+  for (let attempt = 1; attempt <= YOUTUBE_MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetch(buildYouTubeApiUrl(pathName, query), {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const payload = await parseJsonResponse(response);
 
-  if (!response.ok) {
+    if (response.ok) {
+      return payload;
+    }
+
     const message =
       payload?.error?.message ||
       payload?.error_description ||
       `YouTube API request failed (${response.status}).`;
-    throw createHttpError(response.status, message, payload);
+    lastError = createHttpError(response.status, message, payload);
+
+    const isRetryable = YOUTUBE_RETRYABLE_STATUS.has(response.status);
+    const hasAttemptsLeft = attempt < YOUTUBE_MAX_ATTEMPTS;
+    if (!isRetryable || !hasAttemptsLeft) {
+      throw lastError;
+    }
+
+    const delayMs = YOUTUBE_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+    console.warn(
+      `YouTube API transient ${response.status} on ${pathName} (attempt ${attempt}/${YOUTUBE_MAX_ATTEMPTS}): ${message} -- retrying in ${delayMs}ms`,
+    );
+    await sleep(delayMs);
   }
 
-  return payload;
+  throw lastError;
 };
 
 const parseYouTubeChannels = (payload) => {
