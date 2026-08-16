@@ -46,6 +46,7 @@ export interface OAuthState {
 }
 
 const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
+const oauthStateKey = (platform: OAuthPlatform): string => `${OAUTH_STATE_STORAGE_KEY}_${platform}`;
 
 let oauthPublicConfigCache: {
   value: Awaited<ReturnType<typeof getOAuthPublicConfig>>;
@@ -166,8 +167,11 @@ export const createOAuthState = (platform: OAuthPlatform, userId: string): strin
     nonce: generateNonce(),
   };
 
-  // Store state in localStorage so the OAuth popup window can verify it
-  localStorage.setItem(OAUTH_STATE_STORAGE_KEY, JSON.stringify(state));
+  // Store state in localStorage, namespaced per platform, so the OAuth popup
+  // window can verify it. Namespacing prevents one pending flow (e.g. YouTube)
+  // from getting clobbered if the user starts connecting a second platform
+  // (e.g. Facebook) before the first popup's callback resolves.
+  localStorage.setItem(oauthStateKey(platform), JSON.stringify(state));
 
   // Encode state as base64 for URL safety
   return btoa(JSON.stringify(state));
@@ -177,10 +181,10 @@ export const createOAuthState = (platform: OAuthPlatform, userId: string): strin
 export const verifyOAuthState = (stateParam: string): OAuthState | null => {
   try {
     const receivedState: OAuthState = JSON.parse(atob(stateParam));
-    const storedState = localStorage.getItem(OAUTH_STATE_STORAGE_KEY);
+    const storedState = localStorage.getItem(oauthStateKey(receivedState.platform));
 
     if (!storedState) {
-      console.error('No stored OAuth state found');
+      console.error(`No stored OAuth state found for platform "${receivedState.platform}"`);
       return null;
     }
 
@@ -200,7 +204,7 @@ export const verifyOAuthState = (stateParam: string): OAuthState | null => {
     }
 
     // Clear stored state
-    localStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
+    localStorage.removeItem(oauthStateKey(receivedState.platform));
 
     return receivedState;
   } catch (error) {
