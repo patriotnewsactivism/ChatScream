@@ -244,7 +244,11 @@ export const hasFeatureAccess = (
 
 // Check if user can add more destinations
 // Master admin emails — full access, no plan limits
-export const ADMIN_EMAILS: string[] = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+export const ADMIN_EMAILS: string[] = [
+  'don@donmatthews.live',
+  'mreardon@wtpnews.org',
+  'patriotnewsactivism@gmail.com',
+];
 
 export const isAdminEmail = (email?: string | null): boolean =>
   !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());

@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 const NotFoundPage: FC = () => {
   const location = useLocation();
   const { user } = useAuth();
-  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org'];
+  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org', 'patriotnewsactivism@gmail.com'];
   const isMaster = adminEmails.includes((user?.email || '').trim().toLowerCase());
 
   return (
