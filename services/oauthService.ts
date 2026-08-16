@@ -114,7 +114,6 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'pages_manage_posts',
           'pages_manage_metadata',
           'publish_video',
-          'live_video',
         ],
         redirectUri: baseRedirectUri,
       };
