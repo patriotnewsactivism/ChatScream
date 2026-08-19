@@ -67,6 +67,7 @@ const getIdentityClients = async () => {
     const usePostgresTls = parseBoolean(process.env.POSTGRES_SSL);
     const pool = new Pool({
       connectionString: postgresUrl,
+      connectionTimeoutMillis: 10000,
       ...(usePostgresTls ? { ssl: { rejectUnauthorized: false } } : {}),
     });
 
