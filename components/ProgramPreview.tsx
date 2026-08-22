@@ -1,31 +1,21 @@
 /**
  * ProgramPreview — Switcher-style dual-canvas multiview.
- *
- * Shows a "Preview" canvas (what you're building) and a "Program" canvas
- * (what's actually going out live). Tap/click "TAKE" or "CUT" to push
- * preview → program. Transitions: cut (instant) or mix (500 ms crossfade).
- *
- * The Program canvas is what CanvasCompositor renders into (the stream).
- * The Preview canvas shows a second CanvasCompositor at reduced resolution
- * with the *next* layout/scene you're cueing up.
+ * Program is the exact composed output that goes to the audience.
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { LayoutMode, Scene, BrandingSettings } from '../types';
 import { ScreamAlert } from '../services/chatScreamer';
 import CanvasCompositor, { CanvasRef } from './CanvasCompositor';
 import type { GraphicsState } from './GraphicsOverlay';
-import { ArrowRight, Zap, Blend } from 'lucide-react';
+import { ArrowRight, Zap, Blend, PictureInPicture2 } from 'lucide-react';
 
 export type TransitionType = 'cut' | 'mix';
 
 interface ProgramPreviewProps {
-  /* Current live state */
   programLayout: LayoutMode;
   programScene: Scene | null;
-  /* Shared streams */
   cameraStream: MediaStream | null;
   screenStream: MediaStream | null;
-  /* Media & branding */
   activeMediaUrl: string | null;
   activeVideoUrl: string | null;
   backgroundUrl: string | null;
@@ -34,14 +24,10 @@ interface ProgramPreviewProps {
   showWatermark: boolean;
   activeScream: ScreamAlert | null;
   nowPlaying?: string | null;
-  /* Callbacks */
   onTake: (layout: LayoutMode, scene: Scene | null) => void;
   programCanvasRef: React.RefObject<CanvasRef | null>;
-  /* Compact mode for small screens */
   compact?: boolean;
-  /* Graphics overlays */
   graphics?: GraphicsState | null;
-  /* Mirror camera feed */
   mirrorCamera?: boolean;
 }
 
@@ -65,47 +51,79 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
   mirrorCamera = false,
 }) => {
   const previewCanvasRef = useRef<CanvasRef | null>(null);
-
-  // Preview state — starts matching program
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
   const [previewLayout, setPreviewLayout] = useState<LayoutMode>(programLayout);
   const [previewScene, setPreviewScene] = useState<Scene | null>(programScene);
   const [transition, setTransition] = useState<TransitionType>('cut');
   const [transitioning, setTransitioning] = useState(false);
+  const [pipActive, setPipActive] = useState(false);
 
-  // Sync preview if program changes externally
   useEffect(() => {
     setPreviewLayout(programLayout);
     setPreviewScene(programScene);
   }, [programLayout, programScene]);
 
-  // TAKE — push preview → program
+  useEffect(() => {
+    return () => {
+      const video = pipVideoRef.current;
+      if (video) {
+        video.pause();
+        video.srcObject = null;
+      }
+    };
+  }, []);
+
   const handleTake = useCallback(() => {
     if (transitioning) return;
-
     if (transition === 'mix') {
       setTransitioning(true);
-      // Crossfade animation (CSS driven)
       setTimeout(() => {
         onTake(previewLayout, previewScene);
         setTransitioning(false);
       }, 500);
     } else {
-      // Instant cut
       onTake(previewLayout, previewScene);
     }
   }, [transition, previewLayout, previewScene, onTake, transitioning]);
 
+  const toggleProgramPip = useCallback(async () => {
+    const doc = document as Document & { pictureInPictureElement?: Element | null; exitPictureInPicture?: () => Promise<void> };
+    if (doc.pictureInPictureElement && doc.exitPictureInPicture) {
+      await doc.exitPictureInPicture();
+      return;
+    }
+
+    const stream = programCanvasRef.current?.getStream();
+    if (!stream) return;
+
+    let video = pipVideoRef.current;
+    if (!video) {
+      video = document.createElement('video');
+      video.muted = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      pipVideoRef.current = video;
+      video.addEventListener('enterpictureinpicture', () => setPipActive(true));
+      video.addEventListener('leavepictureinpicture', () => setPipActive(false));
+    }
+
+    video.srcObject = stream;
+    await video.play();
+    const pipVideo = video as HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> };
+    if (pipVideo.requestPictureInPicture) {
+      await pipVideo.requestPictureInPicture();
+    }
+  }, [programCanvasRef]);
+
+  const pipSupported = typeof document !== 'undefined' && 'pictureInPictureEnabled' in document;
   const labelClass = 'text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-t-md';
 
   return (
     <div className={`flex ${compact ? 'flex-col gap-2' : 'gap-3'} w-full`}>
-      {/* Preview pane */}
       <div className={`flex-1 flex flex-col ${compact ? '' : 'min-w-0'}`}>
         <div className={`${labelClass} bg-yellow-600/80 text-white self-start`}>PREVIEW</div>
         <div
-          className={`relative border-2 border-yellow-500/50 rounded-b-lg rounded-tr-lg overflow-hidden bg-black ${
-            transitioning ? 'opacity-60' : ''
-          }`}
+          className={`relative border-2 border-yellow-500/50 rounded-b-lg rounded-tr-lg overflow-hidden bg-black ${transitioning ? 'opacity-60' : ''}`}
           style={{ aspectRatio: '16/9' }}
         >
           <CanvasCompositor
@@ -116,7 +134,7 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
             activeMediaUrl={activeMediaUrl}
             activeVideoUrl={activeVideoUrl}
             backgroundUrl={backgroundUrl}
-            videoVolume={0} // muted in preview
+            videoVolume={0}
             branding={branding}
             showWatermark={false}
             activeScene={previewScene}
@@ -128,7 +146,6 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
         </div>
       </div>
 
-      {/* Transition controls — center column on desktop, horizontal strip on mobile */}
       <div className={`flex ${compact ? 'flex-row justify-center' : 'flex-col justify-center'} items-center gap-2 shrink-0`}>
         <button
           onClick={handleTake}
@@ -144,37 +161,36 @@ const ProgramPreview: React.FC<ProgramPreviewProps> = ({
         </button>
 
         <div className="flex gap-1">
-          <button
-            onClick={() => setTransition('cut')}
-            className={`p-1.5 rounded ${
-              transition === 'cut' ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400'
-            }`}
-            title="Instant cut"
-          >
+          <button onClick={() => setTransition('cut')} className={`p-1.5 rounded ${transition === 'cut' ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400'}`} title="Instant cut">
             <Zap size={14} />
           </button>
-          <button
-            onClick={() => setTransition('mix')}
-            className={`p-1.5 rounded ${
-              transition === 'mix' ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400'
-            }`}
-            title="Crossfade mix"
-          >
+          <button onClick={() => setTransition('mix')} className={`p-1.5 rounded ${transition === 'mix' ? 'bg-brand-500 text-white' : 'bg-gray-800 text-gray-400'}`} title="Crossfade mix">
             <Blend size={14} />
           </button>
         </div>
       </div>
 
-      {/* Program pane */}
       <div className={`flex-1 flex flex-col ${compact ? '' : 'min-w-0'}`}>
-        <div className={`${labelClass} bg-red-600 text-white self-start`}>
-          PROGRAM{' '}
-          <span className="inline-block w-2 h-2 bg-white rounded-full ml-1 animate-pulse" />
+        <div className="flex items-end justify-between gap-2">
+          <div className={`${labelClass} bg-red-600 text-white`}>
+            PROGRAM <span className="inline-block w-2 h-2 bg-white rounded-full ml-1 animate-pulse" />
+          </div>
+          {pipSupported && (
+            <button
+              type="button"
+              onClick={() => void toggleProgramPip()}
+              className={`mb-1 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                pipActive
+                  ? 'bg-green-950/70 border-green-500/70 text-green-300'
+                  : 'bg-gray-900 border-gray-600 text-gray-300 hover:border-brand-400 hover:text-white'
+              }`}
+              title="Float the exact Program output over other apps/tabs while you stay live"
+            >
+              <PictureInPicture2 size={13} /> {pipActive ? 'Floating' : 'Float Program'}
+            </button>
+          )}
         </div>
-        <div
-          className="relative border-2 border-red-500/60 rounded-b-lg rounded-tr-lg overflow-hidden bg-black"
-          style={{ aspectRatio: '16/9' }}
-        >
+        <div className="relative border-2 border-red-500/60 rounded-b-lg rounded-tr-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
           <CanvasCompositor
             ref={programCanvasRef}
             layout={programLayout}
