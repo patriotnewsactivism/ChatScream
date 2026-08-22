@@ -244,7 +244,7 @@ This plan covers wiring up every feature of ChatScream: the multi-platform strea
 ### 5.2 Environment Configuration
 
 - Create working `.env` file from `.env.example`
-- Ensure OAuth secrets are loadable via railway.json or env vars
+- Ensure OAuth secrets are supplied through Cloud Run environment variables or Secret Manager
 - Document missing env vars in `.env.example`
 
 ### 5.3 Docker/FFmpeg

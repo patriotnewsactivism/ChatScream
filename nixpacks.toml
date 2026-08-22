@@ -1,5 +1,0 @@
-# ChatScream Railway Configuration
-# Only adding FFmpeg for RTMP relay - Railway auto-detects Node.js build/start
-
-[phases.setup]
-nixPkgs = ["ffmpeg"]

@@ -23,7 +23,7 @@ ChatScream is a browser-based multi-streaming studio. Creators broadcast from a 
 | `public/`                  | PWA manifest, service worker, icons                                            |
 | `scripts/`                 | Deploy, migrate, autostart helpers                                             |
 
-**Production split:** Vercel hosts the Vite frontend (`dist/`); Railway runs `node server/index.js` (API + WebSockets + FFmpeg). See `DEPLOY.md` and `RAILWAY_DEPLOYMENT.md`.
+**Production split:** Vercel hosts the Vite frontend (`dist/`); Google Cloud Run runs `node server/index.js` (API + WebSockets + FFmpeg). See `DEPLOY.md`.
 
 **Local ports:** Vite `3000` (proxies `/api` → `8787`); API/WebSocket `8787`.
 
@@ -57,7 +57,7 @@ Minimum before shipping behavior changes: `npm run typecheck` and `npm run build
 - **Auth / identity:** Default `IDENTITY_STORAGE_MODE=managed` — users/profiles in Postgres (`POSTGRES_URL`), sessions in Redis (`REDIS_URL`). Local-only override: `IDENTITY_STORAGE_MODE=local` (file store). Production needs SSL/TLS flags as in `.env.production.example`.
 - **API client:** Frontend network calls go through `services/apiClient.ts` / `services/backend.ts`, not ad-hoc `fetch` in components.
 - **AI:** Server-side only (`server/ai.js`). Do not put provider secrets in Vite client bundles; client uses `services/aiClient.ts` → backend routes.
-- **Streaming path:** Browser MediaRecorder → WebSocket ingest → server FFmpeg → platform RTMP. WebSocket signaling: `/ws/signal/:roomId`; scream alerts use streamer rooms. Client WebSocket base must target the **API host** (Railway), never the Vercel static origin.
+- **Streaming path:** Browser MediaRecorder → WebSocket ingest → server FFmpeg → platform RTMP. WebSocket signaling: `/ws/signal/:roomId`; scream alerts use streamer rooms. Client WebSocket base must target the **API host** (Cloud Run), never the Vercel static origin.
 - **OAuth:** Platform connect flows live in `services/oauthService.ts` + `server/app.js` (`/api/auth/oauth/*`). Secrets stay server-side; public client IDs may appear in env for start flows.
 - **Billing:** Stripe Connect / subscriptions via `services/stripe.ts` and `server/webhooks/stripe.js`. Webhook path: `/api/webhooks/stripe`.
 - **Plans:** Canonical names `free`, `starter`, `creator`, `pro` (older env names `expert`/`enterprise` still mapped in Vite config for back-compat).
@@ -89,13 +89,13 @@ Minimum before shipping behavior changes: `npm run typecheck` and `npm run build
 - Restrict `CORS_ORIGINS` / `APP_BASE_URL` to trusted frontend origins (www variants are auto-added server-side).
 - OAuth needs matching redirect URIs on each platform console and `AUTH_STATE_SECRET` for CSRF state.
 - Media uploads: prefer S3-compatible storage in production; local `uploads/` is ephemeral on deploy.
-- Health: `GET /api/health`, readiness `GET /api/ready` (used by Railway).
+- Health: `GET /api/health`, readiness `GET /api/ready` (used by Cloud Run).
 - Rate limits apply on auth, scream, billing, and upload routes — preserve them when adding endpoints.
 
 ## Agent Working Notes
 
 - Prefer editing existing modules over new abstractions; avoid drive-by refactors and unsolicited markdown docs.
-- When changing deploy behavior, update `DEPLOY.md` / `railway.json` / `vercel.json` / `nixpacks.toml` only as needed.
+- When changing deploy behavior, update `DEPLOY.md` / `vercel.json` / `Dockerfile` only as needed.
 - Active product debt and streaming fix checklist live in `TODO.md` — check it before reinventing fixed work.
 - Branch context often tracks live-testing fixes (`fix/*`); keep changes scoped to the reported issue.
   )

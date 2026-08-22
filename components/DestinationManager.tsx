@@ -305,14 +305,20 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     }
 
     const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === 'oauth:connected' && event.data?.platform === platform) {
         window.removeEventListener('message', onMessage);
-        if (!event.data?.error) {
-          onPlatformConnected?.(platform);
-          // Auto-open channel picker for YouTube after connecting
-          if (platform === 'youtube') {
-            setTimeout(() => openYouTubeChannelPicker(), 500);
-          }
+        if (event.data?.error) {
+          safeAlert(String(event.data.error));
+          return;
+        }
+
+        onPlatformConnected?.(platform);
+        // Move directly from account connection to selecting a real destination.
+        if (platform === 'youtube') {
+          setTimeout(() => openYouTubeChannelPicker(), 500);
+        } else if (platform === 'facebook') {
+          setTimeout(() => openFacebookPagePicker(), 500);
         }
       }
     };
@@ -388,6 +394,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     try {
       const data = await apiRequest<{
         streamUrl?: string;
+        serverUrl?: string;
         streamKey?: string;
         liveVideoId?: string;
       }>('/api/destinations/facebook/create-live', {
@@ -395,17 +402,15 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
         body: pageId ? { pageId } : {},
       });
-      if (!data.streamUrl) {
+      const fallbackParts = data.streamUrl?.match(/^(rtmps?:\/\/[^/]+\/[^/]+)\/(.+)$/);
+      const serverUrl = data.serverUrl || fallbackParts?.[1] || '';
+      const streamKey = data.streamKey || fallbackParts?.[2] || '';
+      if (!serverUrl || !streamKey) {
         safeAlert(
-          'Facebook did not return a stream URL. Ensure your account has live streaming permissions.',
+          'Facebook did not return a usable RTMPS destination. Ensure the account is eligible for Facebook Live and try again.',
         );
         return;
       }
-      // Facebook live_videos returns stream_url as "rtmp://live-api-s.facebook.com:80/rtmp/<key>"
-      // Split into serverUrl + streamKey
-      const urlParts = data.streamUrl.match(/^(rtmp:\/\/[^/]+\/[^/]+)\/(.+)$/);
-      const serverUrl = urlParts ? urlParts[1] : data.streamUrl;
-      const streamKey = urlParts ? urlParts[2] : data.streamKey || '';
       const liveVideoId = data.liveVideoId || undefined;
 
       handleAddWithLimitCheck({
@@ -533,16 +538,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
   };
 
   const handleOAuthAddDestination = async (option: OAuthOption) => {
-    if (option.oauthPlatform === 'youtube') {
-      if (isPlatformConnected('youtube')) {
-        await openYouTubeChannelPicker();
-      } else {
-        handleConnectOAuth('youtube');
-      }
-      return;
-    }
-
-    handleAddWithLimitCheck(createOAuthDestination(option.platform));
+    await handleOAuthPrimaryAction(option);
   };
 
   return (
@@ -764,16 +760,22 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
                     onClick={() => {
                       void handleOAuthAddDestination(option);
                     }}
+                    aria-label={`Add ${option.label} destination`}
                     disabled={
                       isStreaming ||
                       !destinationLimit.allowed ||
+                      connectingPlatform === option.oauthPlatform ||
                       (option.oauthPlatform === 'youtube' && youtubeChannelsLoading)
                     }
                     className="w-full text-[11px] px-2 py-2 rounded bg-gray-800/80 hover:bg-gray-800 border border-gray-600 text-gray-200 disabled:opacity-50"
                   >
-                    {option.oauthPlatform === 'youtube' && isPlatformConnected('youtube')
-                      ? 'Select destination'
-                      : 'Add destination'}
+                    {isPlatformConnected(option.oauthPlatform)
+                      ? option.oauthPlatform === 'youtube'
+                        ? 'Select channel'
+                        : option.oauthPlatform === 'facebook'
+                          ? 'Select page'
+                          : 'Add destination'
+                      : `Connect ${option.label}`}
                   </button>
                 </div>
               </div>
@@ -782,8 +784,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
           {visibleOAuthOptions.length === 0 && (
             <div className="space-y-2">
               <p className="text-xs text-amber-300 mb-3">
-                OAuth quick-connect requires provider credentials. Ask an admin to configure them in
-                the Admin Portal.
+                OAuth quick-connect requires a provider client ID and server-side secret on Cloud
+                Run. Ask an admin to configure both.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {oauthOptions.map((option) => (

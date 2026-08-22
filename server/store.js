@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
 import * as schema from './db/schema.js';
+import { runDatabaseMigrations } from './db/migrate.js';
 
 const envDataDir = String(process.env.CHATSCREAM_DATA_DIR || '').trim();
 const defaultDataDir = process.env.VERCEL
@@ -71,6 +72,7 @@ const getIdentityClients = async () => {
       ...(usePostgresTls ? { ssl: { rejectUnauthorized: false } } : {}),
     });
 
+    await runDatabaseMigrations(pool);
     const db = drizzle(pool, { schema });
 
     let redis = null;
@@ -86,26 +88,6 @@ const getIdentityClients = async () => {
         console.warn('Redis connection failed, using Postgres for sessions:', err.message);
         redis = null;
       }
-    }
-
-    // Ensure Postgres session tables exist when Redis is unavailable
-    if (!redis) {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS chatscream_sessions (
-          token TEXT PRIMARY KEY,
-          data JSONB NOT NULL,
-          expires_at TIMESTAMPTZ NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS chatscream_reset_tokens (
-          token_hash TEXT PRIMARY KEY,
-          data JSONB NOT NULL,
-          expires_at TIMESTAMPTZ NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
     }
 
     identityClients = { pool, db, redis };
@@ -454,6 +436,26 @@ export const getPublicProfile = (record) => ({
   photoURL: record.profile?.photoURL || '',
 });
 
+const CONNECTED_PLATFORM_SECRET_FIELDS = new Set([
+  'accessToken',
+  'refreshToken',
+  'clientSecret',
+  'streamKey',
+]);
+
+export const getConnectedPlatformsSummary = (platforms = {}) =>
+  Object.fromEntries(
+    Object.entries(platforms).map(([platform, account]) => {
+      if (!account || typeof account !== 'object') return [platform, account];
+      return [
+        platform,
+        Object.fromEntries(
+          Object.entries(account).filter(([key]) => !CONNECTED_PLATFORM_SECRET_FIELDS.has(key)),
+        ),
+      ];
+    }),
+  );
+
 // Full profile — only for the record owner (or admin) to see, never for
 // cross-user lookups. Includes billing, connected destinations, and
 // affiliate data that getPublicProfile intentionally omits.
@@ -466,7 +468,7 @@ export const getOwnProfile = (record) => ({
   usage: record.profile?.usage,
   affiliate: record.profile?.affiliate,
   settings: record.profile?.settings,
-  connectedPlatforms: record.profile?.connectedPlatforms,
+  connectedPlatforms: getConnectedPlatformsSummary(record.profile?.connectedPlatforms),
 });
 
 export const setConnectedPlatform = async (uid, platform, value) => {

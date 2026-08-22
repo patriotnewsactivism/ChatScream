@@ -58,7 +58,7 @@ export class DestinationRouter {
     this.stream = stream;
     this.state.totalDestinations = enabled.length;
 
-    // Connect to the backend API server (Railway), not the frontend (Vercel)
+    // Connect to the backend API server (Cloud Run), not the frontend (Vercel)
     const apiBase = getApiBaseUrl();
     let wsUrl: string;
     if (apiBase) {

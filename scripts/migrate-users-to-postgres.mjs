@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
+import { runDatabaseMigrations } from '../server/db/migrate.js';
 
 const postgresUrl = String(process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
 if (!postgresUrl) {
@@ -31,17 +32,7 @@ const pool = new Pool({
 });
 
 try {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS chatscream_users (
-      uid TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL DEFAULT '',
-      profile JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_chatscream_users_email ON chatscream_users (email);
-  `);
+  await runDatabaseMigrations(pool);
 
   let migrated = 0;
   for (const user of users) {

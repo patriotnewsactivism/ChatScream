@@ -1,189 +1,123 @@
-# ChatScream — Deployment Guide
+# ChatScream production deployment
 
-**Architecture:** Vercel (React frontend) + Railway (Express/WebSocket backend + FFmpeg)
+ChatScream uses a split production architecture:
 
----
+- **Vercel:** Vite/React frontend at `https://www.chatscream.live`
+- **Google Cloud Run:** Express API, WebSockets, FFmpeg, and OAuth token exchange at `https://api.chatscream.live`
+- **Postgres/Neon:** durable users, sessions, reset tokens, and viral-content schema
+- **Redis:** optional session cache; Postgres remains the fallback
 
-## 1. Railway — Backend
+The frontend must never point its WebSocket or API traffic at the Vercel origin. Set
+`VITE_API_BASE_URL=https://api.chatscream.live` for the Vercel production environment.
 
-### One-time setup
+## Database migrations
 
-1. Create a new Railway project and connect your GitHub repo.
-2. Railway auto-detects Node.js via `nixpacks.toml` (FFmpeg included).
-3. Set the following environment variables in **Railway → Variables**:
+The backend runs versioned, advisory-locked migrations during startup before it accepts traffic. A
+failed migration prevents the Cloud Run revision from becoming ready.
 
+Run the same migrations manually when validating a database:
+
+```bash
+npm run db:migrate
+npm run db:verify
 ```
-# ── Required ──────────────────────────────────────────────────────
+
+Both commands require `POSTGRES_URL` (or `DATABASE_URL`). Set `POSTGRES_SSL=true` for hosted
+Postgres providers that require TLS.
+
+`npm run migrate:users` is only for importing the legacy
+`server/data/runtime.json` user file. It is idempotent, but it should only be run where that source
+file exists.
+
+## Cloud Run backend
+
+Build the Dockerfile's `backend` target and deploy it to the existing Cloud Run service. The
+container listens on the Cloud Run-provided `PORT` and includes FFmpeg.
+
+Required production configuration:
+
+```dotenv
 NODE_ENV=production
-PORT=8787
-
-# Postgres (Railway → Add Plugin → PostgreSQL, then copy the URL)
-POSTGRES_URL=postgresql://...
+IDENTITY_STORAGE_MODE=managed
+POSTGRES_URL=<secret>
 POSTGRES_SSL=true
-
-# Redis (Railway → Add Plugin → Redis, then copy the URL)
-REDIS_URL=redis://...
+REDIS_URL=<secret>
 REDIS_TLS=true
 
-# The public URL of your Vercel frontend (used for CORS + OAuth redirects)
-APP_BASE_URL=https://chatscream.live
+APP_BASE_URL=https://www.chatscream.live
+VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback
 CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live
 
-# AI
-ANTHROPIC_API_KEY=sk-ant-...
+YOUTUBE_CLIENT_ID=<secret-or-env>
+YOUTUBE_CLIENT_SECRET=<secret>
+FACEBOOK_APP_ID=<secret-or-env>
+FACEBOOK_APP_SECRET=<secret>
+FACEBOOK_GRAPH_API_VERSION=v26.0
 
-# ── OAuth Secrets (backend only — never expose these to the frontend) ──
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-YOUTUBE_CLIENT_ID=...
-YOUTUBE_CLIENT_SECRET=...
-FACEBOOK_APP_ID=...
-FACEBOOK_APP_SECRET=...
-TWITCH_CLIENT_ID=...
-TWITCH_CLIENT_SECRET=...
-TIKTOK_CLIENT_KEY=...
-TIKTOK_CLIENT_SECRET=...
-AUTH_STATE_SECRET=<random 32+ char string>
-
-# ── Stripe (optional — leave blank to disable billing) ──
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-VITE_STRIPE_PRO_PRICE_ID=price_...
-VITE_STRIPE_EXPERT_PRICE_ID=price_...
-VITE_STRIPE_ENTERPRISE_PRICE_ID=price_...
+AUTH_STATE_SECRET=<secret>
+SESSION_SECRET=<secret>
 ```
 
-4. **Deploy.** Railway runs `npm install --omit=dev` then `node server/index.js`.
-5. After deploy, note your Railway public URL (e.g. `https://chatscream-production.up.railway.app`).
+Store secrets in Google Secret Manager and expose them to the Cloud Run revision. Do not commit
+`.env` files.
 
-### WebSocket support
+After deployment, verify:
 
-Railway supports WebSocket connections on the same port as HTTP — no extra config needed.
+- `GET https://api.chatscream.live/api/health`
+- `GET https://api.chatscream.live/api/ready`
+- `GET https://api.chatscream.live/api/public/capabilities`
 
-### Stripe webhook
+Readiness must report a usable identity store. Capabilities must show both YouTube and Facebook as
+configured before the frontend enables their quick-connect actions.
 
-In Stripe Dashboard → Developers → Webhooks, add an endpoint:
+## OAuth provider setup
 
-- URL: `https://<your-railway-url>/api/webhooks/stripe`
-- Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
+Use this exact redirect URI for both providers:
 
-Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
-
----
-
-## 2. Vercel — Frontend
-
-### One-time setup
-
-1. Import your repo in Vercel. Framework preset: **Vite**.
-2. Build command: `npm run build` — Output dir: `dist`
-3. Set the following environment variables in **Vercel → Settings → Environment Variables**:
-
-```
-# ── Required ──────────────────────────────────────────────────────
-VITE_APP_ENV=production
-VITE_DEBUG=false
-
-# Your Railway backend URL (no trailing slash)
-VITE_API_BASE_URL=https://chatscream-production.up.railway.app
-
-# OAuth Public Client IDs (safe to expose — secrets stay on Railway)
-VITE_YOUTUBE_CLIENT_ID=...
-VITE_FACEBOOK_APP_ID=...
-VITE_TWITCH_CLIENT_ID=...
-VITE_TIKTOK_CLIENT_KEY=...
-
-# Must match the redirect URI registered in each OAuth console (see §3)
-VITE_OAUTH_REDIRECT_URI=https://chatscream.live/oauth/callback
-
-# Stripe publishable key (safe to expose)
-VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
-VITE_STRIPE_PRO_PRICE_ID=price_...
-VITE_STRIPE_EXPERT_PRICE_ID=price_...
-VITE_STRIPE_ENTERPRISE_PRICE_ID=price_...
+```text
+https://www.chatscream.live/oauth/callback
 ```
 
-4. `vercel.json` is already configured with SPA rewrites and cache headers — no changes needed.
+### Google / YouTube
 
----
+1. Enable YouTube Data API v3 in the Google Cloud project.
+2. Create a Web application OAuth client.
+3. Add the exact redirect URI above.
+4. Put the client ID and client secret in the Cloud Run service.
+5. If the consent screen is in testing, add the intended broadcaster as a test user.
 
-## 3. OAuth Console Setup
+### Meta / Facebook Live
 
-Register `https://chatscream.live/oauth/callback` as an authorized redirect URI in each platform's developer console:
+1. Configure Facebook Login on the Meta app and add the exact redirect URI above.
+2. Configure the Live Video API product/feature.
+3. Request the permissions used by ChatScream:
+   `public_profile`, `email`, `pages_show_list`, `pages_read_engagement`,
+   `pages_manage_posts`, `pages_manage_metadata`, and `publish_video`.
+4. Complete App Review / Live Video API access for accounts outside the app's developer roles.
+5. Keep `FACEBOOK_GRAPH_API_VERSION` on a currently supported Graph API version.
+6. Confirm the destination account or Page meets Meta's current Facebook Live eligibility rules.
 
-| Platform         | Console URL                                                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Google / YouTube | [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth 2.0 Client          |
-| Facebook         | [developers.facebook.com](https://developers.facebook.com) → App → Facebook Login → Settings → Valid OAuth Redirect URIs |
-| Twitch           | [dev.twitch.tv/console](https://dev.twitch.tv/console) → Your App → OAuth Redirect URLs                                  |
-| TikTok           | [developers.tiktok.com](https://developers.tiktok.com) → App → Login Kit → Redirect URI                                  |
+ChatScream prefers Meta's `secure_stream_url` and splits that RTMPS URL into the FFmpeg server URL
+and stream key on the backend.
 
-**Scopes required:**
+## Vercel frontend
 
-- **YouTube:** `youtube`, `youtube.force-ssl`, `youtube.readonly`, `profile`, `email`
-- **Facebook:** `public_profile`, `pages_show_list`, `pages_manage_posts`, `live_video`, `publish_video`
-- **Twitch:** `user:read:email`, `channel:read:stream_key`, `channel:manage:broadcast`
-- **TikTok:** `user.info.basic`, `live.room.manage`, `video.upload`
+Configure the production environment and redeploy:
 
----
-
-## 4. Custom Domain (optional)
-
-1. In Vercel → Domains, add `chatscream.live` and `www.chatscream.live`.
-2. Update Railway → Settings → Networking to add a custom domain for the API (e.g. `api.chatscream.live`).
-3. Update `VITE_API_BASE_URL` in Vercel to `https://api.chatscream.live`.
-4. Update `CORS_ORIGINS` on Railway to include your Vercel preview domains if needed.
-
----
-
-## 5. First-Deploy Checklist
-
-- [ ] Railway deploy succeeds — check `/api/health` returns `{"ok":true}`
-- [ ] Railway deploy succeeds — check `/api/ready` returns `{"ok":true}` (Postgres + Redis connected)
-- [ ] Vercel build succeeds (Vite output in `dist/`)
-- [ ] Frontend loads and can reach the backend (`/api/health` call in Network tab)
-- [ ] Sign up / sign in works
-- [ ] OAuth flow works for at least one platform (YouTube recommended)
-- [ ] WebSocket connects when clicking Go Live (check browser Console)
-- [ ] FFmpeg spawns and stream reaches destination (check Railway logs)
-- [ ] Stripe webhook test event delivers successfully
-
----
-
-## 6. Local Development
-
-```bash
-# Copy and fill in env vars
-cp .env.example .env
-
-# Install deps
-npm install
-
-# Start backend (port 8787) + frontend (port 5173) together
-npm run dev
+```dotenv
+VITE_API_BASE_URL=https://api.chatscream.live
+VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback
 ```
 
-The Vite dev server proxies `/api` and `/ws` to `localhost:8787` automatically via `vite.config.ts`.
+OAuth client secrets do not belong in Vercel's `VITE_*` variables. Token exchange happens only on
+Cloud Run.
 
----
+## Release checklist
 
-## 7. Single-Server Deploy (VPS / Fly.io / Render)
-
-If you want one container instead of Railway + Vercel:
-
-```bash
-# Build the fullstack Docker image
-docker build \
-  --target fullstack \
-  --build-arg VITE_API_BASE_URL="" \
-  -t chatscream .
-
-# Run it (replace env vars as needed)
-docker run -p 8787:8787 \
-  -e NODE_ENV=production \
-  -e POSTGRES_URL=... \
-  -e REDIS_URL=... \
-  chatscream
-```
-
-Express will serve the built frontend from `dist/` and fall back to `index.html` for SPA routing.
+- Database migrations and verification pass.
+- Cloud Run revision is ready and FFmpeg is available.
+- `/api/public/capabilities` reports YouTube and Facebook configured.
+- Vercel's production bundle contains `https://api.chatscream.live`.
+- YouTube connection opens a channel picker and creates a destination with a real ingest URL/key.
+- Facebook connection opens the Page picker and creates a destination from an RTMPS URL.
+- A short private test stream reaches each provider before a public event.

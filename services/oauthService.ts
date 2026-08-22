@@ -19,8 +19,9 @@ export interface OAuthConfig {
 // Connected account info
 export interface ConnectedAccount {
   platform: OAuthPlatform;
-  accessToken: string;
-  refreshToken: string;
+  // OAuth tokens remain server-side. These fields are optional only for legacy callers.
+  accessToken?: string;
+  refreshToken?: string;
   expiresAt: Date;
   accountId: string;
   accountName: string;

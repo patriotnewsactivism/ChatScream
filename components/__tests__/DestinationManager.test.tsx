@@ -42,6 +42,28 @@ describe('DestinationManager quick connect', () => {
     expect(onAddDestination).not.toHaveBeenCalled();
   });
 
+  it('routes Facebook destination actions through OAuth instead of adding a placeholder key', async () => {
+    const onAddDestination = vi.fn();
+    render(
+      <DestinationManager
+        destinations={[]}
+        onAddDestination={onAddDestination}
+        onRemoveDestination={() => {}}
+        onToggleDestination={() => {}}
+        isStreaming={false}
+        userId="user-123"
+      />,
+    );
+
+    const addFacebookButton = await screen.findByRole('button', {
+      name: /Add Facebook destination/i,
+    });
+    fireEvent.click(addFacebookButton);
+
+    expect(vi.mocked(oauthService.initiateOAuth)).toHaveBeenCalledWith('facebook', 'user-123');
+    expect(onAddDestination).not.toHaveBeenCalled();
+  });
+
   it('disables quick connect while streaming', async () => {
     const onAddDestination = vi.fn();
     render(

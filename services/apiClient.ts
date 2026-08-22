@@ -79,7 +79,7 @@ export const buildApiUrl = (path: string): string => {
 };
 
 // WebSocket equivalent of buildApiUrl — the frontend (Vercel) and backend
-// (Railway) are on different hosts, so signaling sockets must point at the
+// (Cloud Run) are on different hosts, so signaling sockets must point at the
 // configured API host, not window.location.host (which is Vercel's).
 export const buildWsUrl = (path: string): string => {
   const base = getApiBaseUrl();

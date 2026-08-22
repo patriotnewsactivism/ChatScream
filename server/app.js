@@ -17,6 +17,7 @@ import {
   getConfig,
   getIdentityStorageMode,
   isManagedIdentityStorageRequired,
+  getConnectedPlatformsSummary,
   getPublicProfile,
   getOwnProfile,
   getSession,
@@ -99,7 +100,7 @@ const parseAllowedOrigins = () => {
     .filter(Boolean);
   const appBaseUrl = String(process.env.APP_BASE_URL || '').trim();
   // Hard-coded fallback origins (dev + production domain).
-  // For any Vercel preview or custom domain, set CORS_ORIGINS in Railway env vars.
+  // For any Vercel preview or custom domain, set CORS_ORIGINS in the Cloud Run service environment.
   const defaults = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -2634,8 +2635,14 @@ const tiktokApiRequest = async (accessToken) => {
 };
 
 // --- FACEBOOK OAUTH ---
-const FACEBOOK_TOKEN_ENDPOINT = 'https://graph.facebook.com/v18.0/oauth/access_token';
-const FACEBOOK_BASE_URL = 'https://graph.facebook.com/v18.0';
+const configuredFacebookGraphVersion = String(
+  process.env.FACEBOOK_GRAPH_API_VERSION || 'v26.0',
+).trim();
+const FACEBOOK_GRAPH_API_VERSION = /^v\d+\.\d+$/.test(configuredFacebookGraphVersion)
+  ? configuredFacebookGraphVersion
+  : 'v26.0';
+const FACEBOOK_BASE_URL = `https://graph.facebook.com/${FACEBOOK_GRAPH_API_VERSION}`;
+const FACEBOOK_TOKEN_ENDPOINT = `${FACEBOOK_BASE_URL}/oauth/access_token`;
 
 /**
  * Auto-extend a Facebook user token via fb_exchange_token grant.
@@ -2687,16 +2694,57 @@ const refreshFacebookTokenIfNeeded = async (uid, fb) => {
 };
 
 const requestFacebookTokenExchange = async ({ code, redirectUri }) => {
-  const response = await fetch(
-    `${FACEBOOK_TOKEN_ENDPOINT}?` +
-      new URLSearchParams({
-        client_id: process.env.FACEBOOK_APP_ID || '',
-        client_secret: process.env.FACEBOOK_APP_SECRET || '',
-        redirect_uri: redirectUri,
-        code,
-      }),
-  );
-  return response.json();
+  const response = await fetch(FACEBOOK_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.FACEBOOK_APP_ID || '',
+      client_secret: process.env.FACEBOOK_APP_SECRET || '',
+      redirect_uri: redirectUri,
+      code,
+    }),
+  });
+  const payload = await response.json();
+  const accessToken = String(payload?.access_token || '').trim();
+  if (!response.ok || payload?.error || !accessToken) {
+    const message =
+      payload?.error?.message ||
+      payload?.error_description ||
+      'Facebook token exchange did not return an access token.';
+    throw createHttpError(response.ok ? 502 : response.status, message, payload);
+  }
+  return payload;
+};
+
+const parseFacebookIngestUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (!['rtmp:', 'rtmps:'].includes(parsed.protocol)) return null;
+
+    const marker = '/rtmp/';
+    const markerIndex = parsed.pathname.toLowerCase().lastIndexOf(marker);
+    if (markerIndex >= 0) {
+      const pathEnd = markerIndex + marker.length - 1;
+      const streamKey = `${parsed.pathname.slice(pathEnd + 1)}${parsed.search}`;
+      if (!streamKey) return null;
+      return {
+        serverUrl: `${parsed.protocol}//${parsed.host}${parsed.pathname.slice(0, pathEnd)}`,
+        streamKey,
+      };
+    }
+
+    const lastSlash = parsed.pathname.lastIndexOf('/');
+    if (lastSlash <= 0 || lastSlash === parsed.pathname.length - 1) return null;
+    return {
+      serverUrl: `${parsed.protocol}//${parsed.host}${parsed.pathname.slice(0, lastSlash)}`,
+      streamKey: `${parsed.pathname.slice(lastSlash + 1)}${parsed.search}`,
+    };
+  } catch {
+    return null;
+  }
 };
 
 app.post(
@@ -2708,6 +2756,9 @@ app.post(
       .toLowerCase();
     const code = String(req.body?.code || '').trim();
     const redirectUri = String(req.body?.redirectUri || '').trim();
+    if (!code || !redirectUri) {
+      return res.status(400).json({ message: 'OAuth code and redirectUri are required.' });
+    }
     const uid = req.auth.profile.uid;
     const record = await getUserByUid(uid);
 
@@ -2736,7 +2787,16 @@ app.post(
           thumbnailUrl: primaryChannel.thumbnailUrl,
         };
         await setConnectedPlatform(uid, 'youtube', nextYouTube);
-        return res.json({ success: true, platform: 'youtube', account: nextYouTube });
+        return res.json({
+          success: true,
+          platform: 'youtube',
+          account: {
+            accountId: nextYouTube.channelId,
+            accountName: nextYouTube.channelName,
+            profileImage: nextYouTube.thumbnailUrl,
+            expiresAt: nextYouTube.expiresAt,
+          },
+        });
       } catch (error) {
         console.error('YouTube OAuth failed:', error?.message || error, error?.body || '');
         const detail = error?.message || error?.statusMessage || String(error);
@@ -2760,20 +2820,58 @@ app.post(
         profileImage: userData?.profile_image_url,
       };
       await setConnectedPlatform(uid, 'twitch', nextTwitch);
-      return res.json({ success: true, platform: 'twitch', account: nextTwitch });
+      return res.json({
+        success: true,
+        platform: 'twitch',
+        account: {
+          accountId: nextTwitch.accountId,
+          accountName: nextTwitch.accountName,
+          profileImage: nextTwitch.profileImage,
+          expiresAt: nextTwitch.expiresAt,
+        },
+      });
     } else if (platform === 'facebook') {
-      const tokenPayload = await requestFacebookTokenExchange({ code, redirectUri });
-      const mePayload = await (
-        await fetch(`${FACEBOOK_BASE_URL}/me?access_token=${tokenPayload.access_token}`)
-      ).json();
-      const nextFacebook = {
-        accessToken: tokenPayload.access_token,
-        expiresAt: getExpiryFromSeconds(tokenPayload.expires_in, 3600),
-        accountId: mePayload.id,
-        accountName: mePayload.name,
-      };
-      await setConnectedPlatform(uid, 'facebook', nextFacebook);
-      return res.json({ success: true, platform: 'facebook', account: nextFacebook });
+      try {
+        const tokenPayload = await requestFacebookTokenExchange({ code, redirectUri });
+        const accessToken = String(tokenPayload.access_token || '').trim();
+        const meResponse = await fetch(`${FACEBOOK_BASE_URL}/me?fields=id,name`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const mePayload = await meResponse.json();
+        if (!meResponse.ok || mePayload?.error || !mePayload?.id) {
+          throw createHttpError(
+            meResponse.ok ? 502 : meResponse.status,
+            mePayload?.error?.message || 'Facebook account lookup failed.',
+            mePayload,
+          );
+        }
+
+        const nextFacebook = {
+          accessToken,
+          expiresAt: getExpiryFromSeconds(tokenPayload.expires_in, 3600),
+          accountId: mePayload.id,
+          accountName: mePayload.name,
+        };
+        await setConnectedPlatform(uid, 'facebook', nextFacebook);
+        return res.json({
+          success: true,
+          platform: 'facebook',
+          account: {
+            accountId: nextFacebook.accountId,
+            accountName: nextFacebook.accountName,
+            expiresAt: nextFacebook.expiresAt,
+          },
+        });
+      } catch (error) {
+        console.error('Facebook OAuth failed:', error?.message || error, error?.body || '');
+        const detail = error?.message || error?.statusMessage || String(error);
+        const statusCode = getHttpErrorStatus(error, 502);
+        res.status(statusCode).json({
+          message: `Facebook connection failed: ${detail}`,
+          detail: String(detail),
+        });
+      }
+      return;
     } else if (platform === 'tiktok') {
       const tokenPayload = await requestTikTokTokenExchange({ code, redirectUri });
       const accessToken = String(tokenPayload?.access_token || '').trim();
@@ -2791,7 +2889,16 @@ app.post(
         profileImage: userData.avatar_url || '',
       };
       await setConnectedPlatform(uid, 'tiktok', nextTikTok);
-      return res.json({ success: true, platform: 'tiktok', account: nextTikTok });
+      return res.json({
+        success: true,
+        platform: 'tiktok',
+        account: {
+          accountId: nextTikTok.accountId,
+          accountName: nextTikTok.accountName,
+          profileImage: nextTikTok.profileImage,
+          expiresAt: nextTikTok.expiresAt,
+        },
+      });
     }
 
     res.status(400).json({ message: 'Unsupported platform' });
@@ -2931,38 +3038,53 @@ app.post(
 
     if (pageId) {
       // Fetch page access token
-      const pagesRes = await fetch(
-        `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,access_token`,
-      );
+      const pagesRes = await fetch(`${FACEBOOK_BASE_URL}/me/accounts?fields=id,name,access_token`, {
+        headers: { Authorization: `Bearer ${fb.accessToken}` },
+      });
       const pagesData = await pagesRes.json();
       const page = Array.isArray(pagesData?.data)
         ? pagesData.data.find((p) => p.id === pageId)
         : null;
-      if (page?.access_token) {
-        streamToken = page.access_token;
-        liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
+      if (!page?.access_token) {
+        return res.status(400).json({
+          message:
+            'The selected Facebook Page is unavailable. Reconnect Facebook and approve Page permissions.',
+        });
       }
+      streamToken = page.access_token;
+      liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
     }
 
-    const fbRes = await fetch(`${liveEndpoint}?access_token=${streamToken}`, {
+    const fbRes = await fetch(liveEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'LIVE_NOW', title: req.body?.title || 'ChatScream Live' }),
+      headers: {
+        Authorization: `Bearer ${streamToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        status: 'LIVE_NOW',
+        title: String(req.body?.title || 'ChatScream Live'),
+      }),
     });
     const fbData = await fbRes.json();
-    if (fbData?.error) {
-      const errMsg = fbData.error?.message || 'Facebook live creation failed.';
-      return res.status(400).json({ message: errMsg });
+    if (!fbRes.ok || fbData?.error) {
+      const errMsg = fbData?.error?.message || 'Facebook live creation failed.';
+      return res.status(fbRes.status >= 400 && fbRes.status < 500 ? 400 : 502).json({
+        message: errMsg,
+      });
     }
-    if (!fbData.stream_url) {
+    const streamUrl = String(fbData.secure_stream_url || fbData.stream_url || '').trim();
+    const ingest = parseFacebookIngestUrl(streamUrl);
+    if (!ingest) {
       return res.status(502).json({
         message:
-          'Failed to create Facebook live video. Ensure your account has live streaming permissions.',
+          'Facebook did not return a usable RTMPS ingest URL. Confirm Live Video API access and account eligibility.',
       });
     }
     res.json({
-      streamUrl: fbData.stream_url,
-      streamKey: fbData.secure_stream_url || null,
+      streamUrl,
+      serverUrl: ingest.serverUrl,
+      streamKey: ingest.streamKey,
       liveVideoId: String(fbData.id || '').trim() || null,
     });
   }),
@@ -2982,7 +3104,8 @@ app.get(
     fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, fb);
 
     const pagesRes = await fetch(
-      `${FACEBOOK_BASE_URL}/me/accounts?access_token=${fb.accessToken}&fields=id,name,picture,fan_count`,
+      `${FACEBOOK_BASE_URL}/me/accounts?fields=id,name,picture,fan_count`,
+      { headers: { Authorization: `Bearer ${fb.accessToken}` } },
     );
     const pagesData = await pagesRes.json();
     if (pagesData?.error) {
@@ -3279,7 +3402,9 @@ app.get(
       res.json({ platforms: {} });
       return;
     }
-    res.json({ platforms: record.profile.connectedPlatforms || {} });
+    res.json({
+      platforms: getConnectedPlatformsSummary(record.profile.connectedPlatforms || {}),
+    });
   }),
 );
 
@@ -4032,8 +4157,8 @@ app.post(
 
 // ── Static frontend (fullstack / single-server mode) ──────────────────────
 // Serve the built Vite frontend from dist/ when it exists.
-// In Railway + Vercel split deployments this block is never reached because
-// dist/ is not present on the Railway backend container.
+// In the Cloud Run + Vercel split deployment this block is never reached because
+// dist/ is not present in the backend-only Cloud Run image.
 const distDir = path.resolve(process.cwd(), 'dist');
 
 if (fs.existsSync(distDir)) {

@@ -10,7 +10,7 @@ Cloud offload means the creator's upload bandwidth is not the bottleneck: the br
 
 **Tech stack:** React 19 + Vite (TypeScript) frontend · Express + WebSocket backend · Postgres (Drizzle ORM) + Redis for identity/sessions · Stripe billing · Anthropic Claude AI (server-side) · FFmpeg for RTMP relay · AWS EC2 Auto Scaling for stream workers.
 
-**Production split:** Vercel hosts the Vite frontend (`dist/`); Railway runs `node server/index.js` (API + WebSockets + FFmpeg). See `DEPLOY.md` and `RAILWAY_DEPLOYMENT.md`.
+**Production split:** Vercel hosts the Vite frontend (`dist/`); Google Cloud Run runs `node server/index.js` (API + WebSockets + FFmpeg). See `DEPLOY.md`.
 
 ## Architecture
 
@@ -94,7 +94,7 @@ npm run migrate:users       # one-shot runtime.json → Postgres migration
 - Browser MediaRecorder → WebSocket ingest → server FFmpeg → platform RTMP.
 - WebSocket signaling: `/ws/signal/:roomId` for WebRTC guest cameras.
 - Scream alerts use per-streamer rooms (keyed by `streamerUid`); the Stripe webhook broadcasts to these rooms when a donation is paid.
-- **Client WebSocket base must target the API host (Railway), never the Vercel static origin.**
+- **Client WebSocket base must target the API host (Cloud Run), never the Vercel static origin.**
 
 ### OAuth
 
@@ -144,7 +144,7 @@ Copy `.env.example` → `.env`. Key groups:
 - OAuth needs matching redirect URIs on each platform console and `AUTH_STATE_SECRET` for CSRF state.
 - Media uploads: prefer S3-compatible storage in production; local `uploads/` is ephemeral on deploy.
 - Rate limits apply on auth, scream, billing, and upload routes — preserve them when adding endpoints.
-- Health: `GET /api/health`, readiness `GET /api/ready` (used by Railway).
+- Health: `GET /api/health`, readiness `GET /api/ready` (used by Cloud Run).
 
 ## Known Gaps & Active Work
 

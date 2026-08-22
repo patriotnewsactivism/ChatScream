@@ -2,7 +2,7 @@
 # ChatScream Dockerfile
 #
 # Two build targets:
-#   --target backend   Railway / any VPS (Node + FFmpeg only, no frontend)
+#   --target backend   Cloud Run / any container host (Node + FFmpeg only, no frontend)
 #   --target fullstack Single-server deploy (Node + FFmpeg + built frontend)
 #
 # Default target: fullstack (keeps existing single-server behavior)
@@ -42,7 +42,7 @@ RUN mkdir -p uploads
 EXPOSE 8787
 
 # ── Target: backend ─────────────────────────────────────────────────────────
-# Use this for Railway + Vercel split deployments.
+# Use this for Cloud Run + Vercel split deployments.
 # The frontend is served by Vercel; this image runs only the API + WebSocket.
 FROM base-runtime AS backend
 CMD ["node", "server/index.js"]
