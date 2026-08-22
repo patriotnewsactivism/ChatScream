@@ -227,7 +227,30 @@ const requireAuth = asyncHandler(async (req, res, next) => {
     res.status(401).json({ message: 'User not found.' });
     return;
   }
-  req.auth = { session, record: userRecord, profile: userRecord.profile, token };
+
+  // Enforce root-admin access on every authenticated request. This closes the
+  // gap before the client's background /api/access/sync call completes.
+  const enforcedProfile = applyAccessOverrides({
+    ...userRecord.profile,
+    uid: userRecord.uid,
+    email: userRecord.email,
+  });
+  const accessChanged =
+    userRecord.profile?.role !== enforcedProfile.role ||
+    Boolean(userRecord.profile?.betaTester) !== Boolean(enforcedProfile.betaTester) ||
+    userRecord.profile?.subscription?.plan !== enforcedProfile.subscription?.plan ||
+    userRecord.profile?.subscription?.status !== enforcedProfile.subscription?.status ||
+    Boolean(userRecord.profile?.subscription?.betaOverride) !==
+      Boolean(enforcedProfile.subscription?.betaOverride);
+
+  const enforcedRecord = accessChanged
+    ? { ...userRecord, profile: enforcedProfile }
+    : userRecord;
+  if (accessChanged) {
+    await putUser(enforcedRecord);
+  }
+
+  req.auth = { session, record: enforcedRecord, profile: enforcedProfile, token };
   next();
 });
 
@@ -1232,14 +1255,16 @@ app.post(
 
     const referredAffiliate = referralCode ? getAffiliate(referralCode) : null;
     const uid = randomUUID();
-    const profile = ensureAffiliateForProfile(
-      createUserProfile({
-        uid,
-        email,
-        displayName: displayName || email.split('@')[0],
-        referredByCode: referredAffiliate?.code || '',
-        referredByUserId: referredAffiliate?.ownerId || '',
-      }),
+    const profile = applyAccessOverrides(
+      ensureAffiliateForProfile(
+        createUserProfile({
+          uid,
+          email,
+          displayName: displayName || email.split('@')[0],
+          referredByCode: referredAffiliate?.code || '',
+          referredByUserId: referredAffiliate?.ownerId || '',
+        }),
+      ),
     );
 
     if (referredAffiliate?.isActive) {
@@ -1665,14 +1690,16 @@ app.get(
 
     if (!record) {
       const uid = randomUUID();
-      const profile = ensureAffiliateForProfile(
-        createUserProfile({
-          uid,
-          email: canonicalEmail,
-          displayName: fbName,
-          photoURL: fbPhoto,
-          referredByCode: normalizeCode(parsedState.ref || ''),
-        }),
+      const profile = applyAccessOverrides(
+        ensureAffiliateForProfile(
+          createUserProfile({
+            uid,
+            email: canonicalEmail,
+            displayName: fbName,
+            photoURL: fbPhoto,
+            referredByCode: normalizeCode(parsedState.ref || ''),
+          }),
+        ),
       );
       await putUser({ uid, email: canonicalEmail, profile });
       record = await getUserByUid(uid);
