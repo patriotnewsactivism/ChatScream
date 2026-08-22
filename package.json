@@ -11,6 +11,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "migrate:users": "node scripts/migrate-users-to-postgres.mjs",
+    "db:migrate": "node scripts/migrate-database.mjs",
+    "db:verify": "node scripts/migrate-database.mjs --verify-only",
     "test": "vitest",
     "test:full": "npm run lint && npm run typecheck && npm run test -- --run && npm run build && npm run test:e2e",
     "test:e2e": "playwright test --project=chromium",

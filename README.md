@@ -127,7 +127,7 @@ npm run build
 `server/index.js` is a real, persistent Node process: it holds the WebSocket
 connection that receives your broadcast and spawns the `ffmpeg` processes
 that push RTMP to YouTube/Facebook/Twitch. It needs a host that can run a
-long-lived process — Railway, Render, Fly.io, a VPS, or AWS EC2/ECS all work.
+long-lived process. Production uses Google Cloud Run; another WebSocket-capable container host also works.
 
 For AWS specifically, `infrastructure/aws/app-backend/` has a ready-to-run
 EC2 deployment (Docker Compose + Caddy for automatic HTTPS):

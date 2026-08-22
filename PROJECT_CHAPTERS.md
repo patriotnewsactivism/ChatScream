@@ -270,7 +270,6 @@
 | `server/storage.js` | File/media storage management |
 | `server/store.js` | Session/data store |
 | `server/webhooks/stripe.js` | Stripe webhook handler |
-| `server/railway.js` | Railway deployment helper |
 | `api/index.js` | Vercel API entry point |
 | `api/all.js` | Catch-all API routes for serverless |
 | `services/backend.ts` | Frontend → backend API client |
@@ -278,14 +277,13 @@
 | `services/env.ts` | Environment variable management |
 | `services/sanitize.ts` | Input sanitization utilities |
 | `services/sentry.ts` | Sentry error tracking integration |
-| `enable-pgvector.js` | Enable pgvector extension for Postgres |
 
 **Key Concepts:**
 - Express API server with session auth
 - Postgres database via Drizzle ORM
 - AI endpoint proxies to Claude/Gemini
 - Stripe webhooks for payment events
-- Dual deployment: Railway (server) + Vercel (frontend)
+- Dual deployment: Cloud Run (server) + Vercel (frontend)
 
 ---
 
@@ -299,11 +297,8 @@
 | `.dockerignore` | Docker build exclusions |
 | `docker-compose.yml` | Multi-container local development |
 | `chatscream.service` | Systemd service definition for Linux servers |
-| `nixpacks.toml` | Nixpacks build config (Railway) |
-| `railway.json` | Railway deployment config |
 | `vercel.json` | Vercel deployment config |
 | `.vercel-trigger` | Vercel deployment trigger |
-| `RAILWAY_DEPLOYMENT.md` | Railway deployment guide |
 | `infrastructure/README.md` | Infrastructure overview |
 | `infrastructure/aws/README.md` | AWS streaming fleet docs |
 | `infrastructure/aws/.env.aws.example` | AWS env template |
@@ -319,7 +314,7 @@
 **Key Concepts:**
 - Docker containerization for consistent deployments
 - AWS EC2 Auto Scaling for streaming FFmpeg workers
-- Railway for backend, Vercel for frontend
+- Cloud Run for backend, Vercel for frontend
 - Systemd service for bare-metal Linux deployment
 
 ---

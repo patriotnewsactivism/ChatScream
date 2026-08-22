@@ -5,35 +5,32 @@ export const users = pgTable('chatscream_users', {
   email: text('email').unique().notNull(),
   passwordHash: text('password_hash').notNull().default(''),
   profile: jsonb('profile').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const viralContent = pgTable('viral_content', {
   id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.uid),
+  userId: text('user_id').references(() => users.uid, { onDelete: 'set null' }),
   topic: text('topic').notNull(),
   title: text('title').notNull(),
   description: text('description').notNull(),
   hashtags: jsonb('hashtags').notNull(),
   tags: jsonb('tags').notNull(),
   embedding: vector('embedding', { dimensions: 768 }), // For Google/Claude embeddings
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const passwordResetTokens = pgTable('password_reset_tokens', {
+export const passwordResetTokens = pgTable('chatscream_reset_tokens', {
   tokenHash: text('token_hash').primaryKey(),
-  uid: text('uid')
-    .notNull()
-    .references(() => users.uid, { onDelete: 'cascade' }),
-  expiresAt: timestamp('expires_at').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  usedAt: timestamp('used_at'),
+  data: jsonb('data').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sessions = pgTable('chatscream_sessions', {
   token: text('token').primaryKey(),
   data: jsonb('data').notNull(),
-  expiresAt: timestamp('expires_at').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

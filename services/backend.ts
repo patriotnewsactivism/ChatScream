@@ -129,7 +129,7 @@ const ensureActiveSession = (): StoredSession | null => {
   return null;
 };
 
-// Wraps a promise with a timeout — prevents Railway cold-start hangs from blocking the UI
+// Wraps a promise with a timeout — prevents Cloud Run cold-start hangs from blocking the UI
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
   return Promise.race([
     promise,

@@ -116,8 +116,23 @@ const OAuthCallback: React.FC = () => {
 
         const result = await handleOAuthCallback(searchParams);
         if (!result.success) {
+          const failureMessage = getProviderSpecificFailureMessage(platformLabel, result.error);
           setStatus('error');
-          setMessage(getProviderSpecificFailureMessage(platformLabel, result.error));
+          setMessage(failureMessage);
+          try {
+            if (window.opener && window.opener !== window) {
+              window.opener.postMessage(
+                {
+                  type: 'oauth:connected',
+                  platform: result.platform || platformLabel,
+                  error: failureMessage,
+                },
+                window.location.origin,
+              );
+            }
+          } catch {
+            // Ignore opener access failures; the callback page still shows the error.
+          }
           return;
         }
 

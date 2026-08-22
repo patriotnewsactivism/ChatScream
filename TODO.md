@@ -73,7 +73,7 @@ See §9 for full details.
 
 The #1 promised feature. OAuth connects and "Go Live" pushes video to YouTube.
 
-- [x] 🔴 **FFmpeg in Docker/deployment** — Included in the Dockerfile and Railway nixpacks config.
+- [x] 🔴 **FFmpeg in Docker/deployment** — Included in the Dockerfile used by Cloud Run.
 - [x] 🔴 **Validate FFmpeg availability on server startup** — `checkFfmpeg()` in `server/index.js` logs a clear warning if missing.
 - [x] 🔴 **FFmpeg args for WebSocket ingest** — No `-re` flag; `-fflags +nobuffer+flush_packets -flags low_delay` for low-latency live ingest.
 - [x] 🔴 **Default RTMP server URLs per platform** — `DEFAULT_RTMP_URLS` in `server/index.js` fills in the standard ingest URL when `serverUrl` is empty.
