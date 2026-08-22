@@ -11,6 +11,13 @@ interface AudioPipelineProps {
   isMicMuted: boolean;
 }
 
+declare global {
+  interface Window {
+    __chatscreamToggleAudienceMonitor?: () => Promise<void>;
+    __chatscreamAudienceMonitorEnabled?: boolean;
+  }
+}
+
 export const useAudioPipeline = (props: AudioPipelineProps) => {
   const {
     micStream,
@@ -26,6 +33,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const monitorAudioRef = useRef<HTMLAudioElement | null>(null);
+  const interceptedScreenStreamRef = useRef<MediaStream | null>(null);
 
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainRef = useRef<GainNode | null>(null);
@@ -39,6 +47,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
   const [levels] = useState({ mic: 0, music: 0, video: 0 });
   const [combinedStreamState, setCombinedStreamState] = useState<MediaStream | null>(null);
   const [audienceMonitorEnabled, setAudienceMonitorEnabled] = useState(false);
+  const [interceptedScreenStream, setInterceptedScreenStream] = useState<MediaStream | null>(null);
 
   const initAudio = useCallback(() => {
     if (audioContextRef.current) return;
@@ -106,15 +115,16 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
       try { screenSourceRef.current.disconnect(); } catch {}
       screenSourceRef.current = null;
     }
-    if (screenStream && screenStream.getAudioTracks().length > 0) {
+    const effectiveScreen = screenStream || interceptedScreenStream;
+    if (effectiveScreen && effectiveScreen.getAudioTracks().length > 0) {
       try {
-        screenSourceRef.current = ctx.createMediaStreamSource(screenStream);
+        screenSourceRef.current = ctx.createMediaStreamSource(effectiveScreen);
         screenSourceRef.current.connect(screenGainRef.current!);
       } catch (e) {
         console.warn('Screen-share audio connect error', e);
       }
     }
-  }, [screenStream]);
+  }, [screenStream, interceptedScreenStream]);
 
   useEffect(() => {
     const ctx = audioContextRef.current;
@@ -138,6 +148,44 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
     }
   }, [videoElement]);
 
+  // Capture system audio from ChatScream's own getDisplayMedia call even on builds
+  // that do not yet pass screenStream directly into this hook.
+  useEffect(() => {
+    const mediaDevices = navigator.mediaDevices as MediaDevices & {
+      getDisplayMedia?: (...args: any[]) => Promise<MediaStream>;
+    };
+    const original = mediaDevices?.getDisplayMedia;
+    if (!original || (original as any).__chatscreamWrapped) return;
+
+    const wrapped = async (...args: any[]) => {
+      const stream = await original.apply(mediaDevices, args as any);
+      interceptedScreenStreamRef.current = stream;
+      setInterceptedScreenStream(stream);
+      stream.getTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          if (interceptedScreenStreamRef.current === stream) {
+            interceptedScreenStreamRef.current = null;
+            setInterceptedScreenStream(null);
+          }
+        }, { once: true });
+      });
+      return stream;
+    };
+    (wrapped as any).__chatscreamWrapped = true;
+
+    try {
+      mediaDevices.getDisplayMedia = wrapped;
+    } catch {
+      // Some browsers expose a non-writable method; direct screenStream wiring still works there.
+    }
+
+    return () => {
+      try {
+        if (mediaDevices.getDisplayMedia === wrapped) mediaDevices.getDisplayMedia = original;
+      } catch {}
+    };
+  }, []);
+
   const toggleAudienceMonitor = useCallback(async () => {
     initAudio();
     const ctx = audioContextRef.current;
@@ -155,18 +203,32 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
       monitorAudioRef.current = audio;
     }
 
-    if (audienceMonitorEnabled) {
+    if (window.__chatscreamAudienceMonitorEnabled) {
       audio.pause();
       audio.srcObject = null;
+      window.__chatscreamAudienceMonitorEnabled = false;
       setAudienceMonitorEnabled(false);
+      window.dispatchEvent(new CustomEvent('chatscream-audience-monitor', { detail: false }));
       return;
     }
 
     audio.srcObject = stream;
     audio.volume = 1;
     await audio.play();
+    window.__chatscreamAudienceMonitorEnabled = true;
     setAudienceMonitorEnabled(true);
-  }, [audienceMonitorEnabled, initAudio]);
+    window.dispatchEvent(new CustomEvent('chatscream-audience-monitor', { detail: true }));
+  }, [initAudio]);
+
+  useEffect(() => {
+    window.__chatscreamToggleAudienceMonitor = toggleAudienceMonitor;
+    window.__chatscreamAudienceMonitorEnabled = audienceMonitorEnabled;
+    return () => {
+      if (window.__chatscreamToggleAudienceMonitor === toggleAudienceMonitor) {
+        delete window.__chatscreamToggleAudienceMonitor;
+      }
+    };
+  }, [toggleAudienceMonitor, audienceMonitorEnabled]);
 
   useEffect(() => {
     return () => {
@@ -175,6 +237,7 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
         audio.pause();
         audio.srcObject = null;
       }
+      window.__chatscreamAudienceMonitorEnabled = false;
     };
   }, []);
 
