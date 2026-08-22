@@ -92,7 +92,12 @@ export default async function handler(req, res) {
     const sizeBytes = Math.max(0, Number(body.sizeBytes) || 0);
     const durationSeconds = Math.max(0, Number(body.durationSeconds) || 0);
 
-    if (!id || !url || !/^https:\/\//i.test(url) || !storageKey.startsWith('recordings/')) {
+    if (
+      !id ||
+      (url && !/^https:\/\//i.test(url)) ||
+      !storageKey.startsWith('recordings/') ||
+      sizeBytes <= 0
+    ) {
       res.status(400).json({ message: 'Invalid recording metadata.' });
       return;
     }
