@@ -2,8 +2,8 @@
  * ChatScream Media Storage Abstraction
  *
  * Ordinary media uploads may fall back to local disk. Cloud recordings never
- * do: they require either S3-compatible object storage or an authenticated
- * HTTP object-storage gateway.
+ * do: they require either S3-compatible object storage or an authenticated,
+ * chunk-capable HTTP recording vault.
  */
 
 import fs from 'node:fs';
@@ -20,6 +20,10 @@ const S3_PUBLIC_URL = String(process.env.S3_PUBLIC_URL || '').trim();
 
 const HTTP_STORAGE_URL = String(process.env.RECORDING_STORAGE_HTTP_URL || '').trim();
 const HTTP_STORAGE_TOKEN = String(process.env.RECORDING_STORAGE_HTTP_TOKEN || '').trim();
+const HTTP_PART_BYTES = Math.min(
+  Math.max(Number(process.env.RECORDING_STORAGE_HTTP_PART_BYTES || 16 * 1024 * 1024), 1024 * 1024),
+  16 * 1024 * 1024,
+);
 
 export const isS3Enabled = Boolean(S3_BUCKET && S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY);
 export const isHttpRecordingStorageEnabled = Boolean(HTTP_STORAGE_URL && HTTP_STORAGE_TOKEN);
@@ -59,9 +63,12 @@ const publicUrlForKey = (key) =>
     ? `${S3_PUBLIC_URL.replace(/\/+$/, '')}/${key}`
     : `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
 
-const buildHttpStorageUrl = (key) => {
+const buildHttpStorageUrl = (key, params = {}) => {
   const target = new URL(HTTP_STORAGE_URL);
   target.searchParams.set('key', key);
+  for (const [name, value] of Object.entries(params)) {
+    target.searchParams.set(name, String(value));
+  }
   return target.toString();
 };
 
@@ -69,6 +76,52 @@ const httpStorageHeaders = (extra = {}) => ({
   authorization: `Bearer ${HTTP_STORAGE_TOKEN}`,
   ...extra,
 });
+
+const readHttpManifest = async (key) => {
+  const response = await fetch(buildHttpStorageUrl(key), {
+    headers: httpStorageHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(`Recording manifest unavailable (${response.status}).`);
+  }
+  const manifest = await response.json();
+  const parts = Number(manifest.parts);
+  const sizeBytes = Number(manifest.sizeBytes);
+  if (!Number.isInteger(parts) || parts < 1 || !Number.isFinite(sizeBytes) || sizeBytes < 1) {
+    throw new Error('Recording vault returned an invalid manifest.');
+  }
+  return { ...manifest, parts, sizeBytes };
+};
+
+const putHttpPart = async (key, part, bytes, contentType = 'application/octet-stream') => {
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: contentType }), `part-${part}.bin`);
+  const response = await fetch(
+    buildHttpStorageUrl(key, { action: 'part', part }),
+    {
+      method: 'POST',
+      headers: httpStorageHeaders(),
+      body: form,
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Recording part ${part} upload failed: ${response.status} ${detail}`.trim());
+  }
+};
+
+const completeHttpRecording = async ({ key, parts, sizeBytes, contentType, contentDisposition }) => {
+  const response = await fetch(buildHttpStorageUrl(key, { action: 'complete' }), {
+    method: 'POST',
+    headers: httpStorageHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ parts, sizeBytes, contentType, contentDisposition }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Recording manifest commit failed: ${response.status} ${detail}`.trim());
+  }
+  return response.json().catch(() => ({}));
+};
 
 export const uploadFile = async (file, baseUrl = '') => {
   const ext = path.extname(file.originalname || '');
@@ -123,6 +176,7 @@ export const uploadRecordingFile = async ({
   const safeId = String(recordingId || randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '_');
   const key = `recordings/${safeUser}/${safeId}.mkv`;
   const stat = fs.statSync(filePath);
+  const contentDisposition = `attachment; filename="chatscream-${safeId}.mkv"`;
 
   const client = await getS3Client();
   if (client) {
@@ -134,7 +188,7 @@ export const uploadRecordingFile = async ({
         Body: fs.createReadStream(filePath),
         ContentLength: stat.size,
         ContentType: contentType,
-        ContentDisposition: `attachment; filename="chatscream-${safeId}.mkv"`,
+        ContentDisposition: contentDisposition,
         CacheControl: 'private, max-age=0, no-cache',
       }),
     );
@@ -147,26 +201,42 @@ export const uploadRecordingFile = async ({
   }
 
   if (isHttpRecordingStorageEnabled) {
-    const response = await fetch(buildHttpStorageUrl(key), {
-      method: 'PUT',
-      headers: httpStorageHeaders({
-        'content-type': contentType,
-        'content-length': String(stat.size),
-        'content-disposition': `attachment; filename="chatscream-${safeId}.mkv"`,
-      }),
-      body: fs.createReadStream(filePath),
-      duplex: 'half',
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`Recording storage upload failed: ${response.status} ${detail}`.trim());
+    const fd = fs.openSync(filePath, 'r');
+    let part = 0;
+    let offset = 0;
+    try {
+      while (offset < stat.size) {
+        const length = Math.min(HTTP_PART_BYTES, stat.size - offset);
+        const buffer = Buffer.allocUnsafe(length);
+        const bytesRead = fs.readSync(fd, buffer, 0, length, offset);
+        if (bytesRead <= 0) throw new Error(`Could not read recording at byte ${offset}.`);
+        await putHttpPart(key, part, buffer.subarray(0, bytesRead));
+        offset += bytesRead;
+        part += 1;
+      }
+    } catch (error) {
+      await fetch(buildHttpStorageUrl(key), {
+        method: 'DELETE',
+        headers: httpStorageHeaders(),
+      }).catch(() => {});
+      throw error;
+    } finally {
+      fs.closeSync(fd);
     }
-    const data = await response.json().catch(() => ({}));
+
+    await completeHttpRecording({
+      key,
+      parts: part,
+      sizeBytes: stat.size,
+      contentType,
+      contentDisposition,
+    });
+
     return {
-      url: String(data.url || ''),
-      key: String(data.key || key),
+      url: '',
+      key,
       storage: 'http',
-      sizeBytes: Number(data.sizeBytes || stat.size),
+      sizeBytes: stat.size,
     };
   }
 
@@ -184,17 +254,27 @@ export const getRecordingObject = async (key) => {
   }
 
   if (isHttpRecordingStorageEnabled) {
-    const response = await fetch(buildHttpStorageUrl(key), {
-      headers: httpStorageHeaders(),
-    });
-    if (!response.ok || !response.body) throw new Error('Recording object unavailable.');
+    const manifest = await readHttpManifest(key);
+    const body = Readable.from(
+      (async function* () {
+        for (let part = 0; part < manifest.parts; part += 1) {
+          const response = await fetch(buildHttpStorageUrl(key, { part }), {
+            headers: httpStorageHeaders(),
+          });
+          if (!response.ok) {
+            throw new Error(`Recording part ${part} unavailable (${response.status}).`);
+          }
+          yield Buffer.from(await response.arrayBuffer());
+        }
+      })(),
+    );
     return {
-      ContentType: response.headers.get('content-type') || 'video/x-matroska',
-      ContentLength: Number(response.headers.get('content-length') || 0) || undefined,
+      ContentType: String(manifest.contentType || 'video/x-matroska'),
+      ContentLength: manifest.sizeBytes,
       ContentDisposition:
-        response.headers.get('content-disposition') ||
+        String(manifest.contentDisposition || '') ||
         'attachment; filename="chatscream-recording.mkv"',
-      Body: Readable.fromWeb(response.body),
+      Body: body,
     };
   }
 
@@ -258,9 +338,7 @@ export const testRecordingStorage = async () => {
         }),
       );
       const fetched = await client.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-      const body = fetched.Body?.transformToString
-        ? await fetched.Body.transformToString()
-        : '';
+      const body = fetched.Body?.transformToString ? await fetched.Body.transformToString() : '';
       if (body !== payload.toString()) throw new Error('Storage read-back verification failed.');
       return { ok: true, backend: 's3' };
     } finally {
@@ -268,24 +346,32 @@ export const testRecordingStorage = async () => {
     }
   }
 
-  const target = buildHttpStorageUrl(key);
-  const put = await fetch(target, {
-    method: 'PUT',
-    headers: httpStorageHeaders({
-      'content-type': 'text/plain',
-      'content-length': String(payload.length),
-    }),
-    body: payload,
-  });
-  if (!put.ok) throw new Error(`Storage write test failed (${put.status}).`);
+  await putHttpPart(key, 0, payload, 'text/plain');
   try {
-    const get = await fetch(target, { headers: httpStorageHeaders() });
-    if (!get.ok || (await get.text()) !== payload.toString()) {
+    await completeHttpRecording({
+      key,
+      parts: 1,
+      sizeBytes: payload.length,
+      contentType: 'text/plain',
+      contentDisposition: 'attachment; filename="selftest.txt"',
+    });
+    const manifest = await readHttpManifest(key);
+    const get = await fetch(buildHttpStorageUrl(key, { part: 0 }), {
+      headers: httpStorageHeaders(),
+    });
+    if (
+      !get.ok ||
+      manifest.sizeBytes !== payload.length ||
+      (await get.text()) !== payload.toString()
+    ) {
       throw new Error('Storage read-back verification failed.');
     }
-    return { ok: true, backend: 'http' };
+    return { ok: true, backend: 'http', partBytes: HTTP_PART_BYTES };
   } finally {
-    await fetch(target, { method: 'DELETE', headers: httpStorageHeaders() }).catch(() => {});
+    await fetch(buildHttpStorageUrl(key), {
+      method: 'DELETE',
+      headers: httpStorageHeaders(),
+    }).catch(() => {});
   }
 };
 
@@ -294,6 +380,7 @@ export const getStorageInfo = () => ({
   bucket: isS3Enabled ? S3_BUCKET : null,
   region: isS3Enabled ? S3_REGION : null,
   persistentRecordings: persistentRecordingStorageEnabled,
+  recordingPartBytes: isHttpRecordingStorageEnabled ? HTTP_PART_BYTES : null,
   warning: persistentRecordingStorageEnabled
     ? null
     : 'Using local filesystem storage. Persistent cloud recordings require S3-compatible storage or an authenticated recording-storage gateway.',
