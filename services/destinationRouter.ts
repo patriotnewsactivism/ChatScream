@@ -27,6 +27,9 @@ export class DestinationRouter {
   private intentionalDisconnect = false;
   private relaySessionId = '';
   private destinations: Destination[] = [];
+  private pendingChunks: Blob[] = [];
+  private pendingBytes = 0;
+  private readonly maxPendingBytes = 12 * 1024 * 1024;
 
   constructor(
     _userPlan: string,
@@ -48,6 +51,13 @@ export class DestinationRouter {
     return `${wsBase}/ws/ingest?session=${encodeURIComponent(this.relaySessionId)}`;
   }
 
+  private flushPendingChunks() {
+    if (this.ws?.readyState !== WebSocket.OPEN || this.pendingChunks.length === 0) return;
+    for (const chunk of this.pendingChunks) this.ws.send(chunk);
+    this.pendingChunks = [];
+    this.pendingBytes = 0;
+  }
+
   private async openRelaySocket(): Promise<void> {
     const token = getCurrentSessionToken();
     if (!token) throw new Error('You must be signed in to start a broadcast.');
@@ -59,9 +69,7 @@ export class DestinationRouter {
       let authenticated = false;
       const timeout = window.setTimeout(() => reject(new Error('Relay connection timed out')), 12000);
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'auth', token }));
-      };
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
 
       ws.onerror = () => {
         window.clearTimeout(timeout);
@@ -86,7 +94,8 @@ export class DestinationRouter {
                 name: d.name,
               })),
             }));
-            this.startRecording();
+            if (!this.recorder) this.startRecording();
+            this.flushPendingChunks();
             resolve();
             return;
           }
@@ -138,7 +147,6 @@ export class DestinationRouter {
   private scheduleReconnect() {
     if (this.reconnectTimer || this.intentionalDisconnect) return;
     this.status = 'reconnecting';
-    this.stopRecorderOnly();
     const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 5000);
     this.reconnectAttempts++;
     this.reconnectTimer = window.setTimeout(async () => {
@@ -153,8 +161,7 @@ export class DestinationRouter {
   }
 
   private startRecording() {
-    if (!this.stream) return;
-    this.stopRecorderOnly();
+    if (!this.stream || this.recorder) return;
     let options: MediaRecorderOptions = { mimeType: 'video/webm;codecs=vp8,opus' };
     if (MediaRecorder.isTypeSupported('video/webm;codecs=h264,aac')) {
       options = { mimeType: 'video/webm;codecs=h264,aac' };
@@ -167,9 +174,19 @@ export class DestinationRouter {
       this.recorder = new MediaRecorder(this.stream);
     }
     this.recorder.ondataavailable = (evt) => {
-      if (evt.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) this.ws.send(evt.data);
+      if (evt.data.size <= 0) return;
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(evt.data);
+        return;
+      }
+      this.pendingChunks.push(evt.data);
+      this.pendingBytes += evt.data.size;
+      while (this.pendingBytes > this.maxPendingBytes && this.pendingChunks.length > 1) {
+        const removed = this.pendingChunks.shift();
+        if (removed) this.pendingBytes -= removed.size;
+      }
     };
-    this.recorder.start(1000);
+    this.recorder.start(500);
   }
 
   private stopRecorderOnly() {
@@ -177,6 +194,8 @@ export class DestinationRouter {
       try { this.recorder.stop(); } catch {}
     }
     this.recorder = null;
+    this.pendingChunks = [];
+    this.pendingBytes = 0;
   }
 
   public async route(stream: MediaStream, destinations: Destination[]): Promise<void> {
@@ -209,10 +228,10 @@ export class DestinationRouter {
     this.intentionalDisconnect = true;
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
-    this.stopRecorderOnly();
     if (this.ws?.readyState === WebSocket.OPEN) {
       try { this.ws.send(JSON.stringify({ type: 'stop' })); } catch {}
     }
+    this.stopRecorderOnly();
     try { this.ws?.close(); } catch {}
     this.ws = null;
     for (const destId of this.activeConnections.keys()) this.updateDestinationStatus(destId, 'offline');
@@ -272,6 +291,7 @@ export class DestinationRouter {
       total: values.length,
       live: values.filter((c) => c.status === 'live').length,
       reconnecting: this.status === 'reconnecting',
+      bufferedBytes: this.pendingBytes,
       error: values.some((c) => c.status === 'error') ? 1 : 0,
     };
   }

@@ -1,4 +1,5 @@
 import app from '../server/app.js';
+import recordingsHandler from './recordings.js';
 
 const normalizePathSegment = (value) => {
   if (Array.isArray(value)) {
@@ -26,6 +27,13 @@ export default (req, res) => {
   incoming.searchParams.delete('path');
   const nextQuery = incoming.searchParams.toString();
   req.url = nextQuery ? `${targetPath}?${nextQuery}` : targetPath;
+
+  // Keep ChatScream on one Vercel API entrypoint. The project rewrites /api/*
+  // to this handler, so specialized routes must dispatch here before Express.
+  if (targetPath === '/api/recordings') {
+    return recordingsHandler(req, res);
+  }
+
   return app(req, res);
 };
 
