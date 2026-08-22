@@ -1,4 +1,4 @@
-import { FC, ReactNode } from 'react';
+import { FC, ReactNode, useEffect, useState } from 'react';
 import { Headphones, Mic, MicOff, Music, Film, Volume2, VolumeX } from 'lucide-react';
 
 interface AudioMixerProps {
@@ -39,9 +39,27 @@ const AudioMixer: FC<AudioMixerProps> = ({
   videoLevel = 0,
   isMicMuted = false,
   onMicMuteToggle,
-  audienceMonitorEnabled = false,
+  audienceMonitorEnabled,
   onAudienceMonitorToggle,
 }) => {
+  const [globalMonitorEnabled, setGlobalMonitorEnabled] = useState(
+    () => Boolean(typeof window !== 'undefined' && window.__chatscreamAudienceMonitorEnabled),
+  );
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<boolean>;
+      setGlobalMonitorEnabled(Boolean(custom.detail));
+    };
+    window.addEventListener('chatscream-audience-monitor', handler);
+    return () => window.removeEventListener('chatscream-audience-monitor', handler);
+  }, []);
+
+  const effectiveMonitorEnabled = audienceMonitorEnabled ?? globalMonitorEnabled;
+  const toggleMonitor = onAudienceMonitorToggle || (() => {
+    void window.__chatscreamToggleAudienceMonitor?.();
+  });
+
   const renderSlider = (
     label: string,
     icon: ReactNode,
@@ -124,27 +142,25 @@ const AudioMixer: FC<AudioMixerProps> = ({
         </button>
       )}
 
-      {onAudienceMonitorToggle && (
-        <button
-          type="button"
-          onClick={onAudienceMonitorToggle}
-          className={`w-full mb-3 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
-            audienceMonitorEnabled
-              ? 'bg-cyan-950/50 border-cyan-500/70 text-cyan-200'
-              : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-cyan-500/60'
-          }`}
-          aria-pressed={audienceMonitorEnabled}
-          title="Monitor the exact pre-relay audience audio mix with minimum local latency. Headphones strongly recommended."
-        >
-          <span className="flex items-center gap-2">
-            <Headphones size={20} /> Live Monitor
-          </span>
-          <span className="text-xs tracking-wider">{audienceMonitorEnabled ? 'HEARING MIX' : 'OFF'}</span>
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={toggleMonitor}
+        className={`w-full mb-3 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
+          effectiveMonitorEnabled
+            ? 'bg-cyan-950/50 border-cyan-500/70 text-cyan-200'
+            : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-cyan-500/60'
+        }`}
+        aria-pressed={effectiveMonitorEnabled}
+        title="Monitor the exact pre-relay audience audio mix with minimum local latency. Headphones strongly recommended."
+      >
+        <span className="flex items-center gap-2">
+          <Headphones size={20} /> Live Monitor
+        </span>
+        <span className="text-xs tracking-wider">{effectiveMonitorEnabled ? 'HEARING MIX' : 'OFF'}</span>
+      </button>
 
       <p className="text-[11px] leading-4 text-gray-400 mb-4">
-        {audienceMonitorEnabled
+        {effectiveMonitorEnabled
           ? 'You are hearing the outgoing audience mix before internet/platform delay. Use headphones to avoid feedback.'
           : isMicMuted
             ? 'Your microphone and nearby background sound are excluded. Screen-share, video and music audio stay independent.'
