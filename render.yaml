@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: chatscream-api
+    runtime: docker
+    region: oregon
+    plan: starter
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile.backend
+    dockerContext: .
+    healthCheckPath: /api/public/capabilities
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: POSTGRES_URL
+        sync: false
+      - key: POSTGRES_SSL
+        value: "true"
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_TLS
+        value: "true"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_GRAPH_API_VERSION
+        value: v26.0
+      - key: TWITCH_CLIENT_ID
+        sync: false
+      - key: TWITCH_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+      - key: AUTH_STATE_SECRET
+        generateValue: true
+      - key: APP_BASE_URL
+        value: https://www.chatscream.live
+      - key: CORS_ORIGINS
+        value: https://www.chatscream.live,https://chatscream.live,https://chatscream.vercel.app
