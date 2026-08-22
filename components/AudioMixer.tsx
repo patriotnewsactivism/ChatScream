@@ -8,27 +8,19 @@ interface AudioMixerProps {
   onMicVolumeChange: (val: number) => void;
   onMusicVolumeChange: (val: number) => void;
   onVideoVolumeChange: (val: number) => void;
-  // Real-time audio level props (0-1 normalized)
   micLevel?: number;
   musicLevel?: number;
   videoLevel?: number;
-  // Mute state and toggle
   isMicMuted?: boolean;
   onMicMuteToggle?: () => void;
 }
 
-// Level meter component that shows real-time audio level
 const LevelMeter: FC<{ level: number; color: string }> = ({ level, color }) => {
-  // Normalize level (0-1) and add some visual scaling
   const normalizedLevel = Math.min(Math.max(level, 0), 1);
-  const displayWidth = Math.pow(normalizedLevel, 0.7) * 100; // Apply curve for better visual response
-
+  const displayWidth = Math.pow(normalizedLevel, 0.7) * 100;
   return (
     <div className="h-1.5 w-full bg-gray-700 rounded overflow-hidden mt-1">
-      <div
-        className={`h-full ${color} transition-all duration-75`}
-        style={{ width: `${displayWidth}%` }}
-      />
+      <div className={`h-full ${color} transition-all duration-75`} style={{ width: `${displayWidth}%` }} />
     </div>
   );
 };
@@ -44,9 +36,8 @@ const AudioMixer: FC<AudioMixerProps> = ({
   musicLevel = 0,
   videoLevel = 0,
   isMicMuted = false,
-  onMicMuteToggle
+  onMicMuteToggle,
 }) => {
-
   const renderSlider = (
     label: string,
     icon: ReactNode,
@@ -57,10 +48,9 @@ const AudioMixer: FC<AudioMixerProps> = ({
     levelColorClass: string,
     level: number,
     isMuted?: boolean,
-    onMuteToggle?: () => void
+    onMuteToggle?: () => void,
   ) => (
     <div className="flex items-center gap-3 mb-4 last:mb-0">
-      {/* Icon/Mute button */}
       {onMuteToggle ? (
         <button
           onClick={onMuteToggle}
@@ -71,9 +61,9 @@ const AudioMixer: FC<AudioMixerProps> = ({
                 ? 'bg-gray-700 text-gray-400'
                 : `${colorClass} hover:opacity-80`
           }`}
-          title={isMuted ? 'Unmute' : 'Mute'}
+          title={isMuted ? 'Turn audience microphone on' : 'Mute audience microphone'}
         >
-          {isMuted ? mutedIcon : (value === 0 ? <VolumeX size={16} /> : icon)}
+          {isMuted ? mutedIcon : value === 0 ? <VolumeX size={16} /> : icon}
         </button>
       ) : (
         <div className={`p-2 rounded-lg ${value === 0 ? 'bg-gray-700 text-gray-400' : colorClass}`}>
@@ -98,74 +88,84 @@ const AudioMixer: FC<AudioMixerProps> = ({
             isMuted ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         />
-        {/* Real-time level meter */}
-        <LevelMeter
-          level={isMuted ? 0 : level}
-          color={levelColorClass}
-        />
+        <LevelMeter level={isMuted ? 0 : level} color={levelColorClass} />
       </div>
     </div>
   );
 
+  const programAudioActive = musicLevel > 0.01 || videoLevel > 0.01;
+
   return (
-    <div className="bg-dark-800 p-4 rounded-lg border border-gray-700 w-64 shadow-xl">
-      <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2">
-        <Volume2 size={14} /> Audio Mixer
+    <div className="bg-dark-800 p-4 rounded-lg border border-gray-700 w-72 shadow-xl">
+      <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
+        <Volume2 size={14} /> Audience Audio
       </h3>
 
-      {/* Microphone with mute toggle */}
+      {onMicMuteToggle && (
+        <button
+          type="button"
+          onClick={onMicMuteToggle}
+          className={`w-full mb-4 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
+            isMicMuted
+              ? 'bg-red-950/40 border-red-700/60 text-red-300 hover:bg-red-900/50'
+              : 'bg-green-950/40 border-green-600/60 text-green-300 hover:bg-green-900/50'
+          }`}
+          aria-pressed={!isMicMuted}
+        >
+          <span className="flex items-center gap-2">
+            {isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            Audience Mic
+          </span>
+          <span className="text-xs tracking-wider">{isMicMuted ? 'MUTED' : 'LIVE'}</span>
+        </button>
+      )}
+
+      <p className="text-[11px] leading-4 text-gray-400 mb-4">
+        {isMicMuted
+          ? 'Your microphone and nearby background sound are excluded from the broadcast. Program, screen-share, video and music audio stay independent.'
+          : 'Your microphone is being mixed into what the audience hears. Local monitoring does not play your mic back to you.'}
+      </p>
+
       {renderSlider(
-        "Microphone",
+        'Mic level to audience',
         <Mic size={16} />,
         <MicOff size={16} />,
         micVolume,
         onMicVolumeChange,
-        "bg-red-500/20 text-red-500",
-        "bg-gradient-to-r from-red-500 to-red-400",
+        'bg-green-500/20 text-green-400',
+        'bg-gradient-to-r from-green-500 to-green-400',
         micLevel,
         isMicMuted,
-        onMicMuteToggle
+        onMicMuteToggle,
       )}
 
-      {/* Video Clip */}
       {renderSlider(
-        "Video Clip",
+        'Video / Program Audio',
         <Film size={16} />,
         null,
         videoVolume,
         onVideoVolumeChange,
-        "bg-blue-500/20 text-blue-500",
-        "bg-gradient-to-r from-blue-500 to-blue-400",
-        videoLevel
+        'bg-blue-500/20 text-blue-500',
+        'bg-gradient-to-r from-blue-500 to-blue-400',
+        videoLevel,
       )}
 
-      {/* Music / SFX */}
       {renderSlider(
-        "Music / SFX",
+        'Music / SFX',
         <Music size={16} />,
         null,
         musicVolume,
         onMusicVolumeChange,
-        "bg-purple-500/20 text-purple-500",
-        "bg-gradient-to-r from-purple-500 to-purple-400",
-        musicLevel
+        'bg-purple-500/20 text-purple-500',
+        'bg-gradient-to-r from-purple-500 to-purple-400',
+        musicLevel,
       )}
 
-      {/* Audio status indicator */}
-      <div className="mt-4 pt-3 border-t border-gray-700">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">Output Level</span>
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              (micLevel > 0.01 || musicLevel > 0.01 || videoLevel > 0.01)
-                ? 'bg-green-500 animate-pulse'
-                : 'bg-gray-600'
-            }`} />
-            <span className="text-gray-400">
-              {(micLevel > 0.01 || musicLevel > 0.01 || videoLevel > 0.01) ? 'Active' : 'Silent'}
-            </span>
-          </div>
-        </div>
+      <div className="mt-4 pt-3 border-t border-gray-700 text-xs flex items-center justify-between">
+        <span className="text-gray-500">Audience hears</span>
+        <span className="text-gray-300">
+          {!isMicMuted && micLevel > 0.01 ? 'Mic + program' : programAudioActive ? 'Program only' : 'Silence'}
+        </span>
       </div>
     </div>
   );
