@@ -148,8 +148,6 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
     }
   }, [videoElement]);
 
-  // Capture system audio from ChatScream's own getDisplayMedia call even on builds
-  // that do not yet pass screenStream directly into this hook.
   useEffect(() => {
     const mediaDevices = navigator.mediaDevices as MediaDevices & {
       getDisplayMedia?: (...args: any[]) => Promise<MediaStream>;
@@ -198,7 +196,6 @@ export const useAudioPipeline = (props: AudioPipelineProps) => {
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
-      audio.playsInline = true;
       audio.preload = 'auto';
       monitorAudioRef.current = audio;
     }
