@@ -118,11 +118,20 @@ export const uploadRecordingFile = async ({ filePath, userId, recordingId, conte
   );
 
   return {
-    url: publicUrlForKey(key),
+    url: S3_PUBLIC_URL ? publicUrlForKey(key) : '',
     key,
     storage: 's3',
     sizeBytes: stat.size,
   };
+};
+
+/** Fetch a private recording object for authenticated relay download streaming. */
+export const getRecordingObject = async (key) => {
+  const client = await getS3Client();
+  if (!client) throw new Error('Persistent cloud object storage is not configured.');
+  if (!String(key || '').startsWith('recordings/')) throw new Error('Invalid recording key.');
+  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+  return client.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
 };
 
 export const deleteFile = async (key) => {
@@ -156,4 +165,11 @@ export const getStorageInfo = () => ({
     : 'Using local filesystem storage. Persistent cloud recordings require S3-compatible object storage.',
 });
 
-export default { uploadFile, uploadRecordingFile, deleteFile, getStorageInfo, isS3Enabled };
+export default {
+  uploadFile,
+  uploadRecordingFile,
+  getRecordingObject,
+  deleteFile,
+  getStorageInfo,
+  isS3Enabled,
+};
