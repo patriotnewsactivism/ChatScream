@@ -1,5 +1,5 @@
 import { FC, ReactNode } from 'react';
-import { Mic, MicOff, Music, Film, Volume2, VolumeX } from 'lucide-react';
+import { Headphones, Mic, MicOff, Music, Film, Volume2, VolumeX } from 'lucide-react';
 
 interface AudioMixerProps {
   micVolume: number;
@@ -13,6 +13,8 @@ interface AudioMixerProps {
   videoLevel?: number;
   isMicMuted?: boolean;
   onMicMuteToggle?: () => void;
+  audienceMonitorEnabled?: boolean;
+  onAudienceMonitorToggle?: () => void;
 }
 
 const LevelMeter: FC<{ level: number; color: string }> = ({ level, color }) => {
@@ -37,6 +39,8 @@ const AudioMixer: FC<AudioMixerProps> = ({
   videoLevel = 0,
   isMicMuted = false,
   onMicMuteToggle,
+  audienceMonitorEnabled = false,
+  onAudienceMonitorToggle,
 }) => {
   const renderSlider = (
     label: string,
@@ -105,7 +109,7 @@ const AudioMixer: FC<AudioMixerProps> = ({
         <button
           type="button"
           onClick={onMicMuteToggle}
-          className={`w-full mb-4 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
+          className={`w-full mb-3 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
             isMicMuted
               ? 'bg-red-950/40 border-red-700/60 text-red-300 hover:bg-red-900/50'
               : 'bg-green-950/40 border-green-600/60 text-green-300 hover:bg-green-900/50'
@@ -120,10 +124,31 @@ const AudioMixer: FC<AudioMixerProps> = ({
         </button>
       )}
 
+      {onAudienceMonitorToggle && (
+        <button
+          type="button"
+          onClick={onAudienceMonitorToggle}
+          className={`w-full mb-3 rounded-xl border px-4 py-3 flex items-center justify-between font-bold transition-all ${
+            audienceMonitorEnabled
+              ? 'bg-cyan-950/50 border-cyan-500/70 text-cyan-200'
+              : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-cyan-500/60'
+          }`}
+          aria-pressed={audienceMonitorEnabled}
+          title="Monitor the exact pre-relay audience audio mix with minimum local latency. Headphones strongly recommended."
+        >
+          <span className="flex items-center gap-2">
+            <Headphones size={20} /> Live Monitor
+          </span>
+          <span className="text-xs tracking-wider">{audienceMonitorEnabled ? 'HEARING MIX' : 'OFF'}</span>
+        </button>
+      )}
+
       <p className="text-[11px] leading-4 text-gray-400 mb-4">
-        {isMicMuted
-          ? 'Your microphone and nearby background sound are excluded from the broadcast. Program, screen-share, video and music audio stay independent.'
-          : 'Your microphone is being mixed into what the audience hears. Local monitoring does not play your mic back to you.'}
+        {audienceMonitorEnabled
+          ? 'You are hearing the outgoing audience mix before internet/platform delay. Use headphones to avoid feedback.'
+          : isMicMuted
+            ? 'Your microphone and nearby background sound are excluded. Screen-share, video and music audio stay independent.'
+            : 'Your microphone is being mixed into what the audience hears.'}
       </p>
 
       {renderSlider(
