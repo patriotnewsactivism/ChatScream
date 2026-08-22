@@ -25,16 +25,19 @@ const HTTP_PART_BYTES = Math.min(
   16 * 1024 * 1024,
 );
 
-export const isS3Enabled = Boolean(S3_BUCKET && S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY);
+const directS3Enabled = Boolean(S3_BUCKET && S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY);
 export const isHttpRecordingStorageEnabled = Boolean(HTTP_STORAGE_URL && HTTP_STORAGE_TOKEN);
 export const persistentRecordingStorageEnabled =
-  isS3Enabled || isHttpRecordingStorageEnabled;
+  directS3Enabled || isHttpRecordingStorageEnabled;
+// Backward-compatible capability flag consumed by relay.js. Historically this
+// meant S3 specifically; it now means any durable recording backend.
+export const isS3Enabled = persistentRecordingStorageEnabled;
 
 let s3Client = null;
 
 const getS3Client = async () => {
   if (s3Client) return s3Client;
-  if (!isS3Enabled) return null;
+  if (!directS3Enabled) return null;
 
   try {
     const { S3Client } = await import('@aws-sdk/client-s3');
@@ -323,7 +326,7 @@ export const testRecordingStorage = async () => {
   const key = `recordings/_selftest/${Date.now()}-${randomUUID()}.txt`;
   const payload = Buffer.from('chatscream-storage-selftest');
 
-  if (isS3Enabled) {
+  if (directS3Enabled) {
     const client = await getS3Client();
     const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = await import(
       '@aws-sdk/client-s3'
@@ -376,9 +379,9 @@ export const testRecordingStorage = async () => {
 };
 
 export const getStorageInfo = () => ({
-  backend: isS3Enabled ? 's3' : isHttpRecordingStorageEnabled ? 'http' : 'local',
-  bucket: isS3Enabled ? S3_BUCKET : null,
-  region: isS3Enabled ? S3_REGION : null,
+  backend: directS3Enabled ? 's3' : isHttpRecordingStorageEnabled ? 'http' : 'local',
+  bucket: directS3Enabled ? S3_BUCKET : null,
+  region: directS3Enabled ? S3_REGION : null,
   persistentRecordings: persistentRecordingStorageEnabled,
   recordingPartBytes: isHttpRecordingStorageEnabled ? HTTP_PART_BYTES : null,
   warning: persistentRecordingStorageEnabled
