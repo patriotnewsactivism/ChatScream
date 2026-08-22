@@ -10,10 +10,11 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import RecordingLibraryShortcut from './components/RecordingLibraryShortcut';
 
-// Lazy load heavy components for code splitting
 const Studio = lazy(() => import('./App'));
 const CreatorDashboard = lazy(() => import('./pages/CreatorDashboard'));
+const RecordingsPage = lazy(() => import('./pages/RecordingsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'));
 const GuestPage = lazy(() => import('./pages/GuestPage'));
@@ -28,7 +29,6 @@ const BlogPage = lazy(() => import('./pages/BlogPage'));
 const CareersPage = lazy(() => import('./pages/CareersPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 
-// Loading component for Suspense fallback
 const PageLoader: React.FC = () => {
   const [slow, setSlow] = React.useState(false);
   React.useEffect(() => {
@@ -45,10 +45,7 @@ const PageLoader: React.FC = () => {
         {slow ? (
           <p className="text-sm text-gray-500 max-w-xs mx-auto">
             Taking a moment... If this persists,{' '}
-            <button
-              className="underline text-brand-400"
-              onClick={() => window.location.reload()}
-            >
+            <button className="underline text-brand-400" onClick={() => window.location.reload()}>
               refresh the page
             </button>
             .
@@ -61,8 +58,6 @@ const PageLoader: React.FC = () => {
   );
 };
 
-
-// Sentry User Context Provider
 const SentryUserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
 
@@ -81,13 +76,11 @@ const SentryUserProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return <>{children}</>;
 };
 
-// App Router Component with Suspense for lazy-loaded components
 const AppRouter: React.FC = () => {
   return (
     <ChunkErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          {/* Public Routes - LandingPage and AuthPage are not lazy for fast initial load */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<AuthPage />} />
           <Route path="/signup" element={<AuthPage />} />
@@ -101,12 +94,19 @@ const AppRouter: React.FC = () => {
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/contact" element={<ContactPage />} />
 
-          {/* Protected Routes */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
                 <CreatorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recordings"
+            element={
+              <ProtectedRoute>
+                <RecordingsPage />
               </ProtectedRoute>
             }
           />
@@ -127,14 +127,9 @@ const AppRouter: React.FC = () => {
             }
           />
 
-          {/* Guest camera join page — public, no auth required */}
           <Route path="/guest/:roomId" element={<GuestPage />} />
-
-          {/* ChatScream viewer donation page and post-checkout confirmation — public */}
           <Route path="/scream/:streamerUid" element={<ScreamPage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
-
-          {/* Fallback */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
@@ -142,7 +137,6 @@ const AppRouter: React.FC = () => {
   );
 };
 
-// Main App with Providers and Global Error Boundary
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
@@ -150,6 +144,7 @@ const App: React.FC = () => {
         <AuthProvider>
           <SentryUserProvider>
             <AppRouter />
+            <RecordingLibraryShortcut />
             <PWAInstallPrompt />
           </SentryUserProvider>
         </AuthProvider>
