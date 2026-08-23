@@ -12,7 +12,7 @@ export interface PricingPlan {
   limits: {
     destinations: number;
     localStreamHours: number; // Unlimited for all plans (device streaming)
-    cloudStreamHours: number; // VM-based streaming hours
+    cloudStreamHours: number; // Browser-independent cloud broadcast hours
     chatScreams: number;
     storage: number; // GB
   };
@@ -21,27 +21,28 @@ export interface PricingPlan {
   hasWatermark: boolean;
 }
 
-// Plan tier type for easy reference
-export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise';
+// Internal IDs preserve backward compatibility with existing subscriptions.
+export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise' | 'business';
 
 export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'free',
     name: 'Free',
-    description: 'Perfect for trying out ChatScream',
+    description: 'Try ChatScream with essential live streaming',
     price: 0,
     interval: 'month',
     features: [
-      '1 streaming destination',
+      '2 streaming destinations',
       'Unlimited local device streaming',
-      '0 cloud VM streaming hours',
+      '0 cloud broadcast hours',
       '720p streaming quality',
       'Basic overlays',
       'ChatScream watermark on stream',
+      '1 GB DVR storage',
     ],
     limits: {
-      destinations: 1,
-      localStreamHours: -1, // -1 = unlimited
+      destinations: 2,
+      localStreamHours: -1,
       cloudStreamHours: 0,
       chatScreams: 0,
       storage: 1,
@@ -52,90 +53,120 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'pro',
     name: 'Starter',
-    description: 'Multi-streaming basics + no watermark',
+    description: 'Affordable multi-streaming with cloud broadcast access',
     price: 19,
     interval: 'month',
     features: [
       '3 simultaneous destinations',
       'Unlimited local device streaming',
-      '3 hours cloud VM streaming',
+      '2 cloud broadcast hours',
       '1080p streaming quality',
       'No watermark',
       'Basic Chat Screamer alerts',
+      '25 GB DVR storage',
       'Email support',
     ],
     limits: {
       destinations: 3,
-      localStreamHours: -1, // -1 = unlimited
-      cloudStreamHours: 3,
+      localStreamHours: -1,
+      cloudStreamHours: 2,
       chatScreams: 50,
       storage: 25,
     },
     stripePriceId:
       import.meta.env.VITE_STRIPE_STARTER_PRICE_ID ||
-      import.meta.env.VITE_STRIPE_PRO_PRICE_ID ||
-      'price_pro',
+      'price_1U4uH8Q38lVRBBaogRLIp28w',
     hasWatermark: false,
   },
   {
     id: 'expert',
     name: 'Creator',
-    description: 'More destinations + higher cloud hours',
-    price: 29,
+    description: 'Serious creator capacity with more cloud hours and storage',
+    price: 39,
     interval: 'month',
     features: [
       '5 simultaneous destinations',
       'Unlimited local device streaming',
-      '10 hours cloud VM streaming',
+      '8 cloud broadcast hours',
       '1080p/60fps streaming',
       'No watermark',
       'Full Chat Screamer tiers',
       'Custom Scream sounds/visuals',
+      '100 GB DVR storage',
       'Priority support',
     ],
     limits: {
       destinations: 5,
-      localStreamHours: -1, // -1 = unlimited
-      cloudStreamHours: 10,
+      localStreamHours: -1,
+      cloudStreamHours: 8,
       chatScreams: 200,
       storage: 100,
     },
     stripePriceId:
       import.meta.env.VITE_STRIPE_CREATOR_PRICE_ID ||
-      import.meta.env.VITE_STRIPE_EXPERT_PRICE_ID ||
-      'price_expert',
+      'price_1U7PZkQ38lVRBBao8s6AHo1O',
     hasWatermark: false,
   },
   {
     id: 'enterprise',
     name: 'Pro',
-    description: 'Unlimited destinations + maximum cloud hours',
-    price: 59,
+    description: 'High-capacity professional streaming with API access',
+    price: 79,
     interval: 'month',
     features: [
-      'Unlimited simultaneous destinations',
+      '8 simultaneous destinations',
       'Unlimited local device streaming',
-      '50 hours cloud VM streaming',
-      '4K streaming quality',
+      '20 cloud broadcast hours',
+      '1080p/60fps streaming',
       'No watermark',
       'Maximum Scream customization',
       'Custom TTS voices',
+      '250 GB DVR storage',
+      'API access',
+      'Priority support',
+    ],
+    limits: {
+      destinations: 8,
+      localStreamHours: -1,
+      cloudStreamHours: 20,
+      chatScreams: 999,
+      storage: 250,
+    },
+    stripePriceId:
+      import.meta.env.VITE_STRIPE_PRO_PRICE_ID ||
+      'price_1U7PZpQ38lVRBBao4VjArshi',
+    popular: true,
+    hasWatermark: false,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    description: 'Cloud-first capacity for teams, agencies, and scheduled channels',
+    price: 149,
+    interval: 'month',
+    features: [
+      '10 simultaneous destinations',
+      'Unlimited local device streaming',
+      '40 cloud broadcast hours',
+      'Browser-independent cloud playback',
+      'No watermark',
+      'Maximum Scream customization',
+      'Custom TTS voices',
+      '500 GB DVR storage',
       'API access',
       'White-label options',
       '24/7 priority support',
     ],
     limits: {
-      destinations: -1, // -1 = unlimited
-      localStreamHours: -1, // -1 = unlimited
-      cloudStreamHours: 50,
+      destinations: 10,
+      localStreamHours: -1,
+      cloudStreamHours: 40,
       chatScreams: 999,
       storage: 500,
     },
     stripePriceId:
-      import.meta.env.VITE_STRIPE_PRO_PRICE_ID ||
-      import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID ||
-      'price_enterprise',
-    popular: true,
+      import.meta.env.VITE_STRIPE_BUSINESS_PRICE_ID ||
+      'price_1U7PZuQ38lVRBBaoUb0prwoJ',
     hasWatermark: false,
   },
 ];
@@ -237,12 +268,10 @@ export const hasFeatureAccess = (
   if (!plan) return false;
 
   const limit = plan.limits[feature];
-  // -1 means unlimited
   if (limit === -1) return true;
   return currentUsage < limit;
 };
 
-// Check if user can add more destinations
 // Master admin emails — full access, no plan limits
 export const ADMIN_EMAILS: string[] = [
   'don@donmatthews.live',
@@ -258,7 +287,6 @@ export const canAddDestination = (
   currentDestinations: number,
   userEmail?: string | null,
 ): { allowed: boolean; maxDestinations: number; message: string } => {
-  // Admins always get unlimited access
   if (isAdminEmail(userEmail)) {
     return {
       allowed: true,
@@ -277,7 +305,6 @@ export const canAddDestination = (
   }
 
   const maxDest = plan.limits.destinations;
-  // -1 means unlimited
   if (maxDest === -1) {
     return {
       allowed: true,
@@ -301,13 +328,11 @@ export const canAddDestination = (
   };
 };
 
-// Check if plan has watermark requirement
 export const planHasWatermark = (userPlan: string): boolean => {
   const plan = getPlanById(userPlan);
   return plan?.hasWatermark ?? true;
 };
 
-// Get remaining cloud hours
 export const getRemainingCloudHours = (
   userPlan: string,
   usedHours: number,
@@ -324,7 +349,6 @@ export const getRemainingCloudHours = (
   return { remaining, total, percentUsed };
 };
 
-// Check if cloud streaming is available
 export const canUseCloudStreaming = (
   userPlan: string,
   usedHours: number,
@@ -339,14 +363,14 @@ export const canUseCloudStreaming = (
     return {
       allowed: false,
       message:
-        'Cloud streaming is not available on the Free plan. Upgrade to Pro for 3 hours of cloud streaming.',
+        'Cloud broadcasting is not available on the Free plan. Upgrade to Starter for 2 included cloud hours.',
     };
   }
 
   if (usedHours >= total) {
     return {
       allowed: false,
-      message: `You've used all ${total} cloud streaming hours this month. Upgrade your plan for more hours.`,
+      message: `You've used all ${total} cloud broadcast hours this month. Upgrade your plan or add cloud hours.`,
     };
   }
 
@@ -433,7 +457,6 @@ export const SCREAM_TIERS: ScreamTier[] = [
   },
 ];
 
-// Get scream tier based on donation amount
 export const getScreamTier = (amount: number): ScreamTier | null => {
   if (amount < 5) return null;
 
