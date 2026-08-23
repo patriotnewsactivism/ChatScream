@@ -477,6 +477,9 @@ export interface UserProfile {
     cloudHoursUsed: number;
     cloudHoursResetAt?: TimestampLike;
     lastStreamDate?: TimestampLike;
+    includedHoursUsed?: number;
+    overageHours?: number;
+    overageAmountCents?: number;
     activeCloudSession?: {
       sessionId: string;
       startTime?: TimestampLike;
@@ -488,8 +491,10 @@ export interface UserProfile {
     referredBy?: string;
     referredByUserId?: string;
     referrals: number;
+    commissionRate?: number;
     totalEarnings: number;
     pendingPayout: number;
+    paidOut?: number;
   };
   settings: {
     emailNotifications: boolean;
@@ -599,7 +604,7 @@ const fallbackProfileFromUser = (user: AuthUser): UserProfile => {
     role: isAdmin ? 'admin' : 'user',
     betaTester: false,
     subscription: {
-      plan: isAdmin ? ('enterprise' as PlanTier) : 'free',
+      plan: isAdmin ? ('business' as PlanTier) : 'free',
       status: isAdmin ? 'active' : 'trialing',
     },
     usage: {
@@ -635,7 +640,7 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
     betaTester: Boolean(raw.betaTester),
     subscription: {
       plan: isAdmin
-        ? ('enterprise' as PlanTier)
+        ? ('business' as PlanTier)
         : (toStringValue(raw.subscription?.plan) as PlanTier) || 'free',
       status: isAdmin
         ? 'active'
@@ -652,10 +657,28 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
           : undefined,
     },
     usage: {
-      cloudHoursUsed: typeof raw.usage?.cloudHoursUsed === 'number' ? raw.usage.cloudHoursUsed : 0,
-      cloudHoursResetAt: raw.usage?.cloudHoursResetAt,
-      lastStreamDate: raw.usage?.lastStreamDate,
-      activeCloudSession: raw.usage?.activeCloudSession || null,
+      cloudHoursUsed:
+        typeof (raw.usage as any)?.cloud?.cloudHoursUsed === 'number'
+          ? (raw.usage as any).cloud.cloudHoursUsed
+          : typeof raw.usage?.cloudHoursUsed === 'number'
+            ? raw.usage.cloudHoursUsed
+            : 0,
+      cloudHoursResetAt: (raw.usage as any)?.cloud?.resetAt || raw.usage?.cloudHoursResetAt,
+      lastStreamDate: (raw.usage as any)?.cloud?.lastStreamDate || raw.usage?.lastStreamDate,
+      includedHoursUsed:
+        typeof (raw.usage as any)?.cloud?.includedHoursUsed === 'number'
+          ? (raw.usage as any).cloud.includedHoursUsed
+          : undefined,
+      overageHours:
+        typeof (raw.usage as any)?.cloud?.overageHours === 'number'
+          ? (raw.usage as any).cloud.overageHours
+          : undefined,
+      overageAmountCents:
+        typeof (raw.usage as any)?.cloud?.overageAmountCents === 'number'
+          ? (raw.usage as any).cloud.overageAmountCents
+          : undefined,
+      activeCloudSession:
+        (raw.usage as any)?.cloud?.activeCloudSession || raw.usage?.activeCloudSession || null,
     },
     affiliate:
       raw.affiliate && typeof raw.affiliate === 'object'
@@ -665,10 +688,18 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
             referredByUserId:
               toStringValue(raw.affiliate.referredByUserId || '').trim() || undefined,
             referrals: typeof raw.affiliate.referrals === 'number' ? raw.affiliate.referrals : 0,
+            commissionRate:
+              typeof (raw.affiliate as any).commissionRate === 'number'
+                ? (raw.affiliate as any).commissionRate
+                : 0.5,
             totalEarnings:
               typeof raw.affiliate.totalEarnings === 'number' ? raw.affiliate.totalEarnings : 0,
             pendingPayout:
               typeof raw.affiliate.pendingPayout === 'number' ? raw.affiliate.pendingPayout : 0,
+            paidOut:
+              typeof (raw.affiliate as any).paidOut === 'number'
+                ? (raw.affiliate as any).paidOut
+                : 0,
           }
         : undefined,
     settings: {
@@ -824,6 +855,7 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
 
   const response = await tryRequestVariants<unknown>(
     [
+      () => apiRequest(`/api/public/commercial/affiliate/${encodeURIComponent(normalizedCode)}`),
       () => authRequest(`/api/affiliates/${encodeURIComponent(normalizedCode)}`),
       () => authRequest(`/api/affiliate/${encodeURIComponent(normalizedCode)}`),
     ],
@@ -843,7 +875,7 @@ export const getAffiliateByCode = async (code: string): Promise<AffiliateCode | 
     ownerId: toStringValue(raw.ownerId),
     ownerEmail: toStringValue(raw.ownerEmail),
     ownerName: toStringValue(raw.ownerName),
-    commissionRate: typeof raw.commissionRate === 'number' ? raw.commissionRate : 0.2,
+    commissionRate: typeof raw.commissionRate === 'number' ? raw.commissionRate : 0.5,
     bonusTrialDays: typeof raw.bonusTrialDays === 'number' ? raw.bonusTrialDays : 3,
     totalReferrals: typeof raw.totalReferrals === 'number' ? raw.totalReferrals : 0,
     totalEarnings: typeof raw.totalEarnings === 'number' ? raw.totalEarnings : 0,

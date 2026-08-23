@@ -63,6 +63,7 @@ router.get('/status', async (req, res, next) => {
       includedHoursUsed: Number(usage.includedHoursUsed || 0),
       overageHours: Number(usage.overageHours || 0),
       overageAmountCents: Number(usage.overageAmountCents || 0),
+      resetDate: usage.resetAt || null,
       activeSession: usage.activeCloudSession || null,
       destinationLimit: destinationsForPlan(plan),
       workerConfigured: isCloudWorkerConfigured(),

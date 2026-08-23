@@ -67,6 +67,7 @@ import {
   moderateMessageWithAi,
 } from './ai.js';
 import commercialRouter from './commercial/router.js';
+import publicCommercialRouter from './commercial/publicRouter.js';
 import { DEFAULT_AFFILIATE_COMMISSION_RATE, findAffiliateByCode, recordDurableReferral } from './commercial/affiliate.js';
 
 const app = express();
@@ -256,6 +257,7 @@ const requireAuth = asyncHandler(async (req, res, next) => {
   next();
 });
 
+app.use('/api/public/commercial', publicCommercialRouter);
 app.use('/api/cloud-v2', requireAuth, commercialRouter);
 
 // Multer Setup
@@ -1271,20 +1273,6 @@ app.post(
         }),
       ),
     );
-
-    if (referredAffiliate?.isActive) {
-      setAffiliate({
-        ...referredAffiliate,
-        totalReferrals: Number(referredAffiliate.totalReferrals || 0) + 1,
-      });
-      addReferral({
-        id: randomUUID(),
-        affiliateCode: referredAffiliate.code,
-        referrerId: referredAffiliate.ownerId,
-        referredUserId: uid,
-        createdAt: nowIso(),
-      });
-    }
 
     await putUser({
       uid,
