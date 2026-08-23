@@ -1,13 +1,14 @@
 /**
  * Multi-Platform Chat Aggregator
  *
- * Aggregates live chat messages from:
- * - YouTube Live Chat (REST polling via YouTube Data API v3)
- * - Twitch Chat (IRC-over-WebSocket via irc-ws.chat.twitch.tv)
- * - Facebook Live Comments (Graph API polling)
+ * Aggregates and publishes live chat messages for:
+ * - YouTube Live Chat (Data API v3)
+ * - Twitch Chat (IRC-over-WebSocket)
+ * - Facebook Live Comments (Graph API)
  *
- * All messages are normalized into a single AggregatedMessage format
- * and dispatched to registered listeners.
+ * All inbound messages are normalized into AggregatedMessage. Outbound publishing
+ * is used by the creator and the opt-in AI Co-Host; it never runs unless the
+ * platform connector is active and authenticated.
  */
 
 export type ChatPlatform = 'youtube' | 'twitch' | 'facebook' | 'local';
@@ -25,6 +26,13 @@ export interface AggregatedMessage {
 }
 
 type MessageListener = (messages: AggregatedMessage[]) => void;
+
+const sanitizeOutbound = (content: string, maxLength = 450): string =>
+  String(content || '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
 
 // ---------------------------------------------------------------------------
 // YouTube Live Chat connector
@@ -57,6 +65,30 @@ class YouTubeChatConnector {
     this.disposed = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+  }
+
+  async sendMessage(content: string): Promise<boolean> {
+    const messageText = sanitizeOutbound(content, 200);
+    if (!messageText || this.disposed) return false;
+    const res = await fetch('https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        snippet: {
+          liveChatId: this.config.liveChatId,
+          type: 'textMessageEvent',
+          textMessageDetails: { messageText },
+        },
+      }),
+    });
+    if (!res.ok) {
+      console.warn('[YouTube Chat] Send failed:', res.status);
+      return false;
+    }
+    return true;
   }
 
   private async poll() {
@@ -140,6 +172,13 @@ class TwitchChatConnector {
     this.ws = null;
   }
 
+  async sendMessage(content: string): Promise<boolean> {
+    const message = sanitizeOutbound(content, 450);
+    if (!message || this.disposed || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(`PRIVMSG #${this.config.channel.toLowerCase()} :${message}`);
+    return true;
+  }
+
   private connect() {
     if (this.disposed) return;
     this.ws = new WebSocket('wss://irc-ws.chat.twitch.tv/');
@@ -155,7 +194,6 @@ class TwitchChatConnector {
 
     this.ws.onmessage = (evt) => {
       const raw = evt.data as string;
-      // Respond to server PINGs to keep the connection alive
       if (raw.startsWith('PING')) {
         this.ws!.send('PONG :tmi.twitch.tv');
         return;
@@ -178,8 +216,6 @@ class TwitchChatConnector {
   }
 
   private parseIrcMessage(raw: string): AggregatedMessage | null {
-    // Parse Twitch IRC PRIVMSG with tags
-    // Format: @tags :user!user@user.tmi.twitch.tv PRIVMSG #channel :message
     const tagMatch = raw.match(/^@([^ ]+) :([^!]+)![^ ]+ PRIVMSG #[^ ]+ :(.+)$/);
     if (!tagMatch) return null;
 
@@ -244,6 +280,21 @@ class FacebookChatConnector {
     this.timer = null;
   }
 
+  async sendMessage(content: string): Promise<boolean> {
+    const message = sanitizeOutbound(content, 450);
+    if (!message || this.disposed) return false;
+    const body = new URLSearchParams({ message, access_token: this.config.accessToken });
+    const res = await fetch(
+      `https://graph.facebook.com/v18.0/${encodeURIComponent(this.config.liveVideoId)}/comments`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body },
+    );
+    if (!res.ok) {
+      console.warn('[Facebook Chat] Send failed:', res.status);
+      return false;
+    }
+    return true;
+  }
+
   private async poll() {
     if (this.disposed) return;
     try {
@@ -281,9 +332,7 @@ class FacebookChatConnector {
     } catch (err) {
       console.warn('[Facebook Chat] Poll error:', err);
     } finally {
-      if (!this.disposed) {
-        this.timer = setTimeout(() => void this.poll(), 5000);
-      }
+      if (!this.disposed) this.timer = setTimeout(() => void this.poll(), 5000);
     }
   }
 }
@@ -306,11 +355,6 @@ export class ChatAggregator {
   private messageHistory: AggregatedMessage[] = [];
   private readonly MAX_HISTORY = 200;
 
-  constructor() {}
-
-  /**
-   * Start aggregating chat from configured platforms.
-   */
   start(config: AggregatorConfig) {
     this.stop();
 
@@ -326,23 +370,17 @@ export class ChatAggregator {
       this.youtubeConnector = new YouTubeChatConnector(config.youtube, dispatch);
       this.youtubeConnector.start();
     }
-
     if (config.twitch) {
       this.twitchConnector = new TwitchChatConnector(config.twitch, dispatch);
       this.twitchConnector.start();
     }
-
     if (config.facebook) {
       this.facebookConnector = new FacebookChatConnector(config.facebook, dispatch);
       this.facebookConnector.start();
     }
-
     console.log('🗨️ ChatAggregator started');
   }
 
-  /**
-   * Stop all platform connectors.
-   */
   stop() {
     this.youtubeConnector?.stop();
     this.twitchConnector?.stop();
@@ -352,27 +390,44 @@ export class ChatAggregator {
     this.facebookConnector = null;
   }
 
-  /**
-   * Register a listener for aggregated messages.
-   * Returns an unsubscribe function.
-   */
+  getActivePlatforms(): ChatPlatform[] {
+    const platforms: ChatPlatform[] = [];
+    if (this.youtubeConnector) platforms.push('youtube');
+    if (this.twitchConnector) platforms.push('twitch');
+    if (this.facebookConnector) platforms.push('facebook');
+    return platforms;
+  }
+
+  async sendMessage(platform: ChatPlatform, content: string): Promise<boolean> {
+    if (platform === 'youtube') return (await this.youtubeConnector?.sendMessage(content)) ?? false;
+    if (platform === 'twitch') return (await this.twitchConnector?.sendMessage(content)) ?? false;
+    if (platform === 'facebook') return (await this.facebookConnector?.sendMessage(content)) ?? false;
+    if (platform === 'local') return true;
+    return false;
+  }
+
+  async sendToActivePlatforms(content: string): Promise<ChatPlatform[]> {
+    const sent: ChatPlatform[] = [];
+    for (const platform of this.getActivePlatforms()) {
+      try {
+        if (await this.sendMessage(platform, content)) sent.push(platform);
+      } catch (error) {
+        console.warn(`[${platform} Chat] Send error`, error);
+      }
+    }
+    return sent;
+  }
+
   subscribe(fn: MessageListener): () => void {
     this.listeners.add(fn);
-    // Immediately emit current history to new subscriber
     if (this.messageHistory.length > 0) fn([...this.messageHistory]);
     return () => this.listeners.delete(fn);
   }
 
-  /**
-   * Clear message history.
-   */
   clearHistory() {
     this.messageHistory = [];
   }
 
-  /**
-   * Inject a local/internal message (e.g. from the stream's own chat API).
-   */
   injectMessage(msg: AggregatedMessage) {
     this.messageHistory.push(msg);
     if (this.messageHistory.length > this.MAX_HISTORY) {
@@ -382,5 +437,4 @@ export class ChatAggregator {
   }
 }
 
-/** Singleton instance for use across the app */
 export const chatAggregator = new ChatAggregator();

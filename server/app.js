@@ -68,6 +68,8 @@ import {
 } from './ai.js';
 import commercialRouter from './commercial/router.js';
 import publicCommercialRouter from './commercial/publicRouter.js';
+import aiModeratorRouter from './aiModerator/router.js';
+import { ingressRouter as internalStudioIngressRouter, adminRouter as internalStudioAdminRouter } from './internalBridge/router.js';
 import { DEFAULT_AFFILIATE_COMMISSION_RATE, findAffiliateByCode, recordDurableReferral } from './commercial/affiliate.js';
 
 const app = express();
@@ -259,6 +261,9 @@ const requireAuth = asyncHandler(async (req, res, next) => {
 
 app.use('/api/public/commercial', publicCommercialRouter);
 app.use('/api/cloud-v2', requireAuth, commercialRouter);
+app.use('/api/ai-moderator', rateLimiter(60), requireAuth, aiModeratorRouter);
+app.use('/api/internal-studio/ingress', rateLimiter(60), internalStudioIngressRouter);
+app.use('/api/internal-studio/admin', rateLimiter(60), requireAuth, internalStudioAdminRouter);
 
 // Multer Setup
 const uploadDir = process.env.VERCEL

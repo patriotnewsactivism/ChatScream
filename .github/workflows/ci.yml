@@ -25,3 +25,5 @@ jobs:
         run: npx vitest run server/__tests__/root-admin-access.test.ts
       - name: Commercialization security and economics regression
         run: npx vitest run server/commercial/__tests__/commercialization.test.js
+      - name: Next-generation studio regression
+        run: npx vitest run server/commercial/__tests__/nextgen-studio.test.js
