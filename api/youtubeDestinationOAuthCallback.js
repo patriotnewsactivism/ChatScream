@@ -31,6 +31,9 @@ export const forwardYouTubeDestinationOAuthCallback = (req, res) => {
 
   const target = new URL('/oauth/callback', `${frontendOrigin}/`);
   target.searchParams.set('platform', 'youtube');
+  // Explicit marker so the callback page never mistakes a destination connect
+  // for a ChatScream account sign-in result.
+  target.searchParams.set('flow', 'destination');
 
   ['code', 'state', 'error', 'error_description', 'scope', 'authuser', 'prompt'].forEach((key) => {
     const value = req?.query?.[key];

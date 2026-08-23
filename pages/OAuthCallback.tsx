@@ -61,11 +61,19 @@ const OAuthCallback: React.FC = () => {
     return platform ? platform : 'platform';
   }, [searchParams]);
 
-  const isDestinationOAuthCallback = useMemo(
-    () =>
-      Boolean(searchParams.get('code') || searchParams.get('state') || searchParams.get('error')),
-    [searchParams],
-  );
+  // ChatScream account sign-in and streaming-destination connects share the
+  // backend Google callback. `flow`/`platform=google` tell them apart; without
+  // either marker a bare code+state is a destination connect (Facebook, Twitch
+  // and TikTok redirect here directly).
+  const isDestinationOAuthCallback = useMemo(() => {
+    const flow = (searchParams.get('flow') || '').toLowerCase();
+    if (flow === 'destination') return true;
+    if (flow === 'account') return false;
+    if ((searchParams.get('platform') || '').toLowerCase() === 'google') return false;
+    return Boolean(
+      searchParams.get('code') || searchParams.get('state') || searchParams.get('error'),
+    );
+  }, [searchParams]);
 
   const hasSessionRedirectParams = useMemo(
     () =>
@@ -162,6 +170,15 @@ const OAuthCallback: React.FC = () => {
       }
 
       if (isAppSignInCallback) {
+        // The backend reports sign-in failures as ?error=, so surface the real
+        // reason rather than a generic "could not be completed".
+        const signInError = (searchParams.get('error') || '').trim();
+        if (signInError) {
+          setStatus('error');
+          setMessage(getProviderSpecificFailureMessage(platformLabel, signInError));
+          return;
+        }
+
         if (!user && hasSessionRedirectParams && !attemptedSessionRestore.current) {
           attemptedSessionRestore.current = true;
           await completeRedirectSignIn().catch((err) => {

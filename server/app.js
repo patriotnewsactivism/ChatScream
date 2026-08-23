@@ -71,6 +71,8 @@ import publicCommercialRouter from './commercial/publicRouter.js';
 import aiModeratorRouter from './aiModerator/router.js';
 import { ingressRouter as internalStudioIngressRouter, adminRouter as internalStudioAdminRouter } from './internalBridge/router.js';
 import { DEFAULT_AFFILIATE_COMMISSION_RATE, findAffiliateByCode, recordDurableReferral } from './commercial/affiliate.js';
+import { buildYouTubeDestinationRedirectTarget } from './youtubeDestinationOAuthCallback.js';
+import { resolveFrontendOAuthCallbackUrl } from './frontendOAuthRedirect.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -619,23 +621,12 @@ const getServerBaseUrl = (req) => {
   return `${protocol}://${host || 'localhost'}`;
 };
 
-const getFrontendOAuthCallbackUrl = (req) => {
-  const configured = String(
-    process.env.AUTH_REDIRECT_URL ||
-      process.env.VITE_OAUTH_REDIRECT_URI ||
-      process.env.APP_BASE_URL ||
-      '',
-  ).trim();
-  if (configured) {
-    if (/^https?:\/\//i.test(configured)) {
-      return configured;
-    }
-    if (configured.startsWith('/')) {
-      return `${getServerBaseUrl(req)}${configured}`;
-    }
-  }
-  return new URL('/oauth/callback', getServerBaseUrl(req)).toString();
-};
+const getFrontendOAuthCallbackUrl = (req) =>
+  resolveFrontendOAuthCallbackUrl({
+    explicitRedirectUrl: process.env.AUTH_REDIRECT_URL || process.env.VITE_OAUTH_REDIRECT_URI || '',
+    appBaseUrl: process.env.APP_BASE_URL || '',
+    serverBaseUrl: getServerBaseUrl(req),
+  });
 
 const redirectToFrontendOAuth = (req, res, params = {}) => {
   const target = new URL(getFrontendOAuthCallbackUrl(req));
@@ -1450,6 +1441,18 @@ app.post(['/api/auth/oauth/start', '/api/auth/social/start'], (req, res) => {
 app.get(
   '/api/auth/oauth/google/callback',
   asyncHandler(async (req, res) => {
+    // YouTube streaming-destination connects reuse this already-authorized
+    // Google callback. Their state is client-generated base64 JSON rather than
+    // signed account-login state, so hand the code straight back to Studio
+    // instead of failing account-state verification. Handled inside the route
+    // so it works no matter which file boots the process.
+    const destinationTarget = buildYouTubeDestinationRedirectTarget(req.query);
+    if (destinationTarget) {
+      res.set('Cache-Control', 'no-store');
+      res.redirect(302, destinationTarget);
+      return;
+    }
+
     const queryError = String(req.query.error || '').trim();
     if (queryError) {
       const message = queryError === 'access_denied' ? 'Authorization was denied.' : queryError;

@@ -7,7 +7,7 @@
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite",
     "dev:api": "node --watch server/index.js",
-    "start": "node server/index.js",
+    "start": "node server/entrypoint.js",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "migrate:users": "node scripts/migrate-users-to-postgres.mjs",
