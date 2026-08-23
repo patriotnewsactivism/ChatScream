@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - hotfix/google-oauth-redirect
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -37,8 +40,6 @@ jobs:
                   raise SystemExit(f'Patch anchor missing in {path}: {old[:120]!r}')
               p.write_text(text.replace(old, new, 1))
 
-          # Frontend: relative auth redirect URLs returned by the API must be
-          # resolved against VITE_API_BASE_URL, not window.location.origin.
           replace_once(
               'services/backend.ts',
               "import { ApiRequestError, apiRequest } from './apiClient';",
@@ -50,9 +51,6 @@ jobs:
               "    window.location.assign(buildApiUrl(redirectUrl || fallbackPath));",
           )
 
-          # Backend: OAuth provider callbacks must use one canonical backend
-          # origin. Google redirect URIs are exact-match values, so allowing the
-          # frontend host (www/root domain) to leak into redirect_uri causes 400.
           p = Path('server/app.js')
           text = p.read_text()
           anchor = "const getFrontendOAuthCallbackUrl = (req) => {\n"
@@ -99,7 +97,6 @@ jobs:
           )
           p.write_text(text)
 
-          # Permanent static regression: protect the exact mobile failure mode.
           test = Path('server/__tests__/oauth-redirect-regression.test.ts')
           test.write_text("""import fs from 'node:fs';
 import path from 'node:path';
@@ -125,13 +122,11 @@ describe('OAuth redirect regression', () => {
 });
 """)
 
-          # Make the regression part of permanent Core CI.
           ci = Path('.github/workflows/ci.yml')
           ci_text = ci.read_text()
           step = "      - name: OAuth redirect regression\n        run: npx vitest run server/__tests__/oauth-redirect-regression.test.ts\n"
           if 'OAuth redirect regression' not in ci_text:
-              ci_text = ci_text.rstrip() + '\n' + step
-              ci.write_text(ci_text)
+              ci.write_text(ci_text.rstrip() + '\n' + step)
           PY
 
       - run: npm ci
@@ -150,6 +145,10 @@ describe('OAuth redirect regression', () => {
 
       - name: Commit hotfix source
         run: |
+          if git diff --quiet; then
+            echo "Hotfix already applied."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add services/backend.ts server/app.js server/__tests__/oauth-redirect-regression.test.ts .github/workflows/ci.yml
