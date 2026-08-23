@@ -64,6 +64,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'No watermark',
       'Basic Chat Screamer alerts',
       '25 GB DVR storage',
+      'AI Co-Host — 500 decisions / month',
       'Email support',
     ],
     limits: {
@@ -93,6 +94,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Full Chat Screamer tiers',
       'Custom Scream sounds/visuals',
       '100 GB DVR storage',
+      'AI Co-Host — 3,000 decisions / month',
       'Priority support',
     ],
     limits: {
@@ -122,6 +124,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Maximum Scream customization',
       'Custom TTS voices',
       '250 GB DVR storage',
+      'AI Co-Host — 12,000 decisions / month',
       'API access',
       'Priority support',
     ],
@@ -153,6 +156,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Maximum Scream customization',
       'Custom TTS voices',
       '500 GB DVR storage',
+      'AI Co-Host — 50,000 decisions / month',
       'API access',
       'White-label options',
       '24/7 priority support',

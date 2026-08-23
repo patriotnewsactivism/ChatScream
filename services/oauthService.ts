@@ -126,6 +126,8 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         tokenEndpoint: 'https://id.twitch.tv/oauth2/token',
         scopes: [
           'user:read:email',
+          'chat:read',
+          'chat:edit',
           'channel:read:stream_key',
           'channel:manage:broadcast',
           'channel:read:subscriptions',

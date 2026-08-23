@@ -225,11 +225,11 @@ def shutdown_instance():
 
 
 def main():
+    global REGION, dynamodb
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
 
     instance_id, detected_region = instance_identity()
-    global REGION, dynamodb
     if detected_region != REGION:
         REGION = detected_region
         dynamodb = boto3.client("dynamodb", region_name=REGION)

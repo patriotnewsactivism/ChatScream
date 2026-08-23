@@ -106,6 +106,7 @@ export interface CloudSessionStartOptions {
   sourceUrl?: string;
   destinations?: CloudDestinationInput[];
   recording?: boolean;
+  allowOverages?: boolean;
 }
 
 const token = () => getCurrentSessionToken();
@@ -380,6 +381,21 @@ export const endCloudSession = async (
       estimatedCostUsd: 0,
       message: 'Failed to end cloud streaming session',
     };
+  }
+};
+
+export const setCloudOverages = async (enabled: boolean): Promise<boolean> => {
+  if (!hasToken()) return false;
+  try {
+    const response = await apiRequest<unknown>('/api/cloud-v2/overages', {
+      method: 'POST',
+      token: token(),
+      body: { enabled },
+    });
+    return asRecord(response).success !== false;
+  } catch (err) {
+    console.error('Error updating cloud overage preference:', err);
+    return false;
   }
 };
 

@@ -5,6 +5,7 @@ import {
   endCloudSession,
   getCloudStreamingStatus,
   startCloudSession,
+  setCloudOverages,
   type CloudStreamingStatus,
 } from '../services/cloudStreamingService';
 
@@ -61,6 +62,11 @@ const CloudBroadcastPanel: React.FC<CloudBroadcastPanelProps> = ({
     setBusy(true);
     setNotice('Starting a cloud worker…');
     try {
+      const overageSaved = await setCloudOverages(allowOverages);
+      if (!overageSaved) {
+        setNotice('Could not save the cloud overage preference. No worker was started.');
+        return;
+      }
       const result = await startCloudSession(userId, userPlan, enabledDestinations.length, {
         sourceUrl: sourceUrl.trim(),
         quality,
@@ -218,7 +224,7 @@ const CloudBroadcastPanel: React.FC<CloudBroadcastPanelProps> = ({
       <button
         type="button"
         onClick={active ? stop : start}
-        disabled={busy || !userId || (!active && !status?.canStream)}
+        disabled={busy || !userId || (!active && !status?.canStream && !allowOverages)}
         className={`w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-black transition-colors disabled:opacity-50 ${
           active
             ? 'bg-red-600 hover:bg-red-500 text-white'
