@@ -1,0 +1,41 @@
+name: Commercialization finalize
+
+on:
+  push:
+    branches:
+      - feature/commercialization-stack
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[commercialization-finalized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/commercialization-stack
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply final cleanup
+        run: node scripts/finalize-commercialization.mjs
+      - name: Verify production build
+        run: npm run build
+      - name: Verify root admin access
+        run: npx vitest run server/__tests__/root-admin-access.test.ts
+      - name: Commit verified source
+        run: |
+          git config user.name "ChatScream Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- server/app.js server/commercial/router.js services/backend.ts services/cloudStreamingService.ts
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git commit -m "Finalize durable commercialization source [commercialization-finalized]"
+          git push origin HEAD:feature/commercialization-stack
