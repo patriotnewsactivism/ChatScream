@@ -1,21 +1,14 @@
 /**
  * ChatScream Stripe Webhook Handler
  *
- * Handles events from Stripe to keep subscription data in sync:
- * - checkout.session.completed → activate subscription
- * - customer.subscription.updated → plan changes
- * - customer.subscription.deleted → handle cancellations
- * - invoice.payment_failed → flag failed payments
- *
- * Setup:
- * 1. Set STRIPE_WEBHOOK_SECRET in env vars
- * 2. Create webhook in Stripe Dashboard → Developers → Webhooks
- *    - Endpoint URL: https://chatscream.live/api/webhooks/stripe
- *    - Events: checkout.session.completed, customer.subscription.updated,
- *              customer.subscription.deleted, invoice.payment_failed
+ * Keeps subscriptions and the affiliate residual ledger synchronized with Stripe.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  accrueAffiliateCommission,
+  reverseAffiliateCommission,
+} from '../commercial/affiliate.js';
 
 const STRIPE_WEBHOOK_SECRET = () => String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 
@@ -33,6 +26,17 @@ const LIVE_PRICE_TO_PLAN = Object.freeze({
   price_1U7PZuQ38lVRBBaoUb0prwoJ: 'business',
 });
 
+const objectId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value.id || '').trim();
+};
+
+const getInvoiceSubscriptionId = (invoice) =>
+  objectId(invoice?.subscription) ||
+  objectId(invoice?.parent?.subscription_details?.subscription) ||
+  objectId(invoice?.subscription_details?.subscription);
+
 // Map Stripe price IDs to ChatScream plan tiers.
 const getPlanFromPriceId = (priceId) => {
   if (!priceId) return null;
@@ -49,12 +53,6 @@ const getPlanFromPriceId = (priceId) => {
   return envMap[priceId] || null;
 };
 
-/**
- * Verify Stripe webhook signature.
- * @param {Buffer} payload - Raw request body
- * @param {string} sigHeader - Stripe-Signature header
- * @returns {object|null} Parsed event or null if invalid
- */
 const verifyWebhookSignature = (payload, sigHeader) => {
   const secret = STRIPE_WEBHOOK_SECRET();
   if (!secret) {
@@ -72,7 +70,6 @@ const verifyWebhookSignature = (payload, sigHeader) => {
 
     const timestamp = parts.t;
     const signature = parts.v1;
-
     if (!timestamp || !signature) return null;
 
     const diff = Math.abs(Date.now() / 1000 - Number(timestamp));
@@ -83,7 +80,6 @@ const verifyWebhookSignature = (payload, sigHeader) => {
 
     const signedPayload = `${timestamp}.${payload.toString()}`;
     const expectedSignature = createHmac('sha256', secret).update(signedPayload).digest('hex');
-
     const sigBuffer = Buffer.from(signature, 'hex');
     const expectedBuffer = Buffer.from(expectedSignature, 'hex');
 
@@ -99,21 +95,13 @@ const verifyWebhookSignature = (payload, sigHeader) => {
   }
 };
 
-/**
- * Create the webhook route handler.
- * @param {object} deps - Dependencies: { getUserByUid, putUser }
- */
 export const createStripeWebhookHandler = ({ getUserByUid, putUser }) => {
   return async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    if (!sig) {
-      return res.status(400).json({ error: 'Missing stripe-signature header' });
-    }
+    if (!sig) return res.status(400).json({ error: 'Missing stripe-signature header' });
 
     const event = verifyWebhookSignature(req.body, sig);
-    if (!event) {
-      return res.status(400).json({ error: 'Invalid signature' });
-    }
+    if (!event) return res.status(400).json({ error: 'Invalid signature' });
 
     console.log(`[Stripe Webhook] Received: ${event.type} (${event.id})`);
 
@@ -122,19 +110,24 @@ export const createStripeWebhookHandler = ({ getUserByUid, putUser }) => {
         case 'checkout.session.completed':
           await handleCheckoutCompleted(event.data.object, { getUserByUid, putUser });
           break;
-
         case 'customer.subscription.updated':
           await handleSubscriptionUpdated(event.data.object, { getUserByUid, putUser });
           break;
-
         case 'customer.subscription.deleted':
           await handleSubscriptionDeleted(event.data.object, { getUserByUid, putUser });
           break;
-
+        case 'invoice.paid':
+          await handleInvoicePaid(event.data.object, event.id);
+          break;
         case 'invoice.payment_failed':
           await handlePaymentFailed(event.data.object, { getUserByUid, putUser });
           break;
-
+        case 'charge.refunded':
+          await handleChargeRefunded(event.data.object, event.id);
+          break;
+        case 'credit_note.created':
+          await handleCreditNoteCreated(event.data.object, event.id);
+          break;
         default:
           console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
       }
@@ -147,16 +140,12 @@ export const createStripeWebhookHandler = ({ getUserByUid, putUser }) => {
   };
 };
 
-// ── Event Handlers ────────────────────────────────────────────────────────────
-
 async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
-  // Handle ChatScream one-time donations
+  // Handle ChatScream one-time donations separately from SaaS subscriptions.
   if (session.metadata?.type === 'chatscream') {
     const { streamerUid, donorName, message, amountCents } = session.metadata;
     const amount = Number(amountCents) / 100;
-    console.log(
-      `[Stripe Webhook] ✅ ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`,
-    );
+    console.log(`[Stripe Webhook] ChatScream payment: $${amount} from ${donorName} to ${streamerUid}`);
 
     try {
       const { updateLeaderboardEntry, addChatMessage, flushState, broadcastScreamAlert } =
@@ -164,7 +153,6 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
       const { randomUUID } = await import('node:crypto');
 
       updateLeaderboardEntry(streamerUid, amount);
-
       const screamId = randomUUID();
       addChatMessage({
         id: screamId,
@@ -188,7 +176,6 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
         streamerId: streamerUid,
         timestamp: new Date().toISOString(),
       });
-
       flushState();
     } catch (error) {
       console.error('[Stripe Webhook] Failed to process scream payment:', error);
@@ -199,9 +186,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
 
   const uid = session.client_reference_id || session.metadata?.uid;
   if (!uid) {
-    console.error(
-      '[Stripe Webhook] checkout.session.completed: no uid in client_reference_id or metadata',
-    );
+    console.error('[Stripe Webhook] checkout.session.completed: missing uid');
     return;
   }
 
@@ -218,35 +203,27 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
     if (plan) break;
   }
 
-  if (!plan && session.subscription) {
-    console.log(
-      `[Stripe Webhook] checkout completed for ${uid}, subscription: ${session.subscription}`,
-    );
-  }
-
   const profile = {
     ...record.profile,
-    stripeCustomerId: session.customer || record.profile.stripeCustomerId,
-    stripeSubscriptionId: session.subscription || record.profile.stripeSubscriptionId,
+    stripeCustomerId: objectId(session.customer) || record.profile?.stripeCustomerId,
+    stripeSubscriptionId: objectId(session.subscription) || record.profile?.stripeSubscriptionId,
     subscription: {
-      ...record.profile.subscription,
-      plan: plan || record.profile.subscription?.plan || 'free',
+      ...record.profile?.subscription,
+      plan: plan || record.profile?.subscription?.plan || 'free',
       status: 'active',
-      stripeSubscriptionId: session.subscription,
+      stripeSubscriptionId: objectId(session.subscription),
       checkoutCompletedAt: new Date().toISOString(),
     },
   };
 
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ✅ User ${uid} upgraded to plan: ${plan || 'pending'}`);
+  console.log(`[Stripe Webhook] User ${uid} checkout completed; plan=${plan || 'pending'}`);
 }
 
-async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }) {
-  const record = await findUserByStripeId(subscription.customer, subscription.id, getUserByUid);
+async function handleSubscriptionUpdated(subscription, { putUser }) {
+  const record = await findUserByStripeId(subscription.customer, subscription.id);
   if (!record) {
-    console.log(
-      `[Stripe Webhook] subscription.updated: no user found for customer ${subscription.customer}`,
-    );
+    console.log(`[Stripe Webhook] subscription.updated: no user for customer ${objectId(subscription.customer)}`);
     return;
   }
 
@@ -257,69 +234,125 @@ async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }
 
   const profile = {
     ...record.profile,
+    stripeCustomerId: objectId(subscription.customer) || record.profile?.stripeCustomerId,
+    stripeSubscriptionId: subscription.id || record.profile?.stripeSubscriptionId,
     subscription: {
-      ...record.profile.subscription,
-      plan: plan || record.profile.subscription?.plan || 'free',
+      ...record.profile?.subscription,
+      plan: plan || record.profile?.subscription?.plan || 'free',
       status: mappedStatus,
       stripeSubscriptionId: subscription.id,
       currentPeriodEnd: subscription.current_period_end
         ? new Date(subscription.current_period_end * 1000).toISOString()
-        : undefined,
+        : record.profile?.subscription?.currentPeriodEnd,
     },
   };
 
   await putUser({ ...record, profile });
-  console.log(
-    `[Stripe Webhook] ✅ Subscription updated for user ${record.uid}: plan=${plan}, status=${mappedStatus}`,
-  );
+  console.log(`[Stripe Webhook] Subscription updated for ${record.uid}: plan=${plan}, status=${mappedStatus}`);
 }
 
-async function handleSubscriptionDeleted(subscription, { getUserByUid, putUser }) {
-  const record = await findUserByStripeId(subscription.customer, subscription.id, getUserByUid);
+async function handleSubscriptionDeleted(subscription, { putUser }) {
+  const record = await findUserByStripeId(subscription.customer, subscription.id);
   if (!record) return;
 
   const profile = {
     ...record.profile,
     subscription: {
-      ...record.profile.subscription,
+      ...record.profile?.subscription,
       plan: 'free',
       status: 'canceled',
       canceledAt: new Date().toISOString(),
     },
   };
-
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ✅ Subscription canceled for user ${record.uid}, reverted to free`);
+  console.log(`[Stripe Webhook] Subscription canceled for ${record.uid}`);
 }
 
-async function handlePaymentFailed(invoice, { getUserByUid, putUser }) {
-  const record = await findUserByStripeId(invoice.customer, invoice.subscription, getUserByUid);
+async function handleInvoicePaid(invoice, eventId) {
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  const record = await findUserByStripeId(invoice.customer, subscriptionId);
+  if (!record) {
+    console.warn(`[Stripe Webhook] invoice.paid: no ChatScream user for invoice ${invoice.id}`);
+    return;
+  }
+
+  const result = await accrueAffiliateCommission({
+    subscriberRecord: record,
+    invoice,
+    eventId,
+  });
+  if (result.accrued) {
+    console.log(
+      `[Stripe Webhook] Affiliate commission accrued for invoice ${invoice.id}: ${result.commissionCents} cents at ${result.commissionRate}`,
+    );
+  }
+}
+
+async function handleChargeRefunded(charge, eventId) {
+  const invoiceId = objectId(charge.invoice);
+  if (!invoiceId) return;
+  const record = await findUserByStripeId(charge.customer, '');
+  if (!record) return;
+
+  const result = await reverseAffiliateCommission({
+    subscriberRecord: record,
+    invoiceId,
+    adjustmentCents: Math.max(0, Number(charge.amount_refunded) || 0),
+    eventId,
+    reason: 'refund',
+    cumulativeAdjustment: true,
+  });
+  if (result.reversed) {
+    console.log(`[Stripe Webhook] Affiliate refund reversal for ${invoiceId}: ${result.commissionCents} cents`);
+  }
+}
+
+async function handleCreditNoteCreated(creditNote, eventId) {
+  const invoiceId = objectId(creditNote.invoice);
+  if (!invoiceId) return;
+  const record = await findUserByStripeId(creditNote.customer, '');
+  if (!record) return;
+
+  const result = await reverseAffiliateCommission({
+    subscriberRecord: record,
+    invoiceId,
+    adjustmentCents: Math.max(0, Number(creditNote.amount) || 0),
+    eventId,
+    reason: 'credit_note',
+    cumulativeAdjustment: false,
+  });
+  if (result.reversed) {
+    console.log(`[Stripe Webhook] Affiliate credit-note reversal for ${invoiceId}: ${result.commissionCents} cents`);
+  }
+}
+
+async function handlePaymentFailed(invoice, { putUser }) {
+  const record = await findUserByStripeId(invoice.customer, getInvoiceSubscriptionId(invoice));
   if (!record) return;
 
   const profile = {
     ...record.profile,
     subscription: {
-      ...record.profile.subscription,
+      ...record.profile?.subscription,
       status: 'past_due',
       lastPaymentFailedAt: new Date().toISOString(),
     },
   };
-
   await putUser({ ...record, profile });
-  console.log(`[Stripe Webhook] ⚠️ Payment failed for user ${record.uid}`);
+  console.log(`[Stripe Webhook] Payment failed for user ${record.uid}`);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function findUserByStripeId(customerId, subscriptionId, _getUserByUid) {
+async function findUserByStripeId(customerId, subscriptionId) {
   try {
     const { listUsers } = await import('../store.js');
     const allUsers = await listUsers();
+    const customer = objectId(customerId);
+    const subscription = objectId(subscriptionId);
     for (const user of allUsers) {
       if (
-        user.profile?.stripeCustomerId === customerId ||
-        user.profile?.stripeSubscriptionId === subscriptionId ||
-        user.profile?.subscription?.stripeSubscriptionId === subscriptionId
+        (customer && user.profile?.stripeCustomerId === customer) ||
+        (subscription && user.profile?.stripeSubscriptionId === subscription) ||
+        (subscription && user.profile?.subscription?.stripeSubscriptionId === subscription)
       ) {
         return user;
       }
