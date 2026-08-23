@@ -29,3 +29,5 @@ jobs:
         run: npx vitest run server/__tests__/nextgen-studio.test.ts
       - name: YouTube destination OAuth regression
         run: npx vitest run server/__tests__/youtube-destination-redirect.test.ts
+      - name: Cloud Run YouTube destination callback regression
+        run: npx vitest run server/__tests__/cloudrun-youtube-destination-callback.test.ts
