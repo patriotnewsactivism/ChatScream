@@ -15,14 +15,15 @@ const ensureStore = () => {
 const QUOTAS_GB = (() => {
   try {
     return {
-      free: 0,
-      pro: 10,
-      expert: 50,
+      free: 1,
+      pro: 25,
+      expert: 100,
       enterprise: 250,
+      business: 500,
       ...JSON.parse(process.env.CLOUD_RECORDING_QUOTAS_GB || '{}'),
     };
   } catch {
-    return { free: 0, pro: 10, expert: 50, enterprise: 250 };
+    return { free: 1, pro: 25, expert: 100, enterprise: 250, business: 500 };
   }
 })();
 

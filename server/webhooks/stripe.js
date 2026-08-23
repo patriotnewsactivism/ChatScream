@@ -19,31 +19,32 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const STRIPE_WEBHOOK_SECRET = () => String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 
-// Map Stripe price IDs to ChatScream plan tiers
+// Internal plan IDs are intentionally stable so grandfathered subscribers keep their entitlements.
+const LIVE_PRICE_TO_PLAN = Object.freeze({
+  // Starter $19
+  price_1U4uH8Q38lVRBBaogRLIp28w: 'pro',
+  // Creator legacy $29 + current $39
+  price_1U4uH9Q38lVRBBaoUmGHtu4p: 'expert',
+  price_1U7PZkQ38lVRBBao8s6AHo1O: 'expert',
+  // Pro legacy $59 + current $79
+  price_1U4uH9Q38lVRBBaoARXrq46a: 'enterprise',
+  price_1U7PZpQ38lVRBBao4VjArshi: 'enterprise',
+  // Business $149
+  price_1U7PZuQ38lVRBBaoUb0prwoJ: 'business',
+});
+
+// Map Stripe price IDs to ChatScream plan tiers.
 const getPlanFromPriceId = (priceId) => {
   if (!priceId) return null;
+  if (LIVE_PRICE_TO_PLAN[priceId]) return LIVE_PRICE_TO_PLAN[priceId];
 
-  const starterPriceId = String(
-    process.env.VITE_STRIPE_STARTER_PRICE_ID || process.env.VITE_STRIPE_PRO_PRICE_ID || '',
-  ).trim();
-  const creatorPriceId = String(
-    process.env.VITE_STRIPE_CREATOR_PRICE_ID || process.env.VITE_STRIPE_EXPERT_PRICE_ID || '',
-  ).trim();
-  const proPriceId = String(
-    process.env.VITE_STRIPE_PRO_PRICE_ID || process.env.VITE_STRIPE_ENTERPRISE_PRICE_ID || '',
-  ).trim();
-
-  if (priceId === starterPriceId) return 'pro';
-  if (priceId === creatorPriceId) return 'expert';
-  if (priceId === proPriceId) return 'enterprise';
-
-  // Fallback: check raw env var names
   const envMap = {
     [process.env.VITE_STRIPE_STARTER_PRICE_ID]: 'pro',
     [process.env.VITE_STRIPE_CREATOR_PRICE_ID]: 'expert',
-    [process.env.VITE_STRIPE_PRO_PRICE_ID]: 'enterprise',
     [process.env.VITE_STRIPE_EXPERT_PRICE_ID]: 'expert',
+    [process.env.VITE_STRIPE_PRO_PRICE_ID]: 'enterprise',
     [process.env.VITE_STRIPE_ENTERPRISE_PRICE_ID]: 'enterprise',
+    [process.env.VITE_STRIPE_BUSINESS_PRICE_ID]: 'business',
   };
   return envMap[priceId] || null;
 };
@@ -74,7 +75,6 @@ const verifyWebhookSignature = (payload, sigHeader) => {
 
     if (!timestamp || !signature) return null;
 
-    // Check timestamp is within 5 minutes
     const diff = Math.abs(Date.now() / 1000 - Number(timestamp));
     if (diff > 300) {
       console.error('[Stripe Webhook] Timestamp too old:', diff, 'seconds');
@@ -163,12 +163,9 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
         await import('../store.js');
       const { randomUUID } = await import('node:crypto');
 
-      // Record the scream for leaderboard
       updateLeaderboardEntry(streamerUid, amount);
 
       const screamId = randomUUID();
-
-      // Create chat message for the scream alert
       addChatMessage({
         id: screamId,
         userId: 'system',
@@ -182,7 +179,6 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
         roomId: streamerUid,
       });
 
-      // Broadcast to streamer's WebSocket scream room
       broadcastScreamAlert(streamerUid, {
         id: screamId,
         donorName,
@@ -196,9 +192,9 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
       flushState();
     } catch (error) {
       console.error('[Stripe Webhook] Failed to process scream payment:', error);
-      throw error; // Propagate so Stripe retries the delivery
+      throw error;
     }
-    return; // Don't process as subscription
+    return;
   }
 
   const uid = session.client_reference_id || session.metadata?.uid;
@@ -215,7 +211,6 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
     return;
   }
 
-  // Determine plan from line items
   const lineItems = session.line_items?.data || [];
   let plan = null;
   for (const item of lineItems) {
@@ -223,9 +218,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
     if (plan) break;
   }
 
-  // If line items weren't expanded, try subscription metadata
   if (!plan && session.subscription) {
-    // We'll catch it in subscription.updated event
     console.log(
       `[Stripe Webhook] checkout completed for ${uid}, subscription: ${session.subscription}`,
     );
@@ -249,7 +242,6 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
 }
 
 async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }) {
-  // Find user by stripeCustomerId or stripeSubscriptionId
   const record = await findUserByStripeId(subscription.customer, subscription.id, getUserByUid);
   if (!record) {
     console.log(
@@ -258,11 +250,9 @@ async function handleSubscriptionUpdated(subscription, { getUserByUid, putUser }
     return;
   }
 
-  // Determine plan from current price
   const priceId = subscription.items?.data?.[0]?.price?.id;
   const plan = getPlanFromPriceId(priceId);
-  const status = subscription.status; // active, past_due, canceled, etc.
-
+  const status = subscription.status;
   const mappedStatus = ['active', 'trialing'].includes(status) ? 'active' : status;
 
   const profile = {
@@ -321,17 +311,10 @@ async function handlePaymentFailed(invoice, { getUserByUid, putUser }) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Find a user by Stripe customer ID or subscription ID.
- * Since we store these in the JSONB profile, we need to search.
- */
-async function findUserByStripeId(customerId, subscriptionId, getUserByUid) {
-  // This is a simplified approach — in production with many users,
-  // you'd want a stripeCustomerId index or lookup table.
-  // For now, we search through the store's listUsers function.
+async function findUserByStripeId(customerId, subscriptionId, _getUserByUid) {
   try {
-    const { listUsers } = await import('./store.js');
-    const allUsers = listUsers();
+    const { listUsers } = await import('../store.js');
+    const allUsers = await listUsers();
     for (const user of allUsers) {
       if (
         user.profile?.stripeCustomerId === customerId ||
@@ -341,8 +324,8 @@ async function findUserByStripeId(customerId, subscriptionId, getUserByUid) {
         return user;
       }
     }
-  } catch {
-    // If listUsers is not available, fall back
+  } catch (error) {
+    console.warn('[Stripe Webhook] Unable to search users by Stripe ID:', error?.message || error);
   }
   return null;
 }

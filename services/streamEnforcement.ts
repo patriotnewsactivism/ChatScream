@@ -69,7 +69,11 @@ export class StreamEnforcementService {
     let destinationsRejected = 0;
 
     // 1. Validate destination count
-    const destCheck = canAddDestination(context.userPlan, context.requestedDestinations, context.userEmail);
+    const destCheck = canAddDestination(
+      context.userPlan,
+      context.requestedDestinations,
+      context.userEmail,
+    );
     if (!destCheck.allowed) {
       violations.push(destCheck.message);
       destinationsAllowed =
@@ -101,7 +105,6 @@ export class StreamEnforcementService {
       const hoursInfo = getRemainingCloudHours(context.userPlan, context.cloudHoursUsed);
       remainingCloudHours = hoursInfo.remaining;
 
-      // Warning if less than 1 hour remaining
       if (hoursInfo.remaining < 1 && hoursInfo.remaining > 0) {
         recommendations.push(
           `⚠️ Less than ${hoursInfo.remaining.toFixed(1)} hours of cloud streaming remaining`,
@@ -109,10 +112,8 @@ export class StreamEnforcementService {
       }
     }
 
-    // 3. Check watermark requirement
     const watermarkRequired = planHasWatermark(context.userPlan);
 
-    // Determine final result
     const allowed =
       violations.length === 0 || (destinationsAllowed > 0 && context.streamingMode === 'local');
 
@@ -129,7 +130,6 @@ export class StreamEnforcementService {
       recommendations: recommendations.length > 0 ? recommendations : undefined,
     };
 
-    // Log enforcement decision
     this.logEnforcement({
       timestamp: Date.now(),
       userId: context.userId,
@@ -145,7 +145,6 @@ export class StreamEnforcementService {
 
   /**
    * Enforce real-time destination counter limits
-   * Called when user attempts to add a new destination during active stream
    */
   public enforceDestinationAdd(
     userId: string,
@@ -193,7 +192,6 @@ export class StreamEnforcementService {
 
   /**
    * Monitor cloud streaming hours and enforce cutoff
-   * Returns true if stream should be terminated
    */
   public checkCloudHoursCutoff(
     userId: string,
@@ -210,14 +208,12 @@ export class StreamEnforcementService {
     const totalProjected = totalHoursUsed + sessionHours;
     const limit = plan.limits.cloudStreamHours;
 
-    // Unlimited cloud hours
     if (limit === -1) {
       return { shouldCutoff: false, reason: 'Unlimited', timeRemaining: -1 };
     }
 
     const remaining = limit - totalProjected;
 
-    // Cutoff if hours exhausted
     if (remaining <= 0) {
       console.log('🚨 CLOUD HOURS EXHAUSTED - ENFORCING CUTOFF');
 
@@ -239,12 +235,11 @@ export class StreamEnforcementService {
 
       return {
         shouldCutoff: true,
-        reason: `Cloud streaming hours exhausted (${limit} hours). Upgrade for more hours.`,
+        reason: `Cloud streaming hours exhausted (${limit} hours). Upgrade or add more cloud hours.`,
         timeRemaining: 0,
       };
     }
 
-    // Warning if less than 15 minutes remaining
     if (remaining < 0.25) {
       console.log(`⚠️ Cloud hours warning: ${(remaining * 60).toFixed(0)} minutes remaining`);
     }
@@ -261,30 +256,26 @@ export class StreamEnforcementService {
    */
   private getUpgradeRecommendation(
     currentPlan: PlanTier,
-    limitType: 'destinations' | 'cloudHours',
+    _limitType: 'destinations' | 'cloudHours',
   ): string {
     const upgradePath: { [key in PlanTier]: string } = {
-      free: 'Upgrade to Pro ($19/mo) for 3 destinations and 3 cloud hours',
-      pro: 'Upgrade to Expert ($29/mo) for 5 destinations and 10 cloud hours',
-      expert: 'Upgrade to Enterprise ($59/mo) for unlimited destinations and 50 cloud hours',
-      enterprise: 'You are on the highest plan',
+      free: 'Upgrade to Starter ($19/mo) for 3 destinations and 2 cloud hours',
+      pro: 'Upgrade to Creator ($39/mo) for 5 destinations and 8 cloud hours',
+      expert: 'Upgrade to Pro ($79/mo) for 8 destinations and 20 cloud hours',
+      enterprise: 'Upgrade to Business ($149/mo) for 10 destinations and 40 cloud hours',
+      business: 'You are on the highest plan',
     };
 
     return upgradePath[currentPlan] || 'Upgrade your plan for more capacity';
   }
 
-  /**
-   * Log enforcement action for audit trail
-   */
   private logEnforcement(log: EnforcementAuditLog): void {
     this.auditLogs.push(log);
 
-    // Keep last 1000 logs in memory
     if (this.auditLogs.length > 1000) {
       this.auditLogs.shift();
     }
 
-    // In production, this would also write to the backend database for permanent audit trail
     console.log('📝 Enforcement logged:', {
       action: log.action,
       result: log.result,
@@ -292,9 +283,6 @@ export class StreamEnforcementService {
     });
   }
 
-  /**
-   * Get enforcement audit logs for user
-   */
   public getAuditLogs(userId: string, limit: number = 50): EnforcementAuditLog[] {
     return this.auditLogs
       .filter((log) => log.userId === userId)
@@ -302,9 +290,6 @@ export class StreamEnforcementService {
       .reverse();
   }
 
-  /**
-   * Get enforcement statistics
-   */
   public getEnforcementStats(): {
     totalEnforcements: number;
     allowed: number;
@@ -331,23 +316,14 @@ export class StreamEnforcementService {
     return stats;
   }
 
-  /**
-   * Register active enforcement context
-   */
   public registerActiveStream(userId: string, context: EnforcementContext): void {
     this.activeEnforcements.set(userId, context);
   }
 
-  /**
-   * Unregister active enforcement context
-   */
   public unregisterActiveStream(userId: string): void {
     this.activeEnforcements.delete(userId);
   }
 
-  /**
-   * Get active enforcement context for user
-   */
   public getActiveEnforcement(userId: string): EnforcementContext | null {
     return this.activeEnforcements.get(userId) || null;
   }
@@ -365,11 +341,7 @@ export class StreamEnforcementService {
     enforcement: EnforcementResult;
   } {
     const enabled = destinations.filter((d) => d.isEnabled);
-
-    // Check the plan max by passing 0 as current count (we want the ceiling, not a "can I add one more" check)
     const destCheck = canAddDestination(userPlan, 0, userEmail);
-
-    // -1 = unlimited; otherwise cap to plan max
     const maxAllowed =
       destCheck.maxDestinations === -1 ? enabled.length : destCheck.maxDestinations;
 
@@ -378,9 +350,10 @@ export class StreamEnforcementService {
       rejected: enabled.slice(maxAllowed),
       enforcement: {
         allowed: maxAllowed > 0,
-        reason: maxAllowed >= enabled.length
-          ? `All ${enabled.length} destination(s) allowed`
-          : `Plan allows ${maxAllowed} destination(s); ${enabled.length - maxAllowed} rejected`,
+        reason:
+          maxAllowed >= enabled.length
+            ? `All ${enabled.length} destination(s) allowed`
+            : `Plan allows ${maxAllowed} destination(s); ${enabled.length - maxAllowed} rejected`,
         enforcement: {
           destinationsAllowed: maxAllowed,
           destinationsRejected: Math.max(0, enabled.length - maxAllowed),
@@ -393,5 +366,4 @@ export class StreamEnforcementService {
   }
 }
 
-// Singleton instance
 export const streamEnforcement = new StreamEnforcementService();
