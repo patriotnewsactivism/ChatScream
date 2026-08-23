@@ -1,5 +1,9 @@
 import app from '../server/app.js';
 import recordingsHandler from './recordings.js';
+import {
+  forwardYouTubeDestinationOAuthCallback,
+  isYouTubeDestinationOAuthCallback,
+} from './youtubeDestinationOAuthCallback.js';
 
 const normalizePathSegment = (value) => {
   if (Array.isArray(value)) {
@@ -32,6 +36,17 @@ export default (req, res) => {
   // to this handler, so specialized routes must dispatch here before Express.
   if (targetPath === '/api/recordings') {
     return recordingsHandler(req, res);
+  }
+
+  // YouTube destination OAuth intentionally reuses the already-authorized
+  // Google backend callback. Destination state is forwarded untouched back
+  // to the originating ChatScream web origin, where the existing state check
+  // and authenticated server-side token exchange complete the connection.
+  if (
+    targetPath === '/api/auth/oauth/google/callback' &&
+    isYouTubeDestinationOAuthCallback(req)
+  ) {
+    return forwardYouTubeDestinationOAuthCallback(req, res);
   }
 
   return app(req, res);

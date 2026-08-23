@@ -27,3 +27,5 @@ jobs:
         run: npx vitest run server/commercial/__tests__/commercialization.test.js
       - name: Next-generation studio regression
         run: npx vitest run server/__tests__/nextgen-studio.test.ts
+      - name: YouTube destination OAuth regression
+        run: npx vitest run server/__tests__/youtube-destination-redirect.test.ts
