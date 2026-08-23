@@ -17,6 +17,7 @@ import {
 } from './mediaSources.js';
 import {
   getCloudWorkerHealth,
+  getCloudWorkerJob,
   isCloudWorkerConfigured,
   startCloudWorkerJob,
   stopCloudWorkerJob,
@@ -24,6 +25,14 @@ import {
 
 const router = express.Router();
 const MAX_OVERAGE_JOB_SECONDS = 12 * 60 * 60;
+const TERMINAL_WORKER_STATES = new Set([
+  'completed',
+  'failed',
+  'stopped',
+  'timed_out',
+  'terminated',
+  'launch_failed',
+]);
 
 const clamp = (value, min, max, fallback = min) => {
   const number = Number(value);
@@ -57,11 +66,47 @@ const sanitizeDestinations = (value, maxDestinations) => {
 
 const overagesEnabledForProfile = (profile) => profile?.settings?.cloudOveragesEnabled === true;
 
+const reconcileFinishedWorker = async (userId, initialUsage) => {
+  const usage = initialUsage || {};
+  const active = usage.activeCloudSession;
+  const jobId = active?.worker?.jobId || active?.worker?.workerId;
+  if (!active || !jobId || !isCloudWorkerConfigured()) {
+    return { usage, worker: null, reconciled: false };
+  }
+
+  try {
+    const worker = await getCloudWorkerJob(jobId);
+    const state = String(worker?.state || '').toLowerCase();
+    if (!TERMINAL_WORKER_STATES.has(state)) {
+      return { usage, worker, reconciled: false };
+    }
+
+    const parsedEndedAt = worker?.endedAt ? new Date(worker.endedAt).getTime() : Date.now();
+    const endedAt = Number.isFinite(parsedEndedAt) ? parsedEndedAt : Date.now();
+    const result = await endDurableCloudSession({
+      uid: userId,
+      sessionId: active.sessionId,
+      endedAt,
+    });
+    return {
+      usage: result?.usage || usage,
+      worker,
+      reconciled: result?.ended === true,
+      reconciliation: result || null,
+    };
+  } catch (error) {
+    console.warn('Cloud worker reconciliation skipped:', error?.message || error);
+    return { usage, worker: null, reconciled: false };
+  }
+};
+
 router.get('/status', async (req, res, next) => {
   try {
     const userId = req.auth.profile.uid;
     const plan = String(req.auth.profile.subscription?.plan || 'free');
-    const usage = (await getDurableCloudUsage(userId)) || {};
+    const initialUsage = (await getDurableCloudUsage(userId)) || {};
+    const reconciled = await reconcileFinishedWorker(userId, initialUsage);
+    const usage = reconciled.usage || {};
     const hoursTotal = cloudHoursForPlan(plan);
     const hoursUsed = Math.max(0, Number(usage.cloudHoursUsed) || 0);
     const hoursRemaining = Math.max(0, hoursTotal - hoursUsed);
@@ -83,6 +128,8 @@ router.get('/status', async (req, res, next) => {
       activeSession: usage.activeCloudSession || null,
       destinationLimit: destinationsForPlan(plan),
       workerConfigured: isCloudWorkerConfigured(),
+      workerState: reconciled.worker?.state || usage.activeCloudSession?.worker?.state || null,
+      workerReconciled: reconciled.reconciled,
       message:
         hoursTotal === 0
           ? 'Cloud playback is available on paid plans.'
@@ -147,7 +194,9 @@ router.post('/sessions/start', async (req, res, next) => {
       return;
     }
 
-    const usage = (await getDurableCloudUsage(userId)) || {};
+    const initialUsage = (await getDurableCloudUsage(userId)) || {};
+    const reconciled = await reconcileFinishedWorker(userId, initialUsage);
+    const usage = reconciled.usage || {};
     if (usage.activeCloudSession) {
       res.status(409).json({
         success: false,
@@ -306,8 +355,14 @@ router.post('/sessions/end', async (req, res, next) => {
 
 router.get('/sessions/active', async (req, res, next) => {
   try {
-    const usage = await getDurableCloudUsage(req.auth.profile.uid);
-    res.json({ activeSession: usage?.activeCloudSession || null });
+    const userId = req.auth.profile.uid;
+    const initialUsage = (await getDurableCloudUsage(userId)) || {};
+    const reconciled = await reconcileFinishedWorker(userId, initialUsage);
+    res.json({
+      activeSession: reconciled.usage?.activeCloudSession || null,
+      workerState: reconciled.worker?.state || null,
+      workerReconciled: reconciled.reconciled,
+    });
   } catch (error) {
     next(error);
   }
