@@ -230,6 +230,7 @@ export const reverseAffiliateCommission = async ({
   adjustmentCents,
   eventId,
   reason = 'refund',
+  cumulativeAdjustment = false,
 }) => {
   if (!subscriberRecord || !invoiceId || !eventId) {
     return { reversed: false, reason: 'missing_context' };
@@ -254,7 +255,19 @@ export const reverseAffiliateCommission = async ({
   const remainingCommission = Math.max(0, originalCommission - priorReversals);
   if (remainingCommission <= 0) return { reversed: false, reason: 'nothing_to_reverse' };
 
-  const requested = Math.max(0, Number(adjustmentCents) || 0);
+  let requested = Math.max(0, Number(adjustmentCents) || 0);
+  if (cumulativeAdjustment) {
+    const alreadyAppliedBase = ledger
+      .filter(
+        (entry) =>
+          entry.invoiceId === invoiceId &&
+          entry.type === 'reversal' &&
+          entry.reason === reason,
+      )
+      .reduce((sum, entry) => sum + Math.max(0, Number(entry.adjustmentCents) || 0), 0);
+    requested = Math.max(0, requested - alreadyAppliedBase);
+  }
+
   const calculated = requested > 0
     ? Math.floor(requested * normalizeRate(affiliate.commissionRate))
     : remainingCommission;
@@ -287,5 +300,5 @@ export const reverseAffiliateCommission = async ({
     profile: { ...referrerWithAffiliate.profile, affiliate: nextAffiliate },
   });
 
-  return { reversed: true, commissionCents };
+  return { reversed: true, commissionCents, adjustmentCents: requested };
 };
