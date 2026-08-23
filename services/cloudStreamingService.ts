@@ -3,17 +3,17 @@
 //
 // INFRASTRUCTURE STATUS:
 // ✅ Client-side service: Complete — session management, cost estimation, status tracking
-// ✅ Server API routes: Complete — /api/cloud-streaming/* endpoints in server/app.js
+// ✅ Durable server control plane: /api/cloud-v2/*
 // ✅ Streaming pipeline: Complete — dual-pipeline (local/cloud) with watermark for free tier
-// ⏳ EC2 Backend: NOT YET DEPLOYED — server routes return mock/seeded data
+// ⏳ Worker provider: intentionally fail-closed until CLOUD_WORKER_API_URL/TOKEN are configured
 //
 // TO COMPLETE CLOUD STREAMING:
-// 1. Provision EC2 instances (GPU-capable, e.g. g4dn.xlarge) with OBS or ffmpeg relay
-// 2. Implement /api/cloud-streaming/sessions/start to spin up EC2 instance
-// 3. Implement /api/cloud-streaming/sessions/end to tear down instance
-// 4. Wire WebRTC or RTMP ingest from browser to cloud instance
-// 5. Route cloud output to RTMP destinations (YouTube, Twitch, etc.)
-// 6. Add billing integration to track actual cloud hours consumed
+// 1. Provision a compatible autoscaled FFmpeg worker provider
+// 2. Configure CLOUD_WORKER_API_URL/TOKEN
+// 3. Verify start/stop/checkpoint behavior end-to-end
+// 4. Enable browser ingest and URL-to-live source selection in the Studio UI
+// 5. Validate destination-specific CBR output and recovery
+// 6. Send pending overage usage to the billing provider after reconciliation
 
 import { ApiRequestError, apiRequest } from './apiClient';
 import { getCurrentSessionToken } from './backend';
@@ -87,12 +87,25 @@ export interface ActiveCloudSession {
   estimatedCostPerHour?: number;
 }
 
+export interface CloudDestinationInput {
+  id?: string;
+  platform?: string;
+  ingestUrl?: string;
+  rtmpUrl?: string;
+  url?: string;
+  streamKey?: string;
+  enabled?: boolean;
+}
+
 export interface CloudSessionStartOptions {
   quality?: CloudStreamQuality;
   resolution?: CloudStreamQuality;
   bitrateKbps?: number;
   instanceProfile?: CloudInstanceProfile;
   storageGb?: number;
+  sourceUrl?: string;
+  destinations?: CloudDestinationInput[];
+  recording?: boolean;
 }
 
 const token = () => getCurrentSessionToken();
@@ -222,7 +235,7 @@ export const getCloudStreamingStatus = async (
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/status?userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(userPlan)}`,
+      `/api/cloud-v2/status?userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(userPlan)}`,
       {
         method: 'GET',
         token: token(),
@@ -289,7 +302,7 @@ export const startCloudSession = async (
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/start', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/sessions/start', {
       method: 'POST',
       token: token(),
       body: { userId, userPlan, destinationCount, ...options },
@@ -339,7 +352,7 @@ export const endCloudSession = async (
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/end', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/sessions/end', {
       method: 'POST',
       token: token(),
       body: { userId, sessionId },
@@ -377,7 +390,7 @@ export const resetCloudHours = async (userId: string): Promise<boolean> => {
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/reset', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/reset', {
       method: 'POST',
       token: token(),
       body: { userId },
@@ -434,7 +447,7 @@ export const hasActiveCloudSession = async (userId: string): Promise<boolean> =>
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
+      `/api/cloud-v2/sessions/active?userId=${encodeURIComponent(userId)}`,
       {
         method: 'GET',
         token: token(),
@@ -468,7 +481,7 @@ export const getActiveCloudSession = async (
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
+      `/api/cloud-v2/sessions/active?userId=${encodeURIComponent(userId)}`,
       {
         method: 'GET',
         token: token(),

@@ -66,6 +66,9 @@ import {
   generateViralPackageWithAi,
   moderateMessageWithAi,
 } from './ai.js';
+import commercialRouter from './commercial/router.js';
+import publicCommercialRouter from './commercial/publicRouter.js';
+import { DEFAULT_AFFILIATE_COMMISSION_RATE, findAffiliateByCode, recordDurableReferral } from './commercial/affiliate.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -253,6 +256,9 @@ const requireAuth = asyncHandler(async (req, res, next) => {
   req.auth = { session, record: enforcedRecord, profile: enforcedProfile, token };
   next();
 });
+
+app.use('/api/public/commercial', publicCommercialRouter);
+app.use('/api/cloud-v2', requireAuth, commercialRouter);
 
 // Multer Setup
 const uploadDir = process.env.VERCEL
@@ -448,15 +454,16 @@ app.delete(
 
 const PLAN_HOURS = {
   free: 0,
-  pro: 3,
-  expert: 10,
-  enterprise: 50,
+  pro: 2,
+  expert: 8,
+  enterprise: 20,
+  business: 40,
 };
 
 const AWS_COST_MODEL = Object.freeze({
   region: 'us-east-1',
   minDestinations: 1,
-  maxDestinations: 5,
+  maxDestinations: 10,
   instanceRatesPerHour: {
     't3.medium': 0.0416,
     'c7g.large': 0.0725,
@@ -1201,7 +1208,7 @@ const ensureAffiliateForProfile = (profile) => {
       ownerId: next.uid,
       ownerEmail: next.email,
       ownerName: next.displayName,
-      commissionRate: 0.2,
+      commissionRate: DEFAULT_AFFILIATE_COMMISSION_RATE,
       bonusTrialDays: 3,
       totalReferrals: 0,
       totalEarnings: 0,
@@ -1253,7 +1260,7 @@ app.post(
       return;
     }
 
-    const referredAffiliate = referralCode ? getAffiliate(referralCode) : null;
+    const referredAffiliate = referralCode ? await findAffiliateByCode(referralCode) : null;
     const uid = randomUUID();
     const profile = applyAccessOverrides(
       ensureAffiliateForProfile(
@@ -1267,20 +1274,6 @@ app.post(
       ),
     );
 
-    if (referredAffiliate?.isActive) {
-      setAffiliate({
-        ...referredAffiliate,
-        totalReferrals: Number(referredAffiliate.totalReferrals || 0) + 1,
-      });
-      addReferral({
-        id: randomUUID(),
-        affiliateCode: referredAffiliate.code,
-        referrerId: referredAffiliate.ownerId,
-        referredUserId: uid,
-        createdAt: nowIso(),
-      });
-    }
-
     await putUser({
       uid,
       email,
@@ -1288,6 +1281,14 @@ app.post(
       passwordAlgorithm: PASSWORD_HASH_ALGORITHM,
       profile,
     });
+
+    if (referredAffiliate?.isActive) {
+      await recordDurableReferral({
+        referredUserId: uid,
+        referralCode: referredAffiliate.code,
+        referrerId: referredAffiliate.ownerId,
+      });
+    }
 
     const payload = await buildSessionPayload(uid);
     res.status(201).json(payload);
@@ -2256,7 +2257,7 @@ app.post(
       betaTester: makeAdmin ? true : Boolean(record.profile?.betaTester),
       subscription: {
         ...record.profile.subscription,
-        plan: makeAdmin ? 'enterprise' : record.profile.subscription?.plan || 'free',
+        plan: makeAdmin ? 'business' : record.profile.subscription?.plan || 'free',
         status: makeAdmin ? 'active' : record.profile.subscription?.status || 'active',
         betaOverride: makeAdmin ? true : record.profile.subscription?.betaOverride,
       },

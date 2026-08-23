@@ -663,7 +663,7 @@ export const applyAccessOverrides = (profile) => {
   const isBetaTester = betaUids.includes(uid) || betaEmails.includes(email) || isAdmin;
 
   const nextRole = isAdmin ? 'admin' : isBetaTester ? 'beta_tester' : profile.role || 'user';
-  const nextPlan = isBetaTester ? 'enterprise' : profile.subscription?.plan || 'free';
+  const nextPlan = isBetaTester ? 'business' : profile.subscription?.plan || 'free';
   const nextStatus = isBetaTester ? 'active' : profile.subscription?.status || 'active';
 
   return {

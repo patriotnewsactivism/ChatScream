@@ -1,0 +1,27 @@
+name: Core CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck and production build
+        run: npm run build
+      - name: Root admin regression
+        run: npx vitest run server/__tests__/root-admin-access.test.ts
+      - name: Commercialization security and economics regression
+        run: npx vitest run server/commercial/__tests__/commercialization.test.js

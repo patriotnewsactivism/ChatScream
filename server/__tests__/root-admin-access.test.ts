@@ -25,7 +25,7 @@ describe('root admin access', () => {
       role: 'admin',
       betaTester: true,
       subscription: {
-        plan: 'enterprise',
+        plan: 'business',
         status: 'active',
         betaOverride: true,
       },
