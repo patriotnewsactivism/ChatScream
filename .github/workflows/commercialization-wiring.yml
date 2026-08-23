@@ -1,0 +1,48 @@
+name: Commercialization wiring
+
+on:
+  push:
+    branches:
+      - feature/commercialization-stack
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[commercialization-wired]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/commercialization-stack
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply targeted wiring patch
+        run: node scripts/apply-commercialization-patch.mjs
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Run root admin tests
+        run: npx vitest run server/__tests__/root-admin-access.test.ts
+
+      - name: Commit verified wiring
+        run: |
+          if git diff --quiet; then
+            echo "No wiring changes needed."
+            exit 0
+          fi
+          git config user.name "ChatScream Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- server/app.js server/store.js server/commercial/affiliate.js services/backend.ts services/cloudStreamingService.ts server/__tests__/root-admin-access.test.ts
+          git commit -m "Wire durable commercialization control plane [commercialization-wired]"
+          git push origin HEAD:feature/commercialization-stack
