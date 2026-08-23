@@ -26,7 +26,7 @@ const request = async (path, options = {}) => {
     try {
       payload = JSON.parse(text);
     } catch {
-      payload = { raw: text };
+      payload = { raw: text.slice(0, 1000) };
     }
   }
 
@@ -35,7 +35,6 @@ const request = async (path, options = {}) => {
       payload?.message || payload?.error || `Cloud worker request failed (${response.status}).`,
     );
     error.status = response.status;
-    error.details = payload;
     throw error;
   }
 
@@ -48,7 +47,12 @@ export const getCloudWorkerHealth = async () => {
   }
   try {
     const payload = await request('/health', { method: 'GET' });
-    return { configured: true, healthy: payload?.ok !== false, ...payload };
+    return {
+      configured: true,
+      healthy: payload?.ok !== false,
+      provider: String(payload?.provider || 'external'),
+      capacity: payload?.capacity || null,
+    };
   } catch (error) {
     return {
       configured: true,
@@ -66,6 +70,7 @@ export const startCloudWorkerJob = async ({
   quality,
   bitrateKbps,
   recording,
+  maxDurationSeconds,
 }) => {
   const payload = await request('/v1/jobs', {
     method: 'POST',
@@ -79,6 +84,14 @@ export const startCloudWorkerJob = async ({
         bitrateKbps,
         rateControl: 'cbr',
       },
+      limits: {
+        maxDurationSeconds:
+          maxDurationSeconds == null
+            ? null
+            : Math.max(60, Math.floor(Number(maxDurationSeconds) || 60)),
+        blockPrivateNetworks: true,
+        revalidateDnsBeforeFetch: true,
+      },
       recording: recording || { enabled: true },
     }),
   });
@@ -88,9 +101,8 @@ export const startCloudWorkerJob = async ({
     workerId: String(payload.workerId || payload.jobId || ''),
     jobId: String(payload.jobId || payload.workerId || sessionId),
     state: String(payload.state || 'starting'),
-    ingestUrl: payload.ingestUrl || null,
+    ingestUrl: typeof payload.ingestUrl === 'string' ? payload.ingestUrl : null,
     startedAt: payload.startedAt || new Date().toISOString(),
-    raw: payload,
   };
 };
 
@@ -106,5 +118,13 @@ export const stopCloudWorkerJob = async ({ jobId, sessionId }) => {
 export const getCloudWorkerJob = async (jobId) => {
   const id = encodeURIComponent(String(jobId || '').trim());
   if (!id) throw new Error('Cloud worker job id is required.');
-  return request(`/v1/jobs/${id}`, { method: 'GET' });
+  const payload = await request(`/v1/jobs/${id}`, { method: 'GET' });
+  return {
+    provider: String(payload.provider || 'external'),
+    workerId: String(payload.workerId || payload.jobId || ''),
+    jobId: String(payload.jobId || payload.workerId || id),
+    state: String(payload.state || 'unknown'),
+    startedAt: payload.startedAt || null,
+    endedAt: payload.endedAt || null,
+  };
 };
