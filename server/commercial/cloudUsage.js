@@ -43,20 +43,22 @@ const getPeriodKey = (record) => {
   return `calendar:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
+const freshUsage = (periodKey) => ({
+  periodKey,
+  cloudHoursUsed: 0,
+  includedHoursUsed: 0,
+  overageHours: 0,
+  overageAmountCents: 0,
+  activeCloudSession: null,
+  sessions: [],
+  resetAt: nowIso(),
+});
+
 const normalizeUsage = (record) => {
   const cloud = record?.profile?.usage?.cloud || {};
   const periodKey = getPeriodKey(record);
   if (cloud.periodKey && cloud.periodKey !== periodKey) {
-    return {
-      periodKey,
-      cloudHoursUsed: 0,
-      includedHoursUsed: 0,
-      overageHours: 0,
-      overageAmountCents: 0,
-      activeCloudSession: null,
-      sessions: [],
-      resetAt: nowIso(),
-    };
+    return freshUsage(periodKey);
   }
 
   return {
@@ -103,6 +105,8 @@ export const startDurableCloudSession = async ({
   estimatedCostPerHour,
   source,
   worker,
+  overagesEnabled = false,
+  maxDurationSeconds = null,
 }) => {
   const record = await getUserByUid(uid);
   if (!record) return null;
@@ -120,6 +124,9 @@ export const startDurableCloudSession = async ({
     estimatedCostPerHour: Number(estimatedCostPerHour) || 0,
     source: source || null,
     worker: worker || null,
+    overagesEnabled: overagesEnabled === true,
+    maxDurationSeconds:
+      maxDurationSeconds == null ? null : Math.max(1, Math.floor(Number(maxDurationSeconds) || 1)),
   };
 
   const next = {
@@ -148,9 +155,14 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
   const priorHours = Math.max(0, Number(usage.cloudHoursUsed) || 0);
   const includedRemaining = Math.max(0, includedLimit - priorHours);
   const includedSessionHours = Math.min(sessionHours, includedRemaining);
-  const overageSessionHours = Math.max(0, sessionHours - includedSessionHours);
+  const rawOverageHours = Math.max(0, sessionHours - includedSessionHours);
+  const overagesEnabled = active.overagesEnabled === true;
+  const overageSessionHours = overagesEnabled ? rawOverageHours : 0;
+  const unbilledGraceHours = overagesEnabled ? 0 : rawOverageHours;
   const rate = overageRateCentsPerHour(active.destinationCount);
-  const overageAmountCents = Math.max(0, Math.ceil(overageSessionHours * rate));
+  const overageAmountCents = overagesEnabled
+    ? Math.max(0, Math.ceil(overageSessionHours * rate))
+    : 0;
 
   const session = {
     ...active,
@@ -159,9 +171,11 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
     hoursUsed: roundHours(sessionHours),
     includedHours: roundHours(includedSessionHours),
     overageHours: roundHours(overageSessionHours),
+    unbilledGraceHours: roundHours(unbilledGraceHours),
     overageRateCentsPerHour: rate,
     overageAmountCents,
-    meteringStatus: overageAmountCents > 0 ? 'pending' : 'included',
+    meteringStatus:
+      overageAmountCents > 0 ? 'pending' : unbilledGraceHours > 0 ? 'capped_unbilled' : 'included',
   };
 
   const next = {
@@ -187,6 +201,7 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
     sessionHours: roundHours(sessionHours),
     includedHours: roundHours(includedSessionHours),
     overageHours: roundHours(overageSessionHours),
+    unbilledGraceHours: roundHours(unbilledGraceHours),
     overageAmountCents,
     overageRateCentsPerHour: rate,
     usage: next,
@@ -197,16 +212,7 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
 export const resetDurableCloudUsage = async (uid) => {
   const record = await getUserByUid(uid);
   if (!record) return null;
-  const next = {
-    periodKey: getPeriodKey(record),
-    cloudHoursUsed: 0,
-    includedHoursUsed: 0,
-    overageHours: 0,
-    overageAmountCents: 0,
-    activeCloudSession: null,
-    sessions: [],
-    resetAt: nowIso(),
-  };
+  const next = freshUsage(getPeriodKey(record));
   await saveUsage(record, next);
   return next;
 };
