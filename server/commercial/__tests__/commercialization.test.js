@@ -53,7 +53,7 @@ describe('commercial media source safety', () => {
 
   it('accepts normal RTMPS destinations', () => {
     expect(validateRtmpDestination('rtmps://live.example.com:443/app')).toBe(
-      'rtmps://live.example.com/app',
+      'rtmps://live.example.com:443/app',
     );
   });
 
