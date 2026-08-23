@@ -1,6 +1,7 @@
 import express from 'express';
 import { createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { getUserByEmail, getUserByUid, putUser } from '../store.js';
+import { resolveMediaSource } from '../commercial/mediaSources.js';
 
 const ROOT_ADMIN_EMAILS = new Set([
   'mreardon@wtpnews.org',
@@ -66,23 +67,18 @@ const sanitizeCommand = (raw) => {
   }
 
   if (command === 'program-media') {
-    const url = text(payload.url, 4096);
-    let parsed;
-    try {
-      parsed = new URL(url);
-    } catch {
-      throw new Error('program-media requires a valid HTTPS URL.');
+    const source = resolveMediaSource(text(payload.url, 4096));
+    if (!source.supported || !source.playableUrl) {
+      throw new Error(source.reason || 'program-media requires a supported public media URL.');
     }
-    if (parsed.protocol !== 'https:') {
+    if (!String(source.playableUrl).startsWith('https://')) {
       throw new Error('program-media requires HTTPS.');
-    }
-    if (parsed.username || parsed.password) {
-      throw new Error('Embedded URL credentials are not allowed.');
     }
     return {
       command,
       payload: {
-        url: parsed.toString(),
+        url: source.playableUrl,
+        provider: source.provider,
         label: text(payload.label, 120),
         fullscreen: payload.fullscreen === true,
         autoplay: payload.autoplay !== false,
@@ -169,7 +165,8 @@ ingressRouter.post('/event', async (req, res, next) => {
       (error.message.includes('Unsupported') ||
         error.message.includes('requires') ||
         error.message.includes('authorized') ||
-        error.message.includes('not found'))
+        error.message.includes('not found') ||
+        error.message.includes('not allowed'))
     ) {
       return res.status(400).json({ message: error.message });
     }
