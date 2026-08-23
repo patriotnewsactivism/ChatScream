@@ -11,7 +11,7 @@ const defaultExpirationTime = () => new Date(Date.now() + 60 * 60 * 1000).toISOS
 const isJsdom = () =>
   typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('jsdom');
 
-export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise';
+export type PlanTier = 'free' | 'pro' | 'expert' | 'enterprise' | 'business';
 
 export interface AuthTokenResult {
   token: string;

@@ -91,18 +91,19 @@ export const recordDurableReferral = async ({
   const affiliate = normalizeAffiliate(referrerWithAffiliate);
 
   const existingReferrerId = String(referred.profile?.referredByUserId || '').trim();
-  if (existingReferrerId) {
-    return {
-      recorded: existingReferrerId === referrer.uid,
-      reason: existingReferrerId === referrer.uid ? 'already_recorded' : 'already_attributed',
-    };
+  if (existingReferrerId && existingReferrerId !== referrer.uid) {
+    return { recorded: false, reason: 'already_attributed' };
+  }
+  if (existingReferrerId === referrer.uid && referred.profile?.referralCountedAt) {
+    return { recorded: true, reason: 'already_recorded' };
   }
 
   const referredProfile = {
     ...referred.profile,
     referredByCode: affiliate.code,
     referredByUserId: referrer.uid,
-    referralAttributedAt: nowIso(),
+    referralAttributedAt: referred.profile?.referralAttributedAt || nowIso(),
+    referralCountedAt: nowIso(),
   };
   await putUser({ ...referred, profile: referredProfile });
 

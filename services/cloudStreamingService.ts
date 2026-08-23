@@ -9,8 +9,8 @@
 //
 // TO COMPLETE CLOUD STREAMING:
 // 1. Provision EC2 instances (GPU-capable, e.g. g4dn.xlarge) with OBS or ffmpeg relay
-// 2. Implement /api/cloud-streaming/sessions/start to spin up EC2 instance
-// 3. Implement /api/cloud-streaming/sessions/end to tear down instance
+// 2. Implement /api/cloud-v2/sessions/start to spin up EC2 instance
+// 3. Implement /api/cloud-v2/sessions/end to tear down instance
 // 4. Wire WebRTC or RTMP ingest from browser to cloud instance
 // 5. Route cloud output to RTMP destinations (YouTube, Twitch, etc.)
 // 6. Add billing integration to track actual cloud hours consumed
@@ -222,7 +222,7 @@ export const getCloudStreamingStatus = async (
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/status?userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(userPlan)}`,
+      `/api/cloud-v2/status?userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(userPlan)}`,
       {
         method: 'GET',
         token: token(),
@@ -289,7 +289,7 @@ export const startCloudSession = async (
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/start', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/sessions/start', {
       method: 'POST',
       token: token(),
       body: { userId, userPlan, destinationCount, ...options },
@@ -339,7 +339,7 @@ export const endCloudSession = async (
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/sessions/end', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/sessions/end', {
       method: 'POST',
       token: token(),
       body: { userId, sessionId },
@@ -377,7 +377,7 @@ export const resetCloudHours = async (userId: string): Promise<boolean> => {
   }
 
   try {
-    const response = await apiRequest<unknown>('/api/cloud-streaming/reset', {
+    const response = await apiRequest<unknown>('/api/cloud-v2/reset', {
       method: 'POST',
       token: token(),
       body: { userId },
@@ -434,7 +434,7 @@ export const hasActiveCloudSession = async (userId: string): Promise<boolean> =>
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
+      `/api/cloud-v2/sessions/active?userId=${encodeURIComponent(userId)}`,
       {
         method: 'GET',
         token: token(),
@@ -468,7 +468,7 @@ export const getActiveCloudSession = async (
 
   try {
     const response = await apiRequest<unknown>(
-      `/api/cloud-streaming/sessions/active?userId=${encodeURIComponent(userId)}`,
+      `/api/cloud-v2/sessions/active?userId=${encodeURIComponent(userId)}`,
       {
         method: 'GET',
         token: token(),
