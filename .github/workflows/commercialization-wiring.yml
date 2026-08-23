@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - feature/commercialization-stack
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   wire-and-verify:
-    if: ${{ !contains(github.event.head_commit.message, '[commercialization-wired]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[commercialization-wired]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
