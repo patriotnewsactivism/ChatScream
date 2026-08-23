@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ChatScream scale-to-zero URL-to-live FFmpeg worker control plane.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Public subnets with internet routing. Worker security group has no inbound rules.
+  ControlTokenSha256:
+    Type: String
+    NoEcho: true
+    MinLength: 64
+    MaxLength: 64
+  WorkerCodeUrl:
+    Type: String
+    Description: HTTPS URL to the pinned worker.py source file.
+  WorkerInstanceType:
+    Type: String
+    Default: c7g.large
+    AllowedValues:
+      - t4g.medium
+      - c7g.large
+      - c7g.xlarge
+      - c6i.large
+      - c6i.xlarge
+  WorkerAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id
+    Description: Override with an amd64 Ubuntu AMI when using c6i instances.
+  MaxConcurrentJobs:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    MaxValue: 100
+  JobTtlSeconds:
+    Type: Number
+    Default: 604800
+    MinValue: 3600
+
+Resources:
+  JobTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: job_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: job_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Service
+          Value: chatscream-url-worker
+
+  WorkerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ChatScream URL workers - outbound only
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Service
+          Value: chatscream-url-worker
+
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ChatScreamWorkerJobAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt JobTable.Arn
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeTags
+                Resource: '*'
+      Tags:
+        - Key: Service
+          Value: chatscream-url-worker
+
+  WorkerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WorkerRole
+
+  UrlWorkerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref WorkerAmiId
+        InstanceType: !Ref WorkerInstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt WorkerInstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref WorkerSecurityGroup
+        InstanceInitiatedShutdownBehavior: terminate
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+              VolumeType: gp3
+              VolumeSize: 20
+        TagSpecifications:
+          - ResourceType: volume
+            Tags:
+              - Key: Service
+                Value: chatscream-url-worker
+        UserData:
+          Fn::Base64: !Sub |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            exec > >(tee -a /var/log/chatscream-url-worker-bootstrap.log) 2>&1
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -y
+            apt-get install -y --no-install-recommends ca-certificates curl ffmpeg python3 python3-boto3
+            install -d -m 0755 /opt/chatscream
+            curl --fail --silent --show-error --location '${WorkerCodeUrl}' -o /opt/chatscream/worker.py
+            chmod 0755 /opt/chatscream/worker.py
+            cat >/etc/systemd/system/chatscream-url-worker.service <<'EOF'
+            [Unit]
+            Description=ChatScream URL-to-live worker
+            Wants=network-online.target
+            After=network-online.target
+
+            [Service]
+            Type=simple
+            Environment=JOB_TABLE_NAME=${JobTable}
+            Environment=AWS_REGION=${AWS::Region}
+            ExecStart=/usr/bin/python3 /opt/chatscream/worker.py
+            Restart=no
+            StandardOutput=journal
+            StandardError=journal
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+            systemctl daemon-reload
+            systemctl enable --now chatscream-url-worker.service
+
+  WorkerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+
+  OrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.12
+      Architectures:
+        - arm64
+      Handler: orchestrator.handler
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          JOB_TABLE_NAME: !Ref JobTable
+          LAUNCH_TEMPLATE_ID: !Ref UrlWorkerLaunchTemplate
+          SUBNET_IDS: !Join [',', !Ref SubnetIds]
+          CONTROL_TOKEN_SHA256: !Ref ControlTokenSha256
+          MAX_CONCURRENT_JOBS: !Ref MaxConcurrentJobs
+          MAX_DESTINATIONS: '10'
+          JOB_TTL_SECONDS: !Ref JobTtlSeconds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeInstances
+                - ec2:RunInstances
+                - ec2:TerminateInstances
+                - ec2:CreateTags
+              Resource: '*'
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt WorkerRole.Arn
+      Events:
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WorkerApi
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  WorkerApiUrl:
+    Description: Set this as CLOUD_WORKER_API_URL in ChatScream after verification.
+    Value: !Sub 'https://${WorkerApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  JobTableName:
+    Value: !Ref JobTable
+  LaunchTemplateId:
+    Value: !Ref UrlWorkerLaunchTemplate
+  WorkerSecurityGroupId:
+    Value: !Ref WorkerSecurityGroup
+  WorkerRoleArn:
+    Value: !GetAtt WorkerRole.Arn
