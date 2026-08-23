@@ -18,6 +18,9 @@ interface ChatStreamProps {
   authToken: string | null;
   /** Live platform messages from YouTube / Twitch / Facebook */
   liveMessages?: AggregatedMessage[];
+  /** StreamYard-style: tap a live comment to put it on the encoded program. */
+  onHighlightComment?: (message: AggregatedMessage) => void;
+  highlightedCommentId?: string | null;
 }
 
 /** Platform badge color classes */
@@ -25,6 +28,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   youtube: 'bg-red-600/30 text-red-400 border-red-500/30',
   twitch: 'bg-purple-600/30 text-purple-400 border-purple-500/30',
   facebook: 'bg-blue-600/30 text-blue-400 border-blue-500/30',
+  local: 'bg-indigo-600/30 text-indigo-300 border-indigo-500/30',
 };
 
 const ChatStream: React.FC<ChatStreamProps> = ({
@@ -33,11 +37,12 @@ const ChatStream: React.FC<ChatStreamProps> = ({
   onBroadcast,
   authToken,
   liveMessages = [],
+  onHighlightComment,
+  highlightedCommentId = null,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showOnStream, setShowOnStream] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -65,7 +70,6 @@ const ChatStream: React.FC<ChatStreamProps> = ({
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
-    // Generate AI response if enabled
     if (aiEnabled) {
       if (!authToken) {
         alert('Sign in to use AI chat assistance.');
@@ -155,18 +159,21 @@ const ChatStream: React.FC<ChatStreamProps> = ({
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const clearMessages = () => {
-    setMessages([]);
-  };
+  const clearMessages = () => setMessages([]);
 
   if (!isExpanded) {
     return (
       <button
         onClick={() => setIsExpanded(true)}
         className="fixed bottom-36 right-3 md:bottom-24 md:right-4 z-40 p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-xl shadow-purple-600/30 hover:scale-110 transition-all group"
+        title="Open live chat"
       >
         <MessageSquare size={24} className="text-white" />
-        <span className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full border-2 border-dark-900 animate-pulse" />
+        {liveMessages.length > 0 && (
+          <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 bg-green-500 rounded-full border-2 border-dark-900 text-[9px] font-black text-white flex items-center justify-center">
+            {Math.min(99, liveMessages.length)}
+          </span>
+        )}
         <span className="hidden md:block absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-dark-800 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
           Chat Stream
         </span>
@@ -176,7 +183,6 @@ const ChatStream: React.FC<ChatStreamProps> = ({
 
   return (
     <div className="fixed left-3 right-3 bottom-36 md:left-auto md:right-4 md:bottom-24 z-40 md:w-80 lg:w-96 bg-dark-800/95 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[60vh] md:max-h-[70vh] animate-slide-up">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-t-2xl">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg">
@@ -202,56 +208,76 @@ const ChatStream: React.FC<ChatStreamProps> = ({
           <button
             onClick={clearMessages}
             className="p-1.5 text-gray-500 hover:text-gray-300 rounded-lg transition-colors"
-            title="Clear messages"
+            title="Clear assistant messages"
           >
             <Trash2 size={16} />
           </button>
           <button
             onClick={() => setIsExpanded(false)}
             className="p-1.5 text-gray-500 hover:text-gray-300 rounded-lg transition-colors"
+            title="Close chat"
           >
             <X size={16} />
           </button>
         </div>
       </div>
 
-      {/* Live platform messages */}
       {liveMessages.length > 0 && (
         <div className="border-b border-gray-700/60">
-          <div className="px-4 pt-3 pb-1 flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-              Live Chat
-            </span>
+          <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Live Chat
+              </span>
+            </div>
+            <span className="text-[9px] text-gray-500">Tap a comment to put it on screen</span>
           </div>
-          <div className="overflow-y-auto max-h-48 px-4 pb-3 space-y-1.5">
+          <div className="overflow-y-auto max-h-52 px-3 pb-3 space-y-1.5">
             {liveMessages.map((msg) => {
               const platformKey = msg.platform.toLowerCase();
               const colorClass =
                 PLATFORM_COLORS[platformKey] ?? 'bg-gray-600/30 text-gray-400 border-gray-500/30';
+              const highlighted = highlightedCommentId === msg.id;
               return (
-                <div key={msg.id} className="flex items-start gap-2 text-sm">
+                <button
+                  key={msg.id}
+                  type="button"
+                  onClick={() => onHighlightComment?.(msg)}
+                  className={`w-full flex items-start gap-2 text-sm text-left rounded-lg p-2 border transition-all active:scale-[0.99] ${
+                    highlighted
+                      ? 'border-green-400/70 bg-green-500/10 ring-1 ring-green-400/30'
+                      : 'border-transparent hover:border-gray-700 hover:bg-gray-900/40'
+                  }`}
+                  title={highlighted ? 'Tap to remove this comment from the stream' : 'Put this comment on stream'}
+                >
                   <span
                     className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ${colorClass}`}
                   >
                     {msg.platform}
                   </span>
-                  <span className="font-semibold text-gray-300 shrink-0">{msg.displayName}:</span>
-                  <span className="text-gray-400 break-words min-w-0">{msg.content}</span>
-                </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold text-gray-300">{msg.displayName}: </span>
+                    <span className="text-gray-400 break-words">{msg.content}</span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-md p-1 ${highlighted ? 'bg-green-500/20 text-green-300' : 'text-gray-600'}`}
+                  >
+                    <Eye size={14} />
+                  </span>
+                </button>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* AI / user messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[150px]">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Send messages to your stream!</p>
-            <p className="text-xs mt-1">Messages will appear as overlays for your viewers.</p>
+            <p className="text-sm">Send messages to your stream</p>
+            <p className="text-xs mt-1">AI suggestions and host messages appear here.</p>
           </div>
         ) : (
           messages.map((message) => (
@@ -291,7 +317,6 @@ const ChatStream: React.FC<ChatStreamProps> = ({
                   <p className="text-sm text-gray-200">{message.content}</p>
                 </div>
 
-                {/* Actions */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                   <button
                     onClick={() => copyMessage(message.content, message.id)}
@@ -322,18 +347,9 @@ const ChatStream: React.FC<ChatStreamProps> = ({
         {isLoading && (
           <div className="flex items-center gap-2 text-gray-400 text-sm">
             <div className="flex gap-1">
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '0ms' }}
-              />
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '150ms' }}
-              />
-              <span
-                className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                style={{ animationDelay: '300ms' }}
-              />
+              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" />
+              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:300ms]" />
             </div>
             <span>AI is thinking...</span>
           </div>
@@ -342,7 +358,6 @@ const ChatStream: React.FC<ChatStreamProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -353,11 +368,8 @@ const ChatStream: React.FC<ChatStreamProps> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  if (e.ctrlKey || e.metaKey) {
-                    handleQuickBroadcast();
-                  } else {
-                    handleSend();
-                  }
+                  if (e.ctrlKey || e.metaKey) handleQuickBroadcast();
+                  else handleSend();
                 }
               }}
               placeholder="Type a message..."
