@@ -402,16 +402,17 @@ export const initiateOAuth = (platform: OAuthPlatform, userId: string): void => 
   const mobile = isMobileDevice();
 
   if (mobile) {
-    const mobileTab = window.open('about:blank', '_blank');
+    // Mobile browsers and installed PWAs can treat a disposable OAuth child tab as a
+    // separate app window. Closing that child after the callback can look like the app
+    // itself crashed or force-closed. Keep the whole mobile OAuth flow in the current
+    // tab so localStorage state survives and the callback can navigate back to Studio.
     void (async () => {
       try {
         await ensureConfigured(platform);
         const authUrl = await getAuthorizationUrl(platform, userId);
-        if (mobileTab && !mobileTab.closed) mobileTab.location.href = authUrl;
-        else window.location.assign(authUrl);
+        window.location.assign(authUrl);
       } catch (error) {
         console.error(`Failed to start ${platform} OAuth (mobile):`, error);
-        if (mobileTab && !mobileTab.closed) mobileTab.close();
         alert(`Could not start ${platform} sign-in. Check your OAuth configuration and try again.`);
       }
     })();
