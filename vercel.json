@@ -37,6 +37,18 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/api/auth/oauth/:path*",
+      "destination": "https://api.chatscream.live/api/auth/oauth/:path*",
+      "permanent": false
+    },
+    {
+      "source": "/api/auth/social/:path*",
+      "destination": "https://api.chatscream.live/api/auth/social/:path*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
