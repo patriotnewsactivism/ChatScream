@@ -69,8 +69,15 @@ import {
 import commercialRouter from './commercial/router.js';
 import publicCommercialRouter from './commercial/publicRouter.js';
 import aiModeratorRouter from './aiModerator/router.js';
-import { ingressRouter as internalStudioIngressRouter, adminRouter as internalStudioAdminRouter } from './internalBridge/router.js';
-import { DEFAULT_AFFILIATE_COMMISSION_RATE, findAffiliateByCode, recordDurableReferral } from './commercial/affiliate.js';
+import {
+  ingressRouter as internalStudioIngressRouter,
+  adminRouter as internalStudioAdminRouter,
+} from './internalBridge/router.js';
+import {
+  DEFAULT_AFFILIATE_COMMISSION_RATE,
+  findAffiliateByCode,
+  recordDurableReferral,
+} from './commercial/affiliate.js';
 import { buildYouTubeDestinationRedirectTarget } from './youtubeDestinationOAuthCallback.js';
 import { resolveFrontendOAuthCallbackUrl } from './frontendOAuthRedirect.js';
 
@@ -250,9 +257,7 @@ const requireAuth = asyncHandler(async (req, res, next) => {
     Boolean(userRecord.profile?.subscription?.betaOverride) !==
       Boolean(enforcedProfile.subscription?.betaOverride);
 
-  const enforcedRecord = accessChanged
-    ? { ...userRecord, profile: enforcedProfile }
-    : userRecord;
+  const enforcedRecord = accessChanged ? { ...userRecord, profile: enforcedProfile } : userRecord;
   if (accessChanged) {
     await putUser(enforcedRecord);
   }
@@ -2088,10 +2093,15 @@ app.get('/api/capabilities', requireAuth, (_req, res) => {
   res.json(getBackendCapabilities());
 });
 
-app.patch('/api/config/oauth', requireAuth, requireAdmin, (req, res) => {
-  setConfig('oauth', req.body || {}, req.auth.profile.uid);
-  res.json({ success: true, oauth: getConfig('oauth') });
-});
+app.patch(
+  '/api/config/oauth',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    await setConfig('oauth', req.body || {}, req.auth.profile.uid);
+    res.json({ success: true, oauth: getConfig('oauth') });
+  }),
+);
 
 app.get('/api/oauth/config/public', requireAuth, (req, res) => {
   const oauth = getConfig('oauth') || {};
@@ -2114,70 +2124,85 @@ app.get('/api/oauth/config/public', requireAuth, (req, res) => {
   });
 });
 
-app.put('/api/oauth/config/public', requireAuth, requireAdmin, (req, res) => {
-  setConfig('oauth', req.body || {}, req.auth.profile.uid);
-  res.json({ success: true, oauth: getConfig('oauth') });
-});
+app.put(
+  '/api/oauth/config/public',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    await setConfig('oauth', req.body || {}, req.auth.profile.uid);
+    res.json({ success: true, oauth: getConfig('oauth') });
+  }),
+);
 
 app.get('/api/config/access', requireAuth, requireAdmin, (_req, res) => {
   res.json(getConfig('access'));
 });
 
-app.put('/api/config/access', requireAuth, requireAdmin, (req, res) => {
-  const admins = Array.isArray(req.body?.admins)
-    ? req.body.admins.map(normalizeEmail).filter(Boolean)
-    : [];
-  const betaTesters = Array.isArray(req.body?.betaTesters)
-    ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
-    : [];
-  const adminUids = Array.isArray(req.body?.adminUids)
-    ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
-    ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  setConfig(
-    'access',
-    {
-      admins: [...new Set(admins)],
-      betaTesters: [...new Set(betaTesters)],
-      adminUids: [...new Set(adminUids)],
-      betaTesterUids: [...new Set(betaTesterUids)],
-    },
-    req.auth.profile.uid,
-  );
-  res.json({ success: true, access: getConfig('access') });
-});
+app.put(
+  '/api/config/access',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const admins = Array.isArray(req.body?.admins)
+      ? req.body.admins.map(normalizeEmail).filter(Boolean)
+      : [];
+    const betaTesters = Array.isArray(req.body?.betaTesters)
+      ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
+      : [];
+    const adminUids = Array.isArray(req.body?.adminUids)
+      ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
+      ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    await setConfig(
+      'access',
+      {
+        admins: [...new Set(admins)],
+        betaTesters: [...new Set(betaTesters)],
+        adminUids: [...new Set(adminUids)],
+        betaTesterUids: [...new Set(betaTesterUids)],
+      },
+      req.auth.profile.uid,
+    );
+    res.json({ success: true, access: getConfig('access') });
+  }),
+);
 
 app.get('/api/access/list', requireAuth, requireAdmin, (_req, res) => {
   res.json(getConfig('access'));
 });
 
-app.post('/api/access/list', requireAuth, requireAdmin, (req, res) => {
-  const admins = Array.isArray(req.body?.admins)
-    ? req.body.admins.map(normalizeEmail).filter(Boolean)
-    : [];
-  const betaTesters = Array.isArray(req.body?.betaTesters)
-    ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
-    : [];
-  const adminUids = Array.isArray(req.body?.adminUids)
-    ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
-    ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  setConfig(
-    'access',
-    {
-      admins: [...new Set(admins)],
-      betaTesters: [...new Set(betaTesters)],
-      adminUids: [...new Set(adminUids)],
-      betaTesterUids: [...new Set(betaTesterUids)],
-    },
-    req.auth.profile.uid,
-  );
-  res.json({ success: true, access: getConfig('access') });
-});
+app.post(
+  '/api/access/list',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const admins = Array.isArray(req.body?.admins)
+      ? req.body.admins.map(normalizeEmail).filter(Boolean)
+      : [];
+    const betaTesters = Array.isArray(req.body?.betaTesters)
+      ? req.body.betaTesters.map(normalizeEmail).filter(Boolean)
+      : [];
+    const adminUids = Array.isArray(req.body?.adminUids)
+      ? req.body.adminUids.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const betaTesterUids = Array.isArray(req.body?.betaTesterUids)
+      ? req.body.betaTesterUids.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    await setConfig(
+      'access',
+      {
+        admins: [...new Set(admins)],
+        betaTesters: [...new Set(betaTesters)],
+        adminUids: [...new Set(adminUids)],
+        betaTesterUids: [...new Set(betaTesterUids)],
+      },
+      req.auth.profile.uid,
+    );
+    res.json({ success: true, access: getConfig('access') });
+  }),
+);
 
 app.get(
   '/api/admin/users',
@@ -2283,7 +2308,7 @@ app.post(
       nextAdminUids.delete(targetUid);
     }
 
-    setConfig(
+    await setConfig(
       'access',
       {
         ...(currentAccessConfig || {}),

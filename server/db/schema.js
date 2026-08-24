@@ -34,3 +34,12 @@ export const sessions = pgTable('chatscream_sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Runtime configuration set through the admin portal (OAuth client IDs,
+// access lists). Durable so it survives container restarts and revisions.
+export const config = pgTable('chatscream_config', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedBy: text('updated_by').notNull().default('system'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

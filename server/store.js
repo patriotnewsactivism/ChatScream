@@ -126,6 +126,9 @@ export const initIdentityStorage = async () => {
     throw new Error('Managed identity storage failed to initialize.');
   }
   if (!clients) return 'local';
+  // Warm the runtime-config cache before the server accepts traffic, so the
+  // first request already sees durable admin settings rather than defaults.
+  await loadRuntimeConfig();
   return clients.redis ? 'postgres+redis' : 'postgres';
 };
 
@@ -403,15 +406,100 @@ export const consumePasswordResetToken = async (tokenHash) => {
 
 // --- CONFIG & APP STATE ---
 
-export const getConfig = (key) => loadState().config[key];
-export const setConfig = (key, value, updatedBy) =>
+// --- RUNTIME CONFIG ---
+//
+// Admin-portal settings (OAuth client IDs, access lists) are durable in the
+// managed store. They used to live only in runtime.json on the container's
+// local disk, which Cloud Run discards on every cold start, scale-to-zero and
+// new revision — so a setting saved in the admin portal silently reverted.
+//
+// Reads stay synchronous because they happen inside request handlers and
+// profile mapping. A memory cache backs them, hydrated at boot by
+// loadRuntimeConfig() and refreshed in the background so other instances
+// converge after an admin change.
+const CONFIG_REFRESH_MS = 30_000;
+let configCache = null;
+let configCacheLoadedAt = 0;
+let configRefreshPromise = null;
+
+const configFromLocalState = () => ({ ...loadState().config });
+
+const readConfigFromDatabase = async () => {
+  const clients = await getIdentityClients();
+  if (!clients) return null;
+  const { pool } = clients;
+  const result = await pool.query('SELECT key, value FROM chatscream_config');
+  const loaded = {};
+  for (const row of result.rows) {
+    loaded[row.key] = row.value;
+  }
+  // Seed defaults for keys the database has never been given, so a fresh
+  // deployment still reports root admins rather than an empty access list.
+  return { ...baseState().config, ...loaded };
+};
+
+const refreshRuntimeConfig = async () => {
+  if (configRefreshPromise) return configRefreshPromise;
+  configRefreshPromise = (async () => {
+    try {
+      const loaded = managedIdentityEnabled ? await readConfigFromDatabase() : null;
+      configCache = loaded || configFromLocalState();
+      configCacheLoadedAt = Date.now();
+      return configCache;
+    } finally {
+      configRefreshPromise = null;
+    }
+  })();
+  return configRefreshPromise;
+};
+
+export const loadRuntimeConfig = async () => refreshRuntimeConfig();
+
+export const getConfig = (key) => {
+  if (!configCache) {
+    // Not hydrated yet (or local mode): fall back to the file-backed state so
+    // reads never block, and kick a load so later reads see durable values.
+    if (managedIdentityEnabled) void refreshRuntimeConfig().catch(() => {});
+    return configFromLocalState()[key];
+  }
+  if (managedIdentityEnabled && Date.now() - configCacheLoadedAt > CONFIG_REFRESH_MS) {
+    void refreshRuntimeConfig().catch(() => {});
+  }
+  return configCache[key];
+};
+
+export const setConfig = async (key, value, updatedBy) => {
+  const record = {
+    ...value,
+    updatedAt: new Date().toISOString(),
+    updatedBy: updatedBy || 'system',
+  };
+
+  if (managedIdentityEnabled) {
+    const clients = await getIdentityClients();
+    if (clients) {
+      await clients.pool.query(
+        `INSERT INTO chatscream_config (key, value, updated_by, updated_at)
+         VALUES ($1, $2::jsonb, $3, NOW())
+         ON CONFLICT (key) DO UPDATE
+           SET value = EXCLUDED.value,
+               updated_by = EXCLUDED.updated_by,
+               updated_at = NOW()`,
+        [key, JSON.stringify(record), record.updatedBy],
+      );
+      configCache = { ...(configCache || baseState().config), [key]: record };
+      configCacheLoadedAt = Date.now();
+      return record;
+    }
+  }
+
   writeState((state) => {
-    state.config[key] = {
-      ...value,
-      updatedAt: new Date().toISOString(),
-      updatedBy: updatedBy || 'system',
-    };
+    state.config[key] = record;
   });
+  configCache = { ...(configCache || {}), [key]: record };
+  configCacheLoadedAt = Date.now();
+  return record;
+};
 
 export const listMediaAssets = () => Object.values(loadState().media || {});
 export const addMediaAsset = (asset) =>
