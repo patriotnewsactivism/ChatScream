@@ -4,6 +4,9 @@ name: Deploy backend to Cloud Run
 # workflow, and press "Run workflow". That button works from the GitHub mobile
 # site, which is the point: the API host is Cloud Run and there is otherwise no
 # way to ship a backend change without a terminal.
+#
+# The production service is wired in as defaults below. The only thing that
+# must be configured once is the GCP_SA_KEY secret.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +19,14 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  # Repository variables override these, so a future project or region change
+  # needs no edit to this file.
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'chatscream' }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'chatscream-backend' }}
+  REGION: ${{ vars.CLOUD_RUN_REGION || 'us-central1' }}
+  REPO: ${{ vars.ARTIFACT_REGISTRY_REPO || 'chatscream' }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,25 +37,17 @@ jobs:
           echo "::error::Type 'deploy' in the confirmation box to run this workflow."
           exit 1
 
-      - name: Check required configuration
+      - name: Check credentials are configured
+        # Passed through env, never interpolated into the script: the key is
+        # multi-line JSON and would break the shell if inlined.
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
-          REGION: ${{ vars.CLOUD_RUN_REGION }}
           SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          missing=0
-          for name in PROJECT_ID SERVICE REGION; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Repository variable ${name} is not set (Settings -> Secrets and variables -> Actions -> Variables)."
-              missing=1
-            fi
-          done
           if [ -z "$SA_KEY" ]; then
-            echo "::error::Repository secret GCP_SA_KEY is not set (Settings -> Secrets and variables -> Actions -> Secrets)."
-            missing=1
+            echo "::error::Repository secret GCP_SA_KEY is not set. Add it under Settings -> Secrets and variables -> Actions -> Secrets. It needs Cloud Run Admin, Artifact Registry Writer, and Service Account User on project ${PROJECT_ID}."
+            exit 1
           fi
-          [ "$missing" -eq 0 ] || exit 1
+          echo "Deploying ${SERVICE} to ${REGION} in project ${PROJECT_ID}."
 
       - uses: actions/checkout@v4
 
@@ -54,20 +57,27 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ vars.GCP_PROJECT_ID }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          if ! gcloud artifacts repositories describe "${REPO}" \
+                --location "${REGION}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
+            echo "Creating Artifact Registry repository ${REPO}."
+            gcloud artifacts repositories create "${REPO}" \
+              --repository-format=docker \
+              --location "${REGION}" \
+              --project "${PROJECT_ID}" \
+              --description "ChatScream backend images" \
+              --quiet
+          fi
 
       - name: Resolve image reference
         id: image
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: ${{ vars.CLOUD_RUN_REGION }}
-          REPO: ${{ vars.ARTIFACT_REGISTRY_REPO || 'chatscream' }}
-          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
-        run: |
-          echo "ref=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+        run: echo "ref=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate Docker to Artifact Registry
-        run: gcloud auth configure-docker "${{ vars.CLOUD_RUN_REGION }}-docker.pkg.dev" --quiet
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       # DEPLOY.md specifies the Dockerfile's `backend` target: Node + FFmpeg,
       # no frontend bundle (Vercel serves that).
@@ -79,13 +89,15 @@ jobs:
 
       - name: Deploy revision
         run: |
-          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+          gcloud run deploy "${SERVICE}" \
             --image "${{ steps.image.outputs.ref }}" \
-            --region "${{ vars.CLOUD_RUN_REGION }}" \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}" \
             --quiet
 
       # Fail loudly if the new revision did not actually change the OAuth
-      # behaviour this deploy exists to ship.
+      # behaviour this deploy exists to ship. Probes the public hostname, so it
+      # also catches the domain mapping pointing at a different service.
       - name: Verify OAuth callback lands on the callback page
         env:
           API_BASE: ${{ vars.API_BASE_URL || 'https://api.chatscream.live' }}
