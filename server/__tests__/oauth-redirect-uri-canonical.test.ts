@@ -18,10 +18,13 @@ describe('OAuth redirect URI is canonical, not host-derived', () => {
   });
 
   it('routes every provider redirect through the canonical resolver', () => {
-    const canonical =
-      source.match(/\$\{getOAuthRedirectBaseUrl\(req\)\}\/api\/auth\/oauth\/\w+\/callback/g) || [];
-    // google authorize + google token exchange, facebook authorize + exchange
-    expect(canonical.length).toBe(4);
+    // Assert the invariant rather than a fixed count: every construction of a
+    // provider callback URL must go through the resolver, however many there
+    // are. A new call site that forgets it fails this.
+    const all = source.match(/\$\{\w+\(req\)\}\/api\/auth\/oauth\/\w+\/callback/g) || [];
+    const canonical = all.filter((match) => match.includes('getOAuthRedirectBaseUrl'));
+    expect(all.length).toBeGreaterThanOrEqual(4);
+    expect(canonical).toEqual(all);
   });
 
   it('pins the canonical API origin that is registered with the providers', () => {
