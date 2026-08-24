@@ -8,8 +8,6 @@ on:
       - 'ops/control-plane/request.json'
   workflow_dispatch:
 
-# Production Google credentials are only issued from this main-branch workflow.
-# Keep PR workflows read-only and without id-token permission.
 permissions:
   contents: write
   id-token: write
@@ -40,22 +38,13 @@ jobs:
           set -euo pipefail
           test -f ops/control-plane/request.json
           jq -e 'type == "object"' ops/control-plane/request.json >/dev/null
-
           ACTION="$(jq -r '.action // "status"' ops/control-plane/request.json)"
           REQUEST_ID="$(jq -r '.id // empty' ops/control-plane/request.json)"
-          if [ -z "$REQUEST_ID" ]; then
-            REQUEST_ID="req-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          fi
-
+          if [ -z "$REQUEST_ID" ]; then REQUEST_ID="req-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; fi
           case "$ACTION" in
-            status|health_check|oauth_verify|secret_audit|cost_guard|restart_backend|set_traffic_latest|deploy_backend)
-              ;;
-            *)
-              echo "::error::Unsupported cloud-ops action: $ACTION"
-              exit 2
-              ;;
+            status|health_check|oauth_verify|secret_audit|cost_guard|enforce_scale_to_zero|restart_backend|set_traffic_latest|deploy_backend) ;;
+            *) echo "::error::Unsupported cloud-ops action: $ACTION"; exit 2 ;;
           esac
-
           echo "action=$ACTION" >> "$GITHUB_OUTPUT"
           echo "request_id=$REQUEST_ID" >> "$GITHUB_OUTPUT"
           echo "Accepted cloud-ops request $REQUEST_ID ($ACTION)"
@@ -72,7 +61,6 @@ jobs:
           project_id: ${{ env.TARGET_PROJECT }}
 
       - name: Execute allowlisted cloud operation
-        id: execute
         env:
           ACTION: ${{ steps.request.outputs.action }}
           REQUEST_ID: ${{ steps.request.outputs.request_id }}
@@ -85,39 +73,23 @@ jobs:
           MESSAGE=""
 
           get_service_json() {
-            gcloud run services describe "$SERVICE" \
-              --project "$TARGET_PROJECT" \
-              --region "$REGION" \
-              --format=json
+            gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json
           }
-
           http_code() {
             curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$1" || printf '000'
           }
-
           write_result() {
             local details_file="${1:-}"
             if [ -n "$details_file" ] && [ -f "$details_file" ]; then
-              jq -n \
-                --arg requestId "$REQUEST_ID" \
-                --arg action "$ACTION" \
-                --arg startedAt "$STARTED_AT" \
-                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                --arg message "$MESSAGE" \
-                --argjson success "$SUCCESS" \
-                --slurpfile details "$details_file" \
-                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:($details[0] // {})}' \
-                > "$RESULT"
+              jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg startedAt "$STARTED_AT" \
+                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg message "$MESSAGE" \
+                --argjson success "$SUCCESS" --slurpfile details "$details_file" \
+                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:($details[0] // {})}' > "$RESULT"
             else
-              jq -n \
-                --arg requestId "$REQUEST_ID" \
-                --arg action "$ACTION" \
-                --arg startedAt "$STARTED_AT" \
-                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                --arg message "$MESSAGE" \
+              jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg startedAt "$STARTED_AT" \
+                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg message "$MESSAGE" \
                 --argjson success "$SUCCESS" \
-                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:{}}' \
-                > "$RESULT"
+                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:{}}' > "$RESULT"
             fi
           }
 
@@ -134,20 +106,11 @@ jobs:
               HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
               READY="$(http_code 'https://api.chatscream.live/api/ready')"
               CAPABILITIES="$(http_code 'https://api.chatscream.live/api/public/capabilities')"
-              BILLING="$(gcloud billing projects describe "$TARGET_PROJECT" --format='value(billingEnabled)' 2>/dev/null || printf 'unknown')"
-              jq -n \
-                --arg project "$TARGET_PROJECT" --arg service "$SERVICE" --arg region "$REGION" \
-                --arg url "$SERVICE_URL" --arg revision "$READY_REVISION" --arg billing "$BILLING" \
-                --arg health "$HEALTH" --arg ready "$READY" --arg capabilities "$CAPABILITIES" \
+              jq -n --arg project "$TARGET_PROJECT" --arg service "$SERVICE" --arg region "$REGION" --arg url "$SERVICE_URL" \
+                --arg revision "$READY_REVISION" --arg health "$HEALTH" --arg ready "$READY" --arg capabilities "$CAPABILITIES" \
                 --arg googleSecretRef "$GOOGLE_SECRET_REF" --arg youtubeSecretRef "$YOUTUBE_SECRET_REF" \
-                '{project:$project,service:$service,region:$region,url:$url,latestReadyRevision:$revision,billingEnabled:$billing,http:{health:$health,ready:$ready,capabilities:$capabilities},secretBindings:{google:$googleSecretRef,youtube:$youtubeSecretRef}}' \
-                > /tmp/details.json
-              if [ "$HEALTH" != "200" ] || [ "$READY" != "200" ]; then
-                SUCCESS=false
-                MESSAGE="Production API health/readiness check failed."
-              else
-                MESSAGE="Cloud Run and production API are healthy."
-              fi
+                '{project:$project,service:$service,region:$region,url:$url,latestReadyRevision:$revision,http:{health:$health,ready:$ready,capabilities:$capabilities},secretBindings:{google:$googleSecretRef,youtube:$youtubeSecretRef}}' > /tmp/details.json
+              if [ "$HEALTH" != "200" ] || [ "$READY" != "200" ]; then SUCCESS=false; MESSAGE="Production API health/readiness check failed."; else MESSAGE="Cloud Run and production API are healthy."; fi
               ;;
 
             oauth_verify)
@@ -158,97 +121,70 @@ jobs:
               [ "$YOUTUBE_ID" = "$expected_youtube" ] && youtube_ok=true
               [ "$GOOGLE_SECRET_REF" = 'chatscream-google-client-secret' ] && google_secret_ok=true
               [ "$YOUTUBE_SECRET_REF" = 'chatscream-youtube-client-secret' ] && youtube_secret_ok=true
-              jq -n \
-                --argjson googleClientId "$google_ok" --argjson youtubeClientId "$youtube_ok" \
+              jq -n --argjson googleClientId "$google_ok" --argjson youtubeClientId "$youtube_ok" \
                 --argjson googleSecret "$google_secret_ok" --argjson youtubeSecret "$youtube_secret_ok" \
-                '{googleClientIdCorrect:$googleClientId,youtubeClientIdCorrect:$youtubeClientId,googleSecretManagerBindingCorrect:$googleSecret,youtubeSecretManagerBindingCorrect:$youtubeSecret}' \
-                > /tmp/details.json
-              if $google_ok && $youtube_ok && $google_secret_ok && $youtube_secret_ok; then
-                MESSAGE="Google and YouTube OAuth pairs are separated and correctly bound."
-              else
-                SUCCESS=false
-                MESSAGE="One or more OAuth bindings are incorrect."
-              fi
+                '{googleClientIdCorrect:$googleClientId,youtubeClientIdCorrect:$youtubeClientId,googleSecretManagerBindingCorrect:$googleSecret,youtubeSecretManagerBindingCorrect:$youtubeSecret}' > /tmp/details.json
+              if $google_ok && $youtube_ok && $google_secret_ok && $youtube_secret_ok; then MESSAGE="Google and YouTube OAuth pairs are separated and correctly bound."; else SUCCESS=false; MESSAGE="One or more OAuth bindings are incorrect."; fi
               ;;
 
             secret_audit)
-              # Secret values are never read or printed. Only approved binding names and enabled-version counts are returned.
               google_versions="$(gcloud secrets versions list chatscream-google-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
               youtube_versions="$(gcloud secrets versions list chatscream-youtube-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
-              jq -n \
-                --arg googleRef "$GOOGLE_SECRET_REF" --arg youtubeRef "$YOUTUBE_SECRET_REF" \
+              jq -n --arg googleRef "$GOOGLE_SECRET_REF" --arg youtubeRef "$YOUTUBE_SECRET_REF" \
                 --argjson googleEnabledVersions "${google_versions:-0}" --argjson youtubeEnabledVersions "${youtube_versions:-0}" \
-                '{bindings:{google:$googleRef,youtube:$youtubeRef},enabledVersions:{google:$googleEnabledVersions,youtube:$youtubeEnabledVersions}}' \
-                > /tmp/details.json
+                '{bindings:{google:$googleRef,youtube:$youtubeRef},enabledVersions:{google:$googleEnabledVersions,youtube:$youtubeEnabledVersions}}' > /tmp/details.json
               MESSAGE="Secret Manager bindings audited without reading secret values."
               ;;
 
             cost_guard)
-              BILLING="$(gcloud billing projects describe "$TARGET_PROJECT" --format='value(billingEnabled)' 2>/dev/null || printf 'unknown')"
               MIN_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$service")"
               MAX_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // "platform-default"' <<<"$service")"
               CPU_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.cpu // "platform-default"' <<<"$service")"
               MEMORY_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.memory // "platform-default"' <<<"$service")"
-              jq -n \
-                --arg billing "$BILLING" --arg minScale "$MIN_SCALE" --arg maxScale "$MAX_SCALE" \
-                --arg cpu "$CPU_LIMIT" --arg memory "$MEMORY_LIMIT" \
-                '{billingEnabled:$billing,cloudRun:{minScale:$minScale,maxScale:$maxScale,cpuLimit:$cpu,memoryLimit:$memory}}' \
-                > /tmp/details.json
-              if [ "$MIN_SCALE" != "0" ]; then
-                SUCCESS=false
-                MESSAGE="Cost guard warning: Cloud Run minimum scale is not zero."
+              jq -n --arg minScale "$MIN_SCALE" --arg maxScale "$MAX_SCALE" --arg cpu "$CPU_LIMIT" --arg memory "$MEMORY_LIMIT" \
+                '{cloudRun:{minScale:$minScale,maxScale:$maxScale,cpuLimit:$cpu,memoryLimit:$memory}}' > /tmp/details.json
+              if [ "$MIN_SCALE" != "0" ]; then SUCCESS=false; MESSAGE="Cost guard warning: Cloud Run minimum scale is not zero."; else MESSAGE="Cost guard passed: Cloud Run can scale to zero."; fi
+              ;;
+
+            enforce_scale_to_zero)
+              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min 0 --quiet >/dev/null; then
+                service="$(get_service_json)"
+                MIN_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$service")"
+                READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
+                HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
+                jq -n --arg minScale "$MIN_SCALE" --arg revision "$READY_REVISION" --arg health "$HEALTH" '{minScale:$minScale,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
+                if [ "$MIN_SCALE" = "0" ] && [ "$HEALTH" = "200" ]; then MESSAGE="Cloud Run minimum scale set to zero and production health verified."; else SUCCESS=false; MESSAGE="Scale-to-zero update completed but verification failed."; fi
               else
-                MESSAGE="Cost guard passed: Cloud Run can scale to zero."
+                SUCCESS=false; MESSAGE="Failed to set Cloud Run minimum scale to zero."; echo '{}' > /tmp/details.json
               fi
               ;;
 
             restart_backend)
               nonce="$(date -u +%s)"
-              if gcloud run services update "$SERVICE" \
-                  --project "$TARGET_PROJECT" --region "$REGION" \
-                  --update-env-vars "CHATSCREAM_OPS_RESTART=$nonce" --quiet >/dev/null; then
-                HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
-                service="$(get_service_json)"
-                READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
+              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --update-env-vars "CHATSCREAM_OPS_RESTART=$nonce" --quiet >/dev/null; then
+                HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
                 jq -n --arg revision "$READY_REVISION" --arg health "$HEALTH" '{latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
                 if [ "$HEALTH" = "200" ]; then MESSAGE="Backend restarted in a new Cloud Run revision."; else SUCCESS=false; MESSAGE="New revision deployed but health check failed."; fi
-              else
-                SUCCESS=false; MESSAGE="Cloud Run restart operation failed."; echo '{}' > /tmp/details.json
-              fi
+              else SUCCESS=false; MESSAGE="Cloud Run restart operation failed."; echo '{}' > /tmp/details.json; fi
               ;;
 
             set_traffic_latest)
-              if gcloud run services update-traffic "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --to-latest --quiet >/dev/null; then
-                MESSAGE="Production traffic now targets the latest ready revision."
-              else
-                SUCCESS=false; MESSAGE="Traffic update failed."
-              fi
-              service="$(get_service_json)"
-              READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
+              if gcloud run services update-traffic "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --to-latest --quiet >/dev/null; then MESSAGE="Production traffic now targets the latest ready revision."; else SUCCESS=false; MESSAGE="Traffic update failed."; fi
+              service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
               jq -n --arg revision "$READY_REVISION" '{latestReadyRevision:$revision}' > /tmp/details.json
               ;;
 
             deploy_backend)
               IMAGE="${REGION}-docker.pkg.dev/${TARGET_PROJECT}/${ARTIFACT_REPO}/${SERVICE}:ops-${GITHUB_SHA:0:12}"
               if ! gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
-                SUCCESS=false
-                MESSAGE="Artifact Registry repository is missing; deployment was not attempted."
-                jq -n --arg repository "$ARTIFACT_REPO" '{artifactRepository:$repository}' > /tmp/details.json
+                SUCCESS=false; MESSAGE="Artifact Registry repository is missing; deployment was not attempted."; jq -n --arg repository "$ARTIFACT_REPO" '{artifactRepository:$repository}' > /tmp/details.json
               else
                 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
-                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 \
-                    && docker push "$IMAGE" >/tmp/push.log 2>&1 \
-                    && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then
-                  HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
-                  service="$(get_service_json)"
-                  READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
+                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 && docker push "$IMAGE" >/tmp/push.log 2>&1 && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then
+                  HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
                   jq -n --arg image "$IMAGE" --arg revision "$READY_REVISION" --arg health "$HEALTH" '{image:$image,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
                   if [ "$HEALTH" = "200" ]; then MESSAGE="Backend built, pushed, deployed, and passed health check."; else SUCCESS=false; MESSAGE="Backend deployed but health check failed."; fi
-                else
-                  SUCCESS=false
-                  MESSAGE="Backend build, push, or Cloud Run deployment failed. Sensitive command output was intentionally not published."
-                  jq -n --arg image "$IMAGE" '{image:$image}' > /tmp/details.json
-                fi
+                else SUCCESS=false; MESSAGE="Backend build, push, or Cloud Run deployment failed. Sensitive command output was intentionally not published."; jq -n --arg image "$IMAGE" '{image:$image}' > /tmp/details.json; fi
               fi
               ;;
           esac
@@ -265,13 +201,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f /tmp/cloud-ops-result.json ]; then
-            jq -n \
-              --arg requestId "${REQUEST_ID:-unknown}" --arg action "${ACTION:-unknown}" \
-              --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              '{requestId:$requestId,action:$action,success:false,message:"Controller failed before a sanitized result could be produced.",completedAt:$completedAt,details:{}}' \
-              > /tmp/cloud-ops-result.json
+            jq -n --arg requestId "${REQUEST_ID:-unknown}" --arg action "${ACTION:-unknown}" --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{requestId:$requestId,action:$action,success:false,message:"Controller failed before a sanitized result could be produced.",completedAt:$completedAt,details:{}}' > /tmp/cloud-ops-result.json
           fi
-
           git config user.name 'ChatScream Cloud Ops'
           git config user.email 'actions@users.noreply.github.com'
           git fetch origin main
