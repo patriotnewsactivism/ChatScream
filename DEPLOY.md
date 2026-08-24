@@ -3,138 +3,125 @@
 ChatScream uses a split production architecture:
 
 - **Vercel:** Vite/React frontend at `https://www.chatscream.live`
-- **Google Cloud Run:** Express API, WebSockets, FFmpeg, and OAuth token exchange at `https://api.chatscream.live`
+- **Google Cloud Run:** Express API, WebSockets, FFmpeg, OAuth token exchange at `https://api.chatscream.live`
+- **Google Secret Manager:** backend OAuth/client secrets
 - **Postgres/Neon:** durable users, sessions, reset tokens, and viral-content schema
 - **Redis:** optional session cache; Postgres remains the fallback
+- **GitHub Actions + Google Workload Identity Federation:** keyless production administration
 
-The frontend must never point its WebSocket or API traffic at the Vercel origin. Set
-`VITE_API_BASE_URL=https://api.chatscream.live` for the Vercel production environment.
+The frontend must never point API or WebSocket traffic at the Vercel origin. Production uses
+`VITE_API_BASE_URL=https://api.chatscream.live`.
+
+## Google Cloud production identity
+
+No downloadable Google service-account key is required. GitHub exchanges its short-lived OIDC token
+for the limited service account below:
+
+```text
+Workload Identity Provider:
+projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
+
+Service account:
+chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
+
+Control/OAuth project:
+chat-scream (584450564662)
+
+Production Cloud Run project:
+chatscream (288776423417)
+
+Service / region:
+chatscream-backend / us-central1
+```
+
+Do not recreate `GCP_SA_KEY`. The old static-key deployment path has been retired.
+
+## Phone/manual deployment
+
+Use **Deploy backend to Cloud Run** in GitHub Actions, type `deploy`, and run the workflow. It:
+
+1. authenticates to Google with short-lived OIDC;
+2. builds the Dockerfile `backend` target;
+3. pushes the image to Artifact Registry;
+4. deploys `chatscream-backend`;
+5. verifies `/api/health`, `/api/ready`, and the YouTube destination callback.
+
+## Chat-driven cloud operations
+
+`ops/control-plane/request.json` is the command queue for the allowlisted **Cloud Ops Controller**.
+A request committed to `main` authenticates to Google using OIDC, performs the approved action, and
+writes a sanitized result to `ops/control-plane/result.json`. Secret values and raw Cloud Run logs
+are never written to the public repository.
+
+Supported actions:
+
+- `status`
+- `health_check`
+- `oauth_verify`
+- `secret_audit`
+- `cost_guard`
+- `restart_backend`
+- `set_traffic_latest`
+- `deploy_backend`
+
+The production controller runs only from `main`; pull-request workflows must not receive
+`id-token: write`.
 
 ## Database migrations
 
-The backend runs versioned, advisory-locked migrations during startup before it accepts traffic. A
+The backend runs versioned, advisory-locked migrations during startup before accepting traffic. A
 failed migration prevents the Cloud Run revision from becoming ready.
 
-Run the same migrations manually when validating a database:
+For manual validation:
 
 ```bash
 npm run db:migrate
 npm run db:verify
 ```
 
-Both commands require `POSTGRES_URL` (or `DATABASE_URL`). Set `POSTGRES_SSL=true` for hosted
-Postgres providers that require TLS.
+Both commands require `POSTGRES_URL` (or `DATABASE_URL`). Set `POSTGRES_SSL=true` where required.
+`npm run migrate:users` is only for importing the legacy `server/data/runtime.json` source.
 
-`npm run migrate:users` is only for importing the legacy
-`server/data/runtime.json` user file. It is idempotent, but it should only be run where that source
-file exists.
+## OAuth configuration
 
-## Cloud Run backend
+Google account sign-in and YouTube destination OAuth use separate credential pairs.
 
-Build the Dockerfile's `backend` target and deploy it to the existing Cloud Run service. The
-container listens on the Cloud Run-provided `PORT` and includes FFmpeg. Its command is
-`node server/entrypoint.js` — start the process there rather than at `server/index.js`, so
-`RELAY_ONLY` and the shared Google OAuth callback wiring are both honoured.
+Cloud Run contains the public IDs as normal environment variables:
 
-From a phone (or any machine without `gcloud`), use the **Deploy backend to Cloud Run** workflow in
-the repository's Actions tab: press "Run workflow", type `deploy` to confirm, and it builds the
-`backend` target, ships a revision, and then verifies that a YouTube destination callback lands on
-`/oauth/callback`. The production target is built into the workflow: project `chatscream`, service
-`chatscream-backend`, region `us-central1`. The only setting required is one
-repository secret:
-
-| Setting | Kind | Value |
-| --- | --- | --- |
-| `GCP_SA_KEY` | secret | service-account JSON with Cloud Run Admin, Artifact Registry Writer, and Service Account User on project `chatscream` |
-
-To retarget without editing the workflow, set repository variables
-`GCP_PROJECT_ID`, `CLOUD_RUN_SERVICE`, `CLOUD_RUN_REGION`, or
-`ARTIFACT_REGISTRY_REPO`; each overrides its built-in default.
-
-Required production configuration:
-
-```dotenv
-NODE_ENV=production
-IDENTITY_STORAGE_MODE=managed
-POSTGRES_URL=<secret>
-POSTGRES_SSL=true
-REDIS_URL=<secret>
-REDIS_TLS=true
-
-APP_BASE_URL=https://www.chatscream.live
-VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback
-CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live
-
-YOUTUBE_CLIENT_ID=<secret-or-env>
-YOUTUBE_CLIENT_SECRET=<secret>
-FACEBOOK_APP_ID=<secret-or-env>
-FACEBOOK_APP_SECRET=<secret>
-FACEBOOK_GRAPH_API_VERSION=v26.0
-
-AUTH_STATE_SECRET=<secret>
-SESSION_SECRET=<secret>
+```text
+GOOGLE_CLIENT_ID
+YOUTUBE_CLIENT_ID
 ```
 
-Store secrets in Google Secret Manager and expose them to the Cloud Run revision. Do not commit
-`.env` files.
+Their matching secrets are Secret Manager references:
 
-After deployment, verify:
+```text
+GOOGLE_CLIENT_SECRET  -> chatscream-google-client-secret
+YOUTUBE_CLIENT_SECRET -> chatscream-youtube-client-secret
+```
 
-- `GET https://api.chatscream.live/api/health`
-- `GET https://api.chatscream.live/api/ready`
-- `GET https://api.chatscream.live/api/public/capabilities`
+Client secrets must never be placed in Vercel `VITE_*` variables or committed to GitHub.
 
-Readiness must report a usable identity store. Capabilities must show both YouTube and Facebook as
-configured before the frontend enables their quick-connect actions.
+The YouTube destination callback is:
 
-## OAuth provider setup
+```text
+https://api.chatscream.live/api/auth/oauth/google/callback
+```
 
-Use this exact redirect URI for both providers:
+The frontend callback page is:
 
 ```text
 https://www.chatscream.live/oauth/callback
 ```
 
-### Google / YouTube
+## Production verification
 
-1. Enable YouTube Data API v3 in the Google Cloud project.
-2. Create a Web application OAuth client.
-3. Add the exact redirect URI above.
-4. Put the client ID and client secret in the Cloud Run service.
-5. If the consent screen is in testing, add the intended broadcaster as a test user.
+After a deployment verify:
 
-### Meta / Facebook Live
-
-1. Configure Facebook Login on the Meta app and add the exact redirect URI above.
-2. Configure the Live Video API product/feature.
-3. Request the permissions used by ChatScream:
-   `public_profile`, `email`, `pages_show_list`, `pages_read_engagement`,
-   `pages_manage_posts`, `pages_manage_metadata`, and `publish_video`.
-4. Complete App Review / Live Video API access for accounts outside the app's developer roles.
-5. Keep `FACEBOOK_GRAPH_API_VERSION` on a currently supported Graph API version.
-6. Confirm the destination account or Page meets Meta's current Facebook Live eligibility rules.
-
-ChatScream prefers Meta's `secure_stream_url` and splits that RTMPS URL into the FFmpeg server URL
-and stream key on the backend.
-
-## Vercel frontend
-
-Configure the production environment and redeploy:
-
-```dotenv
-VITE_API_BASE_URL=https://api.chatscream.live
-VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback
-```
-
-OAuth client secrets do not belong in Vercel's `VITE_*` variables. Token exchange happens only on
-Cloud Run.
-
-## Release checklist
-
-- Database migrations and verification pass.
-- Cloud Run revision is ready and FFmpeg is available.
-- `/api/public/capabilities` reports YouTube and Facebook configured.
-- Vercel's production bundle contains `https://api.chatscream.live`.
-- YouTube connection opens a channel picker and creates a destination with a real ingest URL/key.
-- Facebook connection opens the Page picker and creates a destination from an RTMPS URL.
-- A short private test stream reaches each provider before a public event.
+- `GET https://api.chatscream.live/api/health`
+- `GET https://api.chatscream.live/api/ready`
+- `GET https://api.chatscream.live/api/public/capabilities`
+- Google sign-in uses the dedicated Google credential pair.
+- YouTube connection uses the dedicated YouTube credential pair.
+- Facebook quick-connect is enabled only when its backend credentials and permissions are valid.
+- A short private stream reaches each provider before a public event.
