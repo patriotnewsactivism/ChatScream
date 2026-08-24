@@ -1,16 +1,13 @@
 {
-  "requestId": "chat-ops-20260824-0035-cost",
-  "action": "cost_guard",
+  "requestId": "chat-ops-20260824-0038-scalezero",
+  "action": "enforce_scale_to_zero",
   "success": false,
-  "message": "Cost guard warning: Cloud Run minimum scale is not zero.",
-  "startedAt": "2026-08-24T05:36:33Z",
-  "completedAt": "2026-08-24T05:36:35Z",
+  "message": "Scale-to-zero update completed but verification failed.",
+  "startedAt": "2026-08-24T05:37:02Z",
+  "completedAt": "2026-08-24T05:37:31Z",
   "details": {
-    "cloudRun": {
-      "minScale": "1",
-      "maxScale": "20",
-      "cpuLimit": "1000m",
-      "memoryLimit": "512Mi"
-    }
+    "minScale": "1",
+    "latestReadyRevision": "chatscream-backend-00032-kbb",
+    "healthHttp": "200"
   }
 }
