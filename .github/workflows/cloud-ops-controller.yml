@@ -6,7 +6,6 @@ on:
     paths:
       - '.github/workflows/cloud-ops-controller.yml'
       - 'ops/control-plane/request.json'
-      - 'ops/control-plane/facebook-envelope-request.json'
   workflow_dispatch:
 
 permissions:
@@ -18,13 +17,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CONTROL_PROJECT: chat-scream
   TARGET_PROJECT: chatscream
   SERVICE: chatscream-backend
   REGION: us-central1
   ARTIFACT_REPO: chatscream
   WIF_PROVIDER: projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
   OPS_SERVICE_ACCOUNT: chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
+  GOOGLE_CLIENT_ID_EXPECTED: 584450564662-vvlnooo2oe25ltstet0mkqajm4ta80d8.apps.googleusercontent.com
+  YOUTUBE_CLIENT_ID_EXPECTED: 584450564662-ek0a4ibt01t9ho6guc7sfqp59dq0vrs5.apps.googleusercontent.com
+  FACEBOOK_APP_ID_EXPECTED: '1768608743830353'
+  FACEBOOK_ENVELOPE_SECRET: chatscream-facebook-envelope-private-v3
+  FACEBOOK_SECRET: chatscream-facebook-app-secret
 
 jobs:
   controller:
@@ -41,14 +44,13 @@ jobs:
           jq -e 'type == "object"' ops/control-plane/request.json >/dev/null
           ACTION="$(jq -r '.action // "status"' ops/control-plane/request.json)"
           REQUEST_ID="$(jq -r '.id // empty' ops/control-plane/request.json)"
-          if [ -z "$REQUEST_ID" ]; then REQUEST_ID="req-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; fi
+          [ -n "$REQUEST_ID" ] || REQUEST_ID="req-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           case "$ACTION" in
-            status|health_check|oauth_verify|secret_audit|cost_guard|enforce_scale_to_zero|restart_backend|set_traffic_latest|deploy_backend) ;;
+            status|health_check|oauth_verify|secret_audit|cost_guard|enforce_scale_to_zero|restart_backend|set_traffic_latest|deploy_backend|facebook_prepare|facebook_install|launch_audit|prune_secret_versions) ;;
             *) echo "::error::Unsupported cloud-ops action: $ACTION"; exit 2 ;;
           esac
           echo "action=$ACTION" >> "$GITHUB_OUTPUT"
           echo "request_id=$REQUEST_ID" >> "$GITHUB_OUTPUT"
-          echo "Accepted cloud-ops request $REQUEST_ID ($ACTION)"
 
       - name: Authenticate to Google Cloud with short-lived OIDC
         uses: google-github-actions/auth@v2
@@ -61,37 +63,43 @@ jobs:
         with:
           project_id: ${{ env.TARGET_PROJECT }}
 
-      - name: Execute allowlisted cloud operation
+      - name: Execute allowlisted operation
         env:
           ACTION: ${{ steps.request.outputs.action }}
           REQUEST_ID: ${{ steps.request.outputs.request_id }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           RESULT=/tmp/cloud-ops-result.json
           STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUCCESS=true
-          MESSAGE=""
+          MESSAGE=''
+          echo '{}' > /tmp/details.json
 
           get_service_json() {
             gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json
           }
           http_code() {
-            curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$1" || printf '000'
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$1" 2>/dev/null || printf '000'
+          }
+          env_value() {
+            local json="$1" name="$2"
+            jq -r --arg n "$name" '[.spec.template.spec.containers[0].env[]? | select(.name==$n)][0].value // ""' <<<"$json"
+          }
+          env_secret_ref() {
+            local json="$1" name="$2"
+            jq -r --arg n "$name" '[.spec.template.spec.containers[0].env[]? | select(.name==$n)][0].valueFrom.secretKeyRef.name // ""' <<<"$json"
+          }
+          env_present() {
+            local json="$1" name="$2"
+            jq -e --arg n "$name" 'any(.spec.template.spec.containers[0].env[]?; .name==$n)' <<<"$json" >/dev/null 2>&1
           }
           write_result() {
-            local details_file="${1:-}"
-            if [ -n "$details_file" ] && [ -f "$details_file" ]; then
-              jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg startedAt "$STARTED_AT" \
-                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg message "$MESSAGE" \
-                --argjson success "$SUCCESS" --slurpfile details "$details_file" \
-                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:($details[0] // {})}' > "$RESULT"
-            else
-              jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg startedAt "$STARTED_AT" \
-                --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg message "$MESSAGE" \
-                --argjson success "$SUCCESS" \
-                '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:{}}' > "$RESULT"
-            fi
+            jq -n \
+              --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg startedAt "$STARTED_AT" \
+              --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg message "$MESSAGE" \
+              --argjson success "$SUCCESS" --slurpfile details /tmp/details.json \
+              '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:($details[0] // {})}' > "$RESULT"
           }
           scaling_snapshot() {
             local s="$1"
@@ -101,117 +109,185 @@ jobs:
             REVISION_MAX="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // "platform-default"' <<<"$s")"
           }
 
-          service="$(get_service_json)"
-          SERVICE_URL="$(jq -r '.status.url // empty' <<<"$service")"
-          READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
-          GOOGLE_ID="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="GOOGLE_CLIENT_ID")][0].value // ""' <<<"$service")"
-          YOUTUBE_ID="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="YOUTUBE_CLIENT_ID")][0].value // ""' <<<"$service")"
-          GOOGLE_SECRET_REF="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="GOOGLE_CLIENT_SECRET")][0].valueFrom.secretKeyRef.name // ""' <<<"$service")"
-          YOUTUBE_SECRET_REF="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="YOUTUBE_CLIENT_SECRET")][0].valueFrom.secretKeyRef.name // ""' <<<"$service")"
+          service="$(get_service_json 2>/dev/null)" || {
+            SUCCESS=false; MESSAGE='Could not read the production Cloud Run service.'; write_result; exit 0;
+          }
 
           case "$ACTION" in
             status|health_check)
               HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
               READY="$(http_code 'https://api.chatscream.live/api/ready')"
               CAPABILITIES="$(http_code 'https://api.chatscream.live/api/public/capabilities')"
-              jq -n --arg project "$TARGET_PROJECT" --arg service "$SERVICE" --arg region "$REGION" --arg url "$SERVICE_URL" \
-                --arg revision "$READY_REVISION" --arg health "$HEALTH" --arg ready "$READY" --arg capabilities "$CAPABILITIES" \
-                --arg googleSecretRef "$GOOGLE_SECRET_REF" --arg youtubeSecretRef "$YOUTUBE_SECRET_REF" \
-                '{project:$project,service:$service,region:$region,url:$url,latestReadyRevision:$revision,http:{health:$health,ready:$ready,capabilities:$capabilities},secretBindings:{google:$googleSecretRef,youtube:$youtubeSecretRef}}' > /tmp/details.json
-              if [ "$HEALTH" != "200" ] || [ "$READY" != "200" ]; then SUCCESS=false; MESSAGE="Production API health/readiness check failed."; else MESSAGE="Cloud Run and production API are healthy."; fi
+              GOOGLE_REF="$(env_secret_ref "$service" GOOGLE_CLIENT_SECRET)"
+              YOUTUBE_REF="$(env_secret_ref "$service" YOUTUBE_CLIENT_SECRET)"
+              FACEBOOK_REF="$(env_secret_ref "$service" FACEBOOK_APP_SECRET)"
+              jq -n --arg project "$TARGET_PROJECT" --arg service "$SERVICE" --arg region "$REGION" \
+                --arg revision "$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")" \
+                --arg health "$HEALTH" --arg ready "$READY" --arg capabilities "$CAPABILITIES" \
+                --arg google "$GOOGLE_REF" --arg youtube "$YOUTUBE_REF" --arg facebook "$FACEBOOK_REF" \
+                '{project:$project,service:$service,region:$region,latestReadyRevision:$revision,http:{health:$health,ready:$ready,capabilities:$capabilities},secretBindings:{google:$google,youtube:$youtube,facebook:$facebook}}' > /tmp/details.json
+              if [ "$HEALTH" = 200 ] && [ "$READY" = 200 ] && [ "$CAPABILITIES" = 200 ]; then MESSAGE='Cloud Run and production API are healthy.'; else SUCCESS=false; MESSAGE='One or more production API probes failed.'; fi
               ;;
 
             oauth_verify)
-              expected_google='584450564662-vvlnooo2oe25ltstet0mkqajm4ta80d8.apps.googleusercontent.com'
-              expected_youtube='584450564662-ek0a4ibt01t9ho6guc7sfqp59dq0vrs5.apps.googleusercontent.com'
-              google_ok=false; youtube_ok=false; google_secret_ok=false; youtube_secret_ok=false
-              [ "$GOOGLE_ID" = "$expected_google" ] && google_ok=true
-              [ "$YOUTUBE_ID" = "$expected_youtube" ] && youtube_ok=true
-              [ "$GOOGLE_SECRET_REF" = 'chatscream-google-client-secret' ] && google_secret_ok=true
-              [ "$YOUTUBE_SECRET_REF" = 'chatscream-youtube-client-secret' ] && youtube_secret_ok=true
-              jq -n --argjson googleClientId "$google_ok" --argjson youtubeClientId "$youtube_ok" \
-                --argjson googleSecret "$google_secret_ok" --argjson youtubeSecret "$youtube_secret_ok" \
-                '{googleClientIdCorrect:$googleClientId,youtubeClientIdCorrect:$youtubeClientId,googleSecretManagerBindingCorrect:$googleSecret,youtubeSecretManagerBindingCorrect:$youtubeSecret}' > /tmp/details.json
-              if $google_ok && $youtube_ok && $google_secret_ok && $youtube_secret_ok; then MESSAGE="Google and YouTube OAuth pairs are separated and correctly bound."; else SUCCESS=false; MESSAGE="One or more OAuth bindings are incorrect."; fi
+              GID="$(env_value "$service" GOOGLE_CLIENT_ID)"; YID="$(env_value "$service" YOUTUBE_CLIENT_ID)"
+              GREF="$(env_secret_ref "$service" GOOGLE_CLIENT_SECRET)"; YREF="$(env_secret_ref "$service" YOUTUBE_CLIENT_SECRET)"
+              gok=false; yok=false; gsok=false; ysok=false
+              [ "$GID" = "$GOOGLE_CLIENT_ID_EXPECTED" ] && gok=true
+              [ "$YID" = "$YOUTUBE_CLIENT_ID_EXPECTED" ] && yok=true
+              [ "$GREF" = chatscream-google-client-secret ] && gsok=true
+              [ "$YREF" = chatscream-youtube-client-secret ] && ysok=true
+              jq -n --argjson g "$gok" --argjson y "$yok" --argjson gs "$gsok" --argjson ys "$ysok" '{googleClientIdCorrect:$g,youtubeClientIdCorrect:$y,googleSecretManagerBindingCorrect:$gs,youtubeSecretManagerBindingCorrect:$ys}' > /tmp/details.json
+              if $gok && $yok && $gsok && $ysok; then MESSAGE='Google and YouTube OAuth pairs are separated and correctly bound.'; else SUCCESS=false; MESSAGE='One or more Google/YouTube OAuth bindings are incorrect.'; fi
               ;;
 
             secret_audit)
-              google_versions="$(gcloud secrets versions list chatscream-google-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
-              youtube_versions="$(gcloud secrets versions list chatscream-youtube-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
-              jq -n --arg googleRef "$GOOGLE_SECRET_REF" --arg youtubeRef "$YOUTUBE_SECRET_REF" \
-                --argjson googleEnabledVersions "${google_versions:-0}" --argjson youtubeEnabledVersions "${youtube_versions:-0}" \
-                '{bindings:{google:$googleRef,youtube:$youtubeRef},enabledVersions:{google:$googleEnabledVersions,youtube:$youtubeEnabledVersions}}' > /tmp/details.json
-              MESSAGE="Secret Manager bindings audited without reading secret values."
+              GREF="$(env_secret_ref "$service" GOOGLE_CLIENT_SECRET)"; YREF="$(env_secret_ref "$service" YOUTUBE_CLIENT_SECRET)"; FREF="$(env_secret_ref "$service" FACEBOOK_APP_SECRET)"
+              gv="$(gcloud secrets versions list chatscream-google-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
+              yv="$(gcloud secrets versions list chatscream-youtube-client-secret --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
+              fv=0; if gcloud secrets describe "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then fv="$(gcloud secrets versions list "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)' | wc -l | tr -d ' ')"; fi
+              jq -n --arg g "$GREF" --arg y "$YREF" --arg f "$FREF" --argjson gv "${gv:-0}" --argjson yv "${yv:-0}" --argjson fv "${fv:-0}" '{bindings:{google:$g,youtube:$y,facebook:$f},enabledVersions:{google:$gv,youtube:$yv,facebook:$fv}}' > /tmp/details.json
+              MESSAGE='Secret Manager bindings audited without reading secret values.'
               ;;
 
             cost_guard)
               scaling_snapshot "$service"
-              CPU_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.cpu // "platform-default"' <<<"$service")"
-              MEMORY_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.memory // "platform-default"' <<<"$service")"
-              jq -n --arg serviceMin "$SERVICE_MIN" --arg revisionMin "$REVISION_MIN" --arg serviceMax "$SERVICE_MAX" --arg revisionMax "$REVISION_MAX" --arg cpu "$CPU_LIMIT" --arg memory "$MEMORY_LIMIT" \
-                '{cloudRun:{serviceMinScale:$serviceMin,revisionMinScale:$revisionMin,serviceMaxScale:$serviceMax,revisionMaxScale:$revisionMax,cpuLimit:$cpu,memoryLimit:$memory}}' > /tmp/details.json
-              if [ "$SERVICE_MIN" != "0" ] || [ "$REVISION_MIN" != "0" ]; then SUCCESS=false; MESSAGE="Cost guard warning: a Cloud Run minimum-instance setting is still above zero."; else MESSAGE="Cost guard passed: service-level and revision-level minimum instances are zero."; fi
+              CPU="$(jq -r '.spec.template.spec.containers[0].resources.limits.cpu // "platform-default"' <<<"$service")"
+              MEM="$(jq -r '.spec.template.spec.containers[0].resources.limits.memory // "platform-default"' <<<"$service")"
+              jq -n --arg sm "$SERVICE_MIN" --arg rm "$REVISION_MIN" --arg sx "$SERVICE_MAX" --arg rx "$REVISION_MAX" --arg cpu "$CPU" --arg mem "$MEM" '{cloudRun:{serviceMinScale:$sm,revisionMinScale:$rm,serviceMaxScale:$sx,revisionMaxScale:$rx,cpuLimit:$cpu,memoryLimit:$mem}}' > /tmp/details.json
+              if [ "$SERVICE_MIN" = 0 ] && [ "$REVISION_MIN" = 0 ]; then MESSAGE='Cost guard passed: Cloud Run can scale to zero.'; else SUCCESS=false; MESSAGE='Cost guard warning: a minimum-instance setting is above zero.'; fi
               ;;
 
             enforce_scale_to_zero)
-              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min 0 --quiet >/dev/null \
-                 && gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min-instances default --quiet >/dev/null; then
-                service="$(get_service_json)"
-                scaling_snapshot "$service"
-                READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
-                HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
-                jq -n --arg serviceMin "$SERVICE_MIN" --arg revisionMin "$REVISION_MIN" --arg revision "$READY_REVISION" --arg health "$HEALTH" \
-                  '{serviceMinScale:$serviceMin,revisionMinScale:$revisionMin,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
-                if [ "$SERVICE_MIN" = "0" ] && [ "$REVISION_MIN" = "0" ] && [ "$HEALTH" = "200" ]; then MESSAGE="Both Cloud Run minimum-instance settings are zero and production health is verified."; else SUCCESS=false; MESSAGE="Scale-to-zero update completed but verification failed."; fi
-              else
-                SUCCESS=false; MESSAGE="Failed to clear Cloud Run minimum-instance settings."; echo '{}' > /tmp/details.json
-              fi
+              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min 0 --quiet >/dev/null 2>&1 \
+                 && gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min-instances default --quiet >/dev/null 2>&1; then
+                service="$(get_service_json)"; scaling_snapshot "$service"; HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
+                jq -n --arg sm "$SERVICE_MIN" --arg rm "$REVISION_MIN" --arg health "$HEALTH" '{serviceMinScale:$sm,revisionMinScale:$rm,healthHttp:$health}' > /tmp/details.json
+                if [ "$SERVICE_MIN" = 0 ] && [ "$REVISION_MIN" = 0 ] && [ "$HEALTH" = 200 ]; then MESSAGE='Scale-to-zero enforced and production health verified.'; else SUCCESS=false; MESSAGE='Scale-to-zero update completed but verification failed.'; fi
+              else SUCCESS=false; MESSAGE='Failed to clear Cloud Run minimum-instance settings.'; fi
               ;;
 
             restart_backend)
               nonce="$(date -u +%s)"
-              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --update-env-vars "CHATSCREAM_OPS_RESTART=$nonce" --quiet >/dev/null; then
-                HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
-                jq -n --arg revision "$READY_REVISION" --arg health "$HEALTH" '{latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
-                if [ "$HEALTH" = "200" ]; then MESSAGE="Backend restarted in a new Cloud Run revision."; else SUCCESS=false; MESSAGE="New revision deployed but health check failed."; fi
-              else SUCCESS=false; MESSAGE="Cloud Run restart operation failed."; echo '{}' > /tmp/details.json; fi
+              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --update-env-vars "CHATSCREAM_OPS_RESTART=$nonce" --quiet >/dev/null 2>&1; then HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; jq -n --arg health "$HEALTH" '{healthHttp:$health}' > /tmp/details.json; [ "$HEALTH" = 200 ] && MESSAGE='Backend restarted and healthy.' || { SUCCESS=false; MESSAGE='Backend restarted but health probe failed.'; }; else SUCCESS=false; MESSAGE='Cloud Run restart failed.'; fi
               ;;
 
             set_traffic_latest)
-              if gcloud run services update-traffic "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --to-latest --quiet >/dev/null; then MESSAGE="Production traffic now targets the latest ready revision."; else SUCCESS=false; MESSAGE="Traffic update failed."; fi
-              service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
-              jq -n --arg revision "$READY_REVISION" '{latestReadyRevision:$revision}' > /tmp/details.json
+              if gcloud run services update-traffic "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --to-latest --quiet >/dev/null 2>&1; then MESSAGE='Production traffic targets the latest ready revision.'; else SUCCESS=false; MESSAGE='Traffic update failed.'; fi
               ;;
 
             deploy_backend)
               IMAGE="${REGION}-docker.pkg.dev/${TARGET_PROJECT}/${ARTIFACT_REPO}/${SERVICE}:ops-${GITHUB_SHA:0:12}"
-              if ! gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
-                SUCCESS=false; MESSAGE="Artifact Registry repository is missing; deployment was not attempted."; jq -n --arg repository "$ARTIFACT_REPO" '{artifactRepository:$repository}' > /tmp/details.json
+              if gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
+                gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null 2>&1
+                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 && docker push "$IMAGE" >/tmp/push.log 2>&1 && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; jq -n --arg image "$IMAGE" --arg health "$HEALTH" '{image:$image,healthHttp:$health}' > /tmp/details.json; [ "$HEALTH" = 200 ] && MESSAGE='Backend deployed and healthy.' || { SUCCESS=false; MESSAGE='Backend deployed but health probe failed.'; }; else SUCCESS=false; MESSAGE='Backend build, push, or deploy failed; command output was intentionally not published.'; fi
+              else SUCCESS=false; MESSAGE='Artifact Registry repository is missing.'; fi
+              ;;
+
+            facebook_prepare)
+              rm -f /tmp/fb-private.pem /tmp/fb-public.pem
+              if ! openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/fb-private.pem >/dev/null 2>&1 || ! openssl pkey -in /tmp/fb-private.pem -pubout -out /tmp/fb-public.pem >/dev/null 2>&1; then
+                SUCCESS=false; MESSAGE='Failed to generate the one-time Facebook envelope key.'
               else
-                gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
-                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 && docker push "$IMAGE" >/tmp/push.log 2>&1 && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then
-                  HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; service="$(get_service_json)"; READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
-                  jq -n --arg image "$IMAGE" --arg revision "$READY_REVISION" --arg health "$HEALTH" '{image:$image,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
-                  if [ "$HEALTH" = "200" ]; then MESSAGE="Backend built, pushed, deployed, and passed health check."; else SUCCESS=false; MESSAGE="Backend deployed but health check failed."; fi
-                else SUCCESS=false; MESSAGE="Backend build, push, or Cloud Run deployment failed. Sensitive command output was intentionally not published."; jq -n --arg image "$IMAGE" '{image:$image}' > /tmp/details.json; fi
+                if ! gcloud secrets describe "$FACEBOOK_ENVELOPE_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
+                  if ! gcloud secrets create "$FACEBOOK_ENVELOPE_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet >/tmp/fb-create.log 2>&1; then SUCCESS=false; MESSAGE='Failed to create the one-time Facebook envelope secret container.'; fi
+                fi
+                if $SUCCESS && ! gcloud secrets versions add "$FACEBOOK_ENVELOPE_SECRET" --project "$TARGET_PROJECT" --data-file=/tmp/fb-private.pem --quiet >/tmp/fb-add.log 2>&1; then SUCCESS=false; MESSAGE='Failed to store the one-time Facebook envelope private key in Secret Manager.'; fi
+                if $SUCCESS; then
+                  PUB="$(base64 -w0 /tmp/fb-public.pem)"
+                  jq -n --arg envelope "$FACEBOOK_ENVELOPE_SECRET" --arg publicKeyPemBase64 "$PUB" '{envelopeSecret:$envelope,publicKeyPemBase64:$publicKeyPemBase64}' > /tmp/details.json
+                  MESSAGE='Facebook one-time encryption envelope is ready.'
+                fi
               fi
+              rm -f /tmp/fb-private.pem /tmp/fb-public.pem /tmp/fb-create.log /tmp/fb-add.log
+              ;;
+
+            facebook_install)
+              ENVELOPE="$(jq -r '.envelopeSecret // empty' ops/control-plane/request.json)"
+              CIPHERTEXT="$(jq -r '.ciphertextBase64 // empty' ops/control-plane/request.json)"
+              if [ "$ENVELOPE" != "$FACEBOOK_ENVELOPE_SECRET" ] || [ -z "$CIPHERTEXT" ]; then
+                SUCCESS=false; MESSAGE='Facebook install request is missing the approved envelope or ciphertext.'
+              elif ! gcloud secrets versions access latest --secret "$ENVELOPE" --project "$TARGET_PROJECT" > /tmp/fb-private.pem 2>/dev/null; then
+                SUCCESS=false; MESSAGE='Could not access the one-time Facebook envelope private key.'
+              elif ! printf '%s' "$CIPHERTEXT" | base64 -d > /tmp/fb-cipher.bin 2>/dev/null; then
+                SUCCESS=false; MESSAGE='Facebook ciphertext was not valid base64.'
+              elif ! openssl pkeyutl -decrypt -inkey /tmp/fb-private.pem -in /tmp/fb-cipher.bin -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 > /tmp/fb-secret.txt 2>/dev/null; then
+                SUCCESS=false; MESSAGE='Facebook secret envelope decryption failed.'
+              else
+                FBSECRET="$(cat /tmp/fb-secret.txt)"
+                if ! printf '%s' "$FBSECRET" | grep -Eq '^[0-9a-fA-F]{32}$'; then
+                  SUCCESS=false; MESSAGE='Decrypted Facebook App Secret failed validation.'
+                else
+                  if ! gcloud secrets describe "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then gcloud secrets create "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet >/dev/null 2>&1 || SUCCESS=false; fi
+                  $SUCCESS && printf '%s' "$FBSECRET" | gcloud secrets versions add "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --data-file=- --quiet >/dev/null 2>&1 || SUCCESS=false
+                  if $SUCCESS; then
+                    RUNTIME_SA="$(jq -r '.spec.template.spec.serviceAccountName // empty' <<<"$service")"
+                    if [ -z "$RUNTIME_SA" ]; then PN="$(gcloud projects describe "$TARGET_PROJECT" --format='value(projectNumber)')"; RUNTIME_SA="${PN}-compute@developer.gserviceaccount.com"; fi
+                    gcloud secrets add-iam-policy-binding "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor --quiet >/dev/null 2>&1 || SUCCESS=false
+                  fi
+                  if $SUCCESS; then
+                    CURRENT_TYPE="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_SECRET")][0] | if .valueFrom then "secretRef" elif .value then "literal" else "missing" end' <<<"$service")"
+                    [ "$CURRENT_TYPE" != literal ] || gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars FACEBOOK_APP_SECRET --quiet >/dev/null 2>&1 || SUCCESS=false
+                  fi
+                  if $SUCCESS; then
+                    gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" \
+                      --update-env-vars '^@^FACEBOOK_APP_ID=1768608743830353@FACEBOOK_GRAPH_API_VERSION=v26.0@APP_BASE_URL=https://www.chatscream.live@VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback@CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live' \
+                      --update-secrets "FACEBOOK_APP_SECRET=${FACEBOOK_SECRET}:latest" --quiet >/dev/null 2>&1 || SUCCESS=false
+                  fi
+                  unset FBSECRET
+                  if $SUCCESS; then
+                    service="$(get_service_json)"; FID="$(env_value "$service" FACEBOOK_APP_ID)"; FREF="$(env_secret_ref "$service" FACEBOOK_APP_SECRET)"; FVER="$(env_value "$service" FACEBOOK_GRAPH_API_VERSION)"; HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; CAPS="$(http_code 'https://api.chatscream.live/api/public/capabilities')"
+                    jq -n --arg appId "$FID" --arg secretRef "$FREF" --arg version "$FVER" --arg health "$HEALTH" --arg capabilities "$CAPS" '{facebookAppId:$appId,facebookSecretBinding:$secretRef,graphApiVersion:$version,http:{health:$health,capabilities:$capabilities}}' > /tmp/details.json
+                    if [ "$FID" = "$FACEBOOK_APP_ID_EXPECTED" ] && [ "$FREF" = "$FACEBOOK_SECRET" ] && [ "$FVER" = v26.0 ] && [ "$HEALTH" = 200 ] && [ "$CAPS" = 200 ]; then MESSAGE='Facebook production OAuth configuration installed and verified.'; gcloud secrets delete "$ENVELOPE" --project "$TARGET_PROJECT" --quiet >/dev/null 2>&1 || true; else SUCCESS=false; MESSAGE='Facebook settings were applied but final verification failed.'; fi
+                  else MESSAGE='Facebook secret installation failed before final verification.'; fi
+                fi
+              fi
+              rm -f /tmp/fb-private.pem /tmp/fb-cipher.bin /tmp/fb-secret.txt
+              ;;
+
+            prune_secret_versions)
+              for secret in chatscream-google-client-secret chatscream-youtube-client-secret "$FACEBOOK_SECRET"; do
+                if gcloud secrets describe "$secret" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
+                  latest="$(gcloud secrets versions list "$secret" --project "$TARGET_PROJECT" --filter='state=ENABLED' --sort-by='~name' --format='value(name)' | head -n1)"
+                  while IFS= read -r version; do [ -z "$version" ] || [ "$version" = "$latest" ] || gcloud secrets versions disable "$version" --secret "$secret" --project "$TARGET_PROJECT" --quiet >/dev/null 2>&1 || true; done < <(gcloud secrets versions list "$secret" --project "$TARGET_PROJECT" --filter='state=ENABLED' --format='value(name)')
+                fi
+              done
+              MESSAGE='Superseded enabled OAuth secret versions were disabled; latest versions remain active.'
+              ;;
+
+            launch_audit)
+              scaling_snapshot "$service"
+              HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; READY="$(http_code 'https://api.chatscream.live/api/ready')"; CAPS="$(http_code 'https://api.chatscream.live/api/public/capabilities')"
+              node_ok=false; identity_ok=false; db_ok=false; app_ok=false; callback_ok=false; cors_ok=false; auth_state_ok=false; session_ok=false; google_ok=false; youtube_ok=false; facebook_ok=false; scale_ok=false
+              [ "$(env_value "$service" NODE_ENV)" = production ] && node_ok=true
+              [ "$(env_value "$service" IDENTITY_STORAGE_MODE)" = managed ] && identity_ok=true
+              (env_present "$service" POSTGRES_URL || env_present "$service" DATABASE_URL) && db_ok=true
+              [ "$(env_value "$service" APP_BASE_URL)" = 'https://www.chatscream.live' ] && app_ok=true
+              [ "$(env_value "$service" VITE_OAUTH_REDIRECT_URI)" = 'https://www.chatscream.live/oauth/callback' ] && callback_ok=true
+              CORS="$(env_value "$service" CORS_ORIGINS)"; [[ "$CORS" == *'https://chatscream.live'* && "$CORS" == *'https://www.chatscream.live'* ]] && cors_ok=true
+              env_present "$service" AUTH_STATE_SECRET && auth_state_ok=true
+              env_present "$service" SESSION_SECRET && session_ok=true
+              [ "$(env_value "$service" GOOGLE_CLIENT_ID)" = "$GOOGLE_CLIENT_ID_EXPECTED" ] && [ "$(env_secret_ref "$service" GOOGLE_CLIENT_SECRET)" = chatscream-google-client-secret ] && google_ok=true
+              [ "$(env_value "$service" YOUTUBE_CLIENT_ID)" = "$YOUTUBE_CLIENT_ID_EXPECTED" ] && [ "$(env_secret_ref "$service" YOUTUBE_CLIENT_SECRET)" = chatscream-youtube-client-secret ] && youtube_ok=true
+              [ "$(env_value "$service" FACEBOOK_APP_ID)" = "$FACEBOOK_APP_ID_EXPECTED" ] && [ "$(env_secret_ref "$service" FACEBOOK_APP_SECRET)" = "$FACEBOOK_SECRET" ] && [ "$(env_value "$service" FACEBOOK_GRAPH_API_VERSION)" = v26.0 ] && facebook_ok=true
+              [ "$SERVICE_MIN" = 0 ] && [ "$REVISION_MIN" = 0 ] && scale_ok=true
+              redis_present=false; env_present "$service" REDIS_URL && redis_present=true
+              jq -n --argjson node "$node_ok" --argjson identity "$identity_ok" --argjson db "$db_ok" --argjson app "$app_ok" --argjson callback "$callback_ok" --argjson cors "$cors_ok" --argjson authState "$auth_state_ok" --argjson session "$session_ok" --argjson google "$google_ok" --argjson youtube "$youtube_ok" --argjson facebook "$facebook_ok" --argjson scale "$scale_ok" --argjson redis "$redis_present" --arg health "$HEALTH" --arg ready "$READY" --arg caps "$CAPS" '{configuration:{nodeProduction:$node,managedIdentity:$identity,databaseConfigured:$db,appBaseUrlCorrect:$app,oauthCallbackCorrect:$callback,corsCorrect:$cors,authStateSecretPresent:$authState,sessionSecretPresent:$session,googleOAuthCorrect:$google,youtubeOAuthCorrect:$youtube,facebookOAuthCorrect:$facebook,scaleToZero:$scale,redisConfigured:$redis},http:{health:$health,ready:$ready,capabilities:$caps}}' > /tmp/details.json
+              if $node_ok && $identity_ok && $db_ok && $app_ok && $callback_ok && $cors_ok && $auth_state_ok && $session_ok && $google_ok && $youtube_ok && $facebook_ok && $scale_ok && [ "$HEALTH" = 200 ] && [ "$READY" = 200 ] && [ "$CAPS" = 200 ]; then MESSAGE='Core production launch environment is correctly configured.'; else SUCCESS=false; MESSAGE='Launch audit found one or more core production configuration gaps.'; fi
               ;;
           esac
 
-          write_result /tmp/details.json
-          cat "$RESULT"
+          write_result
 
       - name: Publish sanitized result for chat retrieval
         if: always()
         env:
           REQUEST_ID: ${{ steps.request.outputs.request_id }}
-          ACTION: ${{ steps.request.outputs.action }}
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -f /tmp/cloud-ops-result.json ]; then
-            jq -n --arg requestId "${REQUEST_ID:-unknown}" --arg action "${ACTION:-unknown}" --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              '{requestId:$requestId,action:$action,success:false,message:"Controller failed before a sanitized result could be produced.",completedAt:$completedAt,details:{}}' > /tmp/cloud-ops-result.json
+            jq -n --arg requestId "${REQUEST_ID:-unknown}" --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{requestId:$requestId,action:"unknown",success:false,message:"Controller failed before a sanitized result could be produced.",completedAt:$completedAt,details:{}}' > /tmp/cloud-ops-result.json
           fi
           git config user.name 'ChatScream Cloud Ops'
           git config user.email 'actions@users.noreply.github.com'
@@ -220,105 +296,7 @@ jobs:
           mkdir -p ops/control-plane
           cp /tmp/cloud-ops-result.json ops/control-plane/result.json
           git add ops/control-plane/result.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Cloud ops result: ${REQUEST_ID:-unknown} [skip ci]"
-            git push origin main
-          fi
-
-      - name: Read Facebook bootstrap request
-        if: always()
-        id: fbrequest
-        shell: bash
-        run: |
-          set -euo pipefail
-          ACTION='idle'
-          if [ -f ops/control-plane/facebook-envelope-request.json ]; then
-            ACTION="$(jq -r '.action // "idle"' ops/control-plane/facebook-envelope-request.json)"
-          fi
-          case "$ACTION" in prepare|install|idle) ;; *) echo "::error::Unsupported Facebook bootstrap action: $ACTION"; exit 2 ;; esac
-          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare one-time Facebook secret envelope
-        if: steps.fbrequest.outputs.action == 'prepare'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ENVELOPE_SECRET='chatscream-facebook-envelope-private'
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/facebook-envelope-private.pem >/dev/null 2>&1
-          openssl pkey -in /tmp/facebook-envelope-private.pem -pubout -out /tmp/facebook-envelope-public.pem
-          if ! gcloud secrets describe "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
-            gcloud secrets create "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
-          fi
-          gcloud secrets versions add "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --data-file=/tmp/facebook-envelope-private.pem --quiet >/dev/null
-          git fetch origin main
-          git checkout -B main origin/main
-          mkdir -p ops/control-plane
-          cp /tmp/facebook-envelope-public.pem ops/control-plane/facebook-envelope-public.pem
-          jq -n '{action:"prepare",success:true,message:"One-time Facebook envelope public key ready; private key is held only in Google Secret Manager."}' > ops/control-plane/facebook-envelope-result.json
-          git add ops/control-plane/facebook-envelope-public.pem ops/control-plane/facebook-envelope-result.json
-          git commit -m 'Prepare Facebook secret envelope [skip ci]'
-          git push origin main
-          rm -f /tmp/facebook-envelope-private.pem /tmp/facebook-envelope-public.pem
-
-      - name: Install Facebook secret and production bindings
-        if: steps.fbrequest.outputs.action == 'install'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ENVELOPE_SECRET='chatscream-facebook-envelope-private'
-          FACEBOOK_SECRET='chatscream-facebook-app-secret'
-          FACEBOOK_APP_ID='1768608743830353'
-          test -f ops/control-plane/facebook-app-secret.enc || { echo '::error::Encrypted Facebook secret envelope is missing.'; exit 3; }
-          gcloud secrets versions access latest --secret "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" > /tmp/facebook-envelope-private.pem
-          chmod 600 /tmp/facebook-envelope-private.pem
-          base64 -d ops/control-plane/facebook-app-secret.enc > /tmp/facebook-app-secret.bin
-          openssl pkeyutl -decrypt -inkey /tmp/facebook-envelope-private.pem -in /tmp/facebook-app-secret.bin -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 > /tmp/facebook-app-secret.txt
-          FACEBOOK_SECRET_VALUE="$(cat /tmp/facebook-app-secret.txt)"
-          printf '%s' "$FACEBOOK_SECRET_VALUE" | grep -Eq '^[0-9a-fA-F]{32}$' || { echo '::error::Decrypted Facebook App Secret failed validation.'; exit 4; }
-          if ! gcloud secrets describe "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
-            gcloud secrets create "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
-          fi
-          printf '%s' "$FACEBOOK_SECRET_VALUE" | gcloud secrets versions add "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --data-file=- --quiet >/dev/null
-          SERVICE_JSON="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
-          RUNTIME_SA="$(jq -r '.spec.template.spec.serviceAccountName // empty' <<<"$SERVICE_JSON")"
-          if [ -z "$RUNTIME_SA" ]; then PROJECT_NUMBER="$(gcloud projects describe "$TARGET_PROJECT" --format='value(projectNumber)')"; RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"; fi
-          gcloud secrets add-iam-policy-binding "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
-          CURRENT_FB_TYPE="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_SECRET")][0] | if .valueFrom then "secretRef" elif .value then "literal" else "missing" end' <<<"$SERVICE_JSON")"
-          if [ "$CURRENT_FB_TYPE" = 'literal' ]; then gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars FACEBOOK_APP_SECRET --quiet >/dev/null; fi
-          gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" \
-            --update-env-vars '^@^FACEBOOK_APP_ID=1768608743830353@FACEBOOK_GRAPH_API_VERSION=v26.0@APP_BASE_URL=https://www.chatscream.live@VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback@CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live' \
-            --update-secrets "FACEBOOK_APP_SECRET=${FACEBOOK_SECRET}:latest" --quiet >/dev/null
-          FINAL_JSON="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
-          FB_ID="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_ID")][0].value // ""' <<<"$FINAL_JSON")"
-          FB_SECRET_REF="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_SECRET")][0].valueFrom.secretKeyRef.name // ""' <<<"$FINAL_JSON")"
-          GRAPH_VERSION="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_GRAPH_API_VERSION")][0].value // ""' <<<"$FINAL_JSON")"
-          HEALTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.chatscream.live/api/health || printf '000')"
-          CAPABILITIES="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.chatscream.live/api/public/capabilities || printf '000')"
-          test "$FB_ID" = "$FACEBOOK_APP_ID"; test "$FB_SECRET_REF" = "$FACEBOOK_SECRET"; test "$GRAPH_VERSION" = 'v26.0'; test "$HEALTH" = '200'; test "$CAPABILITIES" = '200'
-          gcloud secrets delete "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --quiet
-          unset FACEBOOK_SECRET_VALUE
-          rm -f /tmp/facebook-envelope-private.pem /tmp/facebook-app-secret.bin /tmp/facebook-app-secret.txt
-          git fetch origin main
-          git checkout -B main origin/main
-          jq -n --arg appId "$FB_ID" --arg secretRef "$FB_SECRET_REF" --arg graphVersion "$GRAPH_VERSION" --arg health "$HEALTH" --arg capabilities "$CAPABILITIES" \
-            '{action:"install",success:true,message:"Facebook production OAuth configuration installed and verified.",details:{facebookAppId:$appId,facebookSecretBinding:$secretRef,graphApiVersion:$graphVersion,http:{health:$health,capabilities:$capabilities}}}' > ops/control-plane/facebook-envelope-result.json
-          jq -n '{action:"idle",purpose:"Facebook production secret is installed; no pending bootstrap action."}' > ops/control-plane/facebook-envelope-request.json
-          rm -f ops/control-plane/facebook-envelope-public.pem ops/control-plane/facebook-app-secret.enc
-          git add -A ops/control-plane/facebook-envelope-result.json ops/control-plane/facebook-envelope-request.json ops/control-plane/facebook-envelope-public.pem ops/control-plane/facebook-app-secret.enc
-          git commit -m 'Complete Facebook secret bootstrap [skip ci]'
-          git push origin main
-
-      - name: Publish sanitized Facebook bootstrap failure
-        if: failure() && steps.fbrequest.outputs.action != 'idle'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git checkout -B main origin/main
-          mkdir -p ops/control-plane
-          jq -n --arg action "${{ steps.fbrequest.outputs.action }}" '{action:$action,success:false,message:"Facebook secret bootstrap failed. No secret value was published."}' > ops/control-plane/facebook-envelope-result.json
-          git add ops/control-plane/facebook-envelope-result.json
-          if ! git diff --cached --quiet; then git commit -m 'Record Facebook secret bootstrap failure [skip ci]'; git push origin main; fi
+          if ! git diff --cached --quiet; then git commit -m "Cloud ops result: ${REQUEST_ID:-unknown} [skip ci]"; git push origin main; fi
 
       - name: Mark failed operation
         if: always()
