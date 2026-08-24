@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-0035-cost",
-  "action": "cost_guard",
-  "purpose": "Verify Cloud Run can scale to zero and report resource limits without exposing secrets"
+  "id": "chat-ops-20260824-0038-scalezero",
+  "action": "enforce_scale_to_zero",
+  "purpose": "Reduce fixed Cloud Run cost by allowing chatscream-backend to scale to zero"
 }
