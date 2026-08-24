@@ -2,7 +2,7 @@ import React from 'react';
 import AccessibilitySettings from './Settings/AccessibilitySettings';
 import { useAccessibilitySettings } from '../hooks/useAccessibilitySettings';
 
-const AccessibilitySettingsModal = ({ onClose }) => {
+const AccessibilitySettingsModal = ({ onClose }: { onClose: () => void }) => {
   const { settings, updateSettings, resetSettings } = useAccessibilitySettings();
 
   const handleApply = () => {

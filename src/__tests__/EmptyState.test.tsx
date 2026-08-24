@@ -86,8 +86,10 @@ describe('EmptyState', () => {
   it('has live region for screen readers', () => {
     render(<EmptyState {...defaultProps} />);
 
-    const liveRegion = screen.getByLiveRegion('polite');
-    expect(liveRegion).toBeDefined();
+    // Testing Library has no getByLiveRegion query; select the region directly.
+    const liveRegion = document.querySelector('[aria-live="polite"]');
+    expect(liveRegion).not.toBeNull();
+    if (!liveRegion) throw new Error('expected a polite live region');
     expect(liveRegion.getAttribute('aria-atomic')).toBe('true');
     expect(liveRegion.textContent).toContain('Test Title');
     expect(liveRegion.textContent).toContain('Test description text');

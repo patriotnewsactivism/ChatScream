@@ -87,8 +87,8 @@ export class HelpTipsManager {
   private announcer: AriaLiveAnnouncer | null = null;
   private tipQueue: HelpTip[] = [];
   private isProcessingQueue: boolean = false;
-  private idleTimer: NodeJS.Timeout | null = null;
-  private pageLoadTimer: NodeJS.Timeout | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private pageLoadTimer: ReturnType<typeof setTimeout> | null = null;
   private hoverTargets: Map<string, (() => void)[]> = new Map();
   private keyboardHandler: ((event: KeyboardEvent) => void) | null = null;
   private readonly IDLE_THRESHOLD_MS = 30000; // 30 seconds

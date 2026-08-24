@@ -206,9 +206,12 @@ const App: FC = () => {
     void getAIModeratorConfig(sessionToken)
       .then((result) => {
         if (!active) return;
-        setAiModeratorConfig(result.config);
-        setAiModeratorUsage(result.usage);
-        setAiModeratorAvailable(result.available);
+        // A partial or empty response must not put undefined into state — every
+        // later read of aiModeratorConfig.enabled would throw and take the whole
+        // Studio down with it.
+        setAiModeratorConfig(result?.config ?? getDefaultAIModeratorConfig());
+        setAiModeratorUsage(result?.usage ?? null);
+        setAiModeratorAvailable(Boolean(result?.available));
       })
       .catch((error) => console.warn('AI Co-Host config load failed:', error));
     return () => {
@@ -342,7 +345,7 @@ const App: FC = () => {
       const data = await apiRequest<{ assets?: MediaAsset[] }>('/api/media/list', {
         token: sessionToken,
       });
-      setAssets(data.assets || []);
+      setAssets(data?.assets || []);
       setMediaError(null);
     } catch (e) {
       console.error(e);

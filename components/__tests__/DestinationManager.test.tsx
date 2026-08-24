@@ -76,8 +76,11 @@ describe('DestinationManager quick connect', () => {
       />,
     );
 
-    const youtubeButton = await screen.findByRole('button', { name: /YouTube/i });
-    expect(youtubeButton).toBeDisabled();
+    // Two YouTube controls exist while streaming — the quick-connect button and
+    // the manual "add destination" fallback. Both must be locked, so assert on
+    // each by its accessible name rather than a substring that matches both.
+    expect(await screen.findByRole('button', { name: /Connect YouTube/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add YouTube destination/i })).toBeDisabled();
   });
 
   it('hides unsupported quick connect providers from UI', async () => {

@@ -53,7 +53,9 @@ describe('CreatorDashboard', () => {
     await screen.findByText('Auth Session');
     expect(screen.getByText('Creator control center')).toBeInTheDocument();
     expect(screen.getByText(/Cloud VM hours/i)).toBeInTheDocument();
-    expect(screen.getByText('10 hrs')).toBeInTheDocument();
+    // Cloud VM hours are not live yet; the card lists the planned per-tier
+    // allotments in one sentence, so match the pro tier within that line.
+    expect(screen.getByText(/Planned allotments/i)).toHaveTextContent('$29: 10 hrs');
     expect(screen.getByText('Destinations')).toBeInTheDocument();
   });
 
