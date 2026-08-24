@@ -53,6 +53,20 @@ export const DATABASE_MIGRATIONS = [
         ON viral_content (created_at DESC)`,
     ],
   },
+  {
+    // Runtime config (admin OAuth settings, access lists) previously lived in
+    // a JSON file on the container's local disk, so every Cloud Run cold start,
+    // scale-to-zero, and new revision silently reverted it.
+    version: '0003_runtime_config',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS chatscream_config (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_by TEXT NOT NULL DEFAULT 'system',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+    ],
+  },
 ];
 
 const ensureMigrationTable = (client) =>
@@ -104,6 +118,7 @@ const EXPECTED_TABLES = [
   'chatscream_sessions',
   'chatscream_reset_tokens',
   'viral_content',
+  'chatscream_config',
   'chatscream_schema_migrations',
 ];
 
