@@ -1,5 +1,5 @@
 {
-  "action": "bootstrap",
-  "requestedAt": "2026-08-24T03:38:00Z",
-  "purpose": "Initialize zero-cost GitHub Actions cloud control plane and publish envelope public key"
+  "id": "chat-ops-20260824-0028-status",
+  "action": "status",
+  "purpose": "End-to-end verification of the chat-driven Google Cloud control plane"
 }
