@@ -1,0 +1,5 @@
+{
+  "action": "prepare",
+  "success": false,
+  "message": "Facebook secret bootstrap failed. No secret value was published; inspect the GitHub Actions job for the failing infrastructure step."
+}
