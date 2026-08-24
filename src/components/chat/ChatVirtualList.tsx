@@ -75,8 +75,10 @@ const ChatVirtualList: React.FC<ChatVirtualListProps> = ({
         <div
           style={style}
           className="chat-message-row flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-2"
-          tabIndex={0}
-          role="log"
+          // Roving tabindex: rows are focused programmatically by the list's
+          // keyboard handler, so they stay out of the sequential tab order.
+          tabIndex={-1}
+          role="article"
         >
           <div className="message-author flex items-center gap-2 shrink-0">
             <PresenceIndicator isOnline={message.user.onlineStatus === 'online'} />
@@ -114,10 +116,9 @@ const ChatVirtualList: React.FC<ChatVirtualListProps> = ({
             {group.messages.map((msg) => (
               <div
                 key={msg.id}
-                style={style}
                 className="chat-message-row flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-2"
-                tabIndex={0}
-                role="log"
+                tabIndex={-1}
+                role="article"
               >
                 <div className="message-author flex items-center gap-2 shrink-0">
                   <PresenceIndicator isOnline={msg.user.onlineStatus === 'online'} />

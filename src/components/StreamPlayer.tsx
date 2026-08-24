@@ -222,9 +222,8 @@ const StreamPlayer = () => {
               focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-black
               min-h-[44px]
             `}
-            role="menuitem"
-            aria-pressed={currentQuality === quality.value}
-            disabled={isSwitchingQuality}
+            role="menuitemradio"
+            aria-checked={currentQuality === quality.value}
           >
             <span>{quality.label}</span>
             {currentQuality === quality.value && (
@@ -244,7 +243,11 @@ const StreamPlayer = () => {
         ref={videoRef}
         aria-label='Stream Video'
         className="w-full h-full object-cover"
-      />
+      >
+        {/* Live captions are rendered by the caption overlay, but the element
+            still needs a track for assistive technology to discover them. */}
+        <track kind="captions" label="Live captions" default />
+      </video>
 
       {/* Buffering Overlay - pointer-events-none to not block controls */}
       <BufferingOverlay />

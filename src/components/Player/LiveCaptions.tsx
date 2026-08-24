@@ -6,7 +6,7 @@ import HelpTooltip from '../HelpTooltip';
 
 // Utility: debounce batching
 function useDebouncedBatch<T>(items: T[], delay: number, onBatch: (batch: T[]) => void) {
-  const timer = useRef<NodeJS.Timeout | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const batch = useRef<T[]>([]);
 
   useEffect(() => {
@@ -139,7 +139,9 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({ captions }) => {
       ref={captionsContainerRef}
       aria-live={screenReaderMode ? 'assertive' : 'polite'}
       aria-atomic="true"
-      tabIndex={screenReaderMode ? 0 : -1}
+      // A live region announces itself; it should not add a tab stop that has
+      // nothing to interact with. Keep it focusable programmatically only.
+      tabIndex={-1}
       style={{ outline: screenReaderMode ? '2px solid #005fcc' : undefined }}
     >
       {displayedCaptions.map((caption) => (

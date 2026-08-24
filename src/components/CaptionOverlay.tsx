@@ -1,6 +1,6 @@
 import React from 'react';
 
-const CaptionOverlay = ({ captions }) => {
+const CaptionOverlay = ({ captions }: { captions: string[] }) => {
   return (
     <div className='caption-overlay' aria-live='polite' aria-atomic='true'>
       {captions.map((caption, index) => (

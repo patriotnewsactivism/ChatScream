@@ -15,7 +15,7 @@ interface AccessibilitySettings {
   colorScheme: string;
 }
 
-const ThemeProvider = ({ children }) => {
+const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAccessibilityMode, setIsAccessibilityMode] = useState(false);
   const [accessibilitySettings, setAccessibilitySettings] = useState<AccessibilitySettings>({ highContrast: false, fontSize: 'medium', colorScheme: 'default' });
 

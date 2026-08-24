@@ -144,7 +144,14 @@ describe('App media API behavior', () => {
   });
 
   it('shows UI error when media list request fails', async () => {
-    vi.mocked(apiRequest).mockRejectedValueOnce(new ApiRequestError('Media list failed.', 500, null));
+    // Key the failure to the media path rather than call order: the Studio also
+    // loads AI co-host config on mount, and whichever effect runs first would
+    // otherwise swallow a queued one-shot rejection.
+    vi.mocked(apiRequest).mockImplementation((path: string) =>
+      path === '/api/media/list'
+        ? Promise.reject(new ApiRequestError('Media list failed.', 500, null))
+        : (Promise.resolve({}) as ReturnType<typeof apiRequest>),
+    );
 
     render(<App />);
 

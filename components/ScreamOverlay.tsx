@@ -6,7 +6,7 @@
  *
  * Renders as an absolutely-positioned overlay on top of the stream canvas.
  */
-import { FC, useEffect, useRef, useState, useCallback } from 'react';
+import { FC, useEffect, useRef, useState, useCallback, type CSSProperties } from 'react';
 import { ScreamAlert } from '../services/chatScreamer';
 import { ScreamTier } from '../services/stripe';
 
@@ -191,7 +191,7 @@ const ScreamOverlay: FC<ScreamOverlayProps> = ({ alert, onDismiss, demoTier }) =
                 backgroundColor: tier.color,
                 width: `${8 + Math.random() * 12}px`,
                 height: `${8 + Math.random() * 12}px`,
-              } as React.CSSProperties}
+              } as CSSProperties}
             />
           );
         })}
