@@ -1,0 +1,103 @@
+name: Deploy backend to Cloud Run
+
+# Manual only — this never fires on a push. Open the Actions tab, pick this
+# workflow, and press "Run workflow". That button works from the GitHub mobile
+# site, which is the point: the API host is Cloud Run and there is otherwise no
+# way to ship a backend change without a terminal.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm you want to ship main to production'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Type 'deploy' in the confirmation box to run this workflow."
+          exit 1
+
+      - name: Check required configuration
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          REGION: ${{ vars.CLOUD_RUN_REGION }}
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          missing=0
+          for name in PROJECT_ID SERVICE REGION; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository variable ${name} is not set (Settings -> Secrets and variables -> Actions -> Variables)."
+              missing=1
+            fi
+          done
+          if [ -z "$SA_KEY" ]; then
+            echo "::error::Repository secret GCP_SA_KEY is not set (Settings -> Secrets and variables -> Actions -> Secrets)."
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] || exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Resolve image reference
+        id: image
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.CLOUD_RUN_REGION }}
+          REPO: ${{ vars.ARTIFACT_REGISTRY_REPO || 'chatscream' }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+        run: |
+          echo "ref=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate Docker to Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.CLOUD_RUN_REGION }}-docker.pkg.dev" --quiet
+
+      # DEPLOY.md specifies the Dockerfile's `backend` target: Node + FFmpeg,
+      # no frontend bundle (Vercel serves that).
+      - name: Build backend image
+        run: docker build --target backend -t "${{ steps.image.outputs.ref }}" .
+
+      - name: Push backend image
+        run: docker push "${{ steps.image.outputs.ref }}"
+
+      - name: Deploy revision
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --image "${{ steps.image.outputs.ref }}" \
+            --region "${{ vars.CLOUD_RUN_REGION }}" \
+            --quiet
+
+      # Fail loudly if the new revision did not actually change the OAuth
+      # behaviour this deploy exists to ship.
+      - name: Verify OAuth callback lands on the callback page
+        env:
+          API_BASE: ${{ vars.API_BASE_URL || 'https://api.chatscream.live' }}
+        run: |
+          state=$(node -e "process.stdout.write(encodeURIComponent(Buffer.from(JSON.stringify({platform:'youtube',userId:'ci',timestamp:Date.now(),nonce:'ci-check',returnOrigin:'https://www.chatscream.live'})).toString('base64')))")
+          location=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 30 \
+            "${API_BASE}/api/auth/oauth/google/callback?code=ci-probe&state=${state}")
+          echo "Redirect: ${location}"
+          case "$location" in
+            *"/oauth/callback"*"flow=destination"*)
+              echo "YouTube destination callback routes to Studio." ;;
+            *)
+              echo "::error::Expected a redirect to /oauth/callback with flow=destination, got: ${location}"
+              exit 1 ;;
+          esac

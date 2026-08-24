@@ -19,15 +19,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Typecheck and production build
         run: npm run build
-      - name: Root admin regression
-        run: npx vitest run server/__tests__/root-admin-access.test.ts
-      - name: Commercialization security and economics regression
-        run: npx vitest run server/commercial/__tests__/commercialization.test.js
-      - name: Next-generation studio regression
-        run: npx vitest run server/__tests__/nextgen-studio.test.ts
-      - name: YouTube destination OAuth regression
-        run: npx vitest run server/__tests__/youtube-destination-redirect.test.ts
-      - name: Cloud Run YouTube destination callback regression
-        run: npx vitest run server/__tests__/cloudrun-youtube-destination-callback.test.ts
+      # The whole suite passes, so run it rather than naming individual
+      # regressions and silently losing coverage of everything unnamed.
+      - name: Unit and integration tests
+        run: npx vitest run
