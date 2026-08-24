@@ -1,14 +1,17 @@
 {
-  "requestId": "chat-ops-20260824-0033-oauth",
-  "action": "oauth_verify",
-  "success": true,
-  "message": "Google and YouTube OAuth pairs are separated and correctly bound.",
-  "startedAt": "2026-08-24T05:34:06Z",
-  "completedAt": "2026-08-24T05:34:08Z",
+  "requestId": "chat-ops-20260824-0035-cost",
+  "action": "cost_guard",
+  "success": false,
+  "message": "Cost guard warning: Cloud Run minimum scale is not zero.",
+  "startedAt": "2026-08-24T05:35:10Z",
+  "completedAt": "2026-08-24T05:35:13Z",
   "details": {
-    "googleClientIdCorrect": true,
-    "youtubeClientIdCorrect": true,
-    "googleSecretManagerBindingCorrect": true,
-    "youtubeSecretManagerBindingCorrect": true
+    "billingEnabled": "unknown",
+    "cloudRun": {
+      "minScale": "1",
+      "maxScale": "20",
+      "cpuLimit": "1000m",
+      "memoryLimit": "512Mi"
+    }
   }
 }
