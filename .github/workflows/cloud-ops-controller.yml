@@ -92,6 +92,13 @@ jobs:
                 '{requestId:$requestId,action:$action,success:$success,message:$message,startedAt:$startedAt,completedAt:$completedAt,details:{}}' > "$RESULT"
             fi
           }
+          scaling_snapshot() {
+            local s="$1"
+            SERVICE_MIN="$(jq -r '.metadata.annotations["run.googleapis.com/minScale"] // "0"' <<<"$s")"
+            REVISION_MIN="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$s")"
+            SERVICE_MAX="$(jq -r '.metadata.annotations["run.googleapis.com/maxScale"] // "platform-default"' <<<"$s")"
+            REVISION_MAX="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // "platform-default"' <<<"$s")"
+          }
 
           service="$(get_service_json)"
           SERVICE_URL="$(jq -r '.status.url // empty' <<<"$service")"
@@ -137,25 +144,26 @@ jobs:
               ;;
 
             cost_guard)
-              MIN_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$service")"
-              MAX_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // "platform-default"' <<<"$service")"
+              scaling_snapshot "$service"
               CPU_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.cpu // "platform-default"' <<<"$service")"
               MEMORY_LIMIT="$(jq -r '.spec.template.spec.containers[0].resources.limits.memory // "platform-default"' <<<"$service")"
-              jq -n --arg minScale "$MIN_SCALE" --arg maxScale "$MAX_SCALE" --arg cpu "$CPU_LIMIT" --arg memory "$MEMORY_LIMIT" \
-                '{cloudRun:{minScale:$minScale,maxScale:$maxScale,cpuLimit:$cpu,memoryLimit:$memory}}' > /tmp/details.json
-              if [ "$MIN_SCALE" != "0" ]; then SUCCESS=false; MESSAGE="Cost guard warning: Cloud Run minimum scale is not zero."; else MESSAGE="Cost guard passed: Cloud Run can scale to zero."; fi
+              jq -n --arg serviceMin "$SERVICE_MIN" --arg revisionMin "$REVISION_MIN" --arg serviceMax "$SERVICE_MAX" --arg revisionMax "$REVISION_MAX" --arg cpu "$CPU_LIMIT" --arg memory "$MEMORY_LIMIT" \
+                '{cloudRun:{serviceMinScale:$serviceMin,revisionMinScale:$revisionMin,serviceMaxScale:$serviceMax,revisionMaxScale:$revisionMax,cpuLimit:$cpu,memoryLimit:$memory}}' > /tmp/details.json
+              if [ "$SERVICE_MIN" != "0" ] || [ "$REVISION_MIN" != "0" ]; then SUCCESS=false; MESSAGE="Cost guard warning: a Cloud Run minimum-instance setting is still above zero."; else MESSAGE="Cost guard passed: service-level and revision-level minimum instances are zero."; fi
               ;;
 
             enforce_scale_to_zero)
-              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min 0 --quiet >/dev/null; then
+              if gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min 0 --quiet >/dev/null \
+                 && gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --min-instances default --quiet >/dev/null; then
                 service="$(get_service_json)"
-                MIN_SCALE="$(jq -r '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$service")"
+                scaling_snapshot "$service"
                 READY_REVISION="$(jq -r '.status.latestReadyRevisionName // empty' <<<"$service")"
                 HEALTH="$(http_code 'https://api.chatscream.live/api/health')"
-                jq -n --arg minScale "$MIN_SCALE" --arg revision "$READY_REVISION" --arg health "$HEALTH" '{minScale:$minScale,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
-                if [ "$MIN_SCALE" = "0" ] && [ "$HEALTH" = "200" ]; then MESSAGE="Cloud Run minimum scale set to zero and production health verified."; else SUCCESS=false; MESSAGE="Scale-to-zero update completed but verification failed."; fi
+                jq -n --arg serviceMin "$SERVICE_MIN" --arg revisionMin "$REVISION_MIN" --arg revision "$READY_REVISION" --arg health "$HEALTH" \
+                  '{serviceMinScale:$serviceMin,revisionMinScale:$revisionMin,latestReadyRevision:$revision,healthHttp:$health}' > /tmp/details.json
+                if [ "$SERVICE_MIN" = "0" ] && [ "$REVISION_MIN" = "0" ] && [ "$HEALTH" = "200" ]; then MESSAGE="Both Cloud Run minimum-instance settings are zero and production health is verified."; else SUCCESS=false; MESSAGE="Scale-to-zero update completed but verification failed."; fi
               else
-                SUCCESS=false; MESSAGE="Failed to set Cloud Run minimum scale to zero."; echo '{}' > /tmp/details.json
+                SUCCESS=false; MESSAGE="Failed to clear Cloud Run minimum-instance settings."; echo '{}' > /tmp/details.json
               fi
               ;;
 
