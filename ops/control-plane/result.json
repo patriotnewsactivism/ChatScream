@@ -3,10 +3,9 @@
   "action": "cost_guard",
   "success": false,
   "message": "Cost guard warning: Cloud Run minimum scale is not zero.",
-  "startedAt": "2026-08-24T05:35:10Z",
-  "completedAt": "2026-08-24T05:35:13Z",
+  "startedAt": "2026-08-24T05:36:33Z",
+  "completedAt": "2026-08-24T05:36:35Z",
   "details": {
-    "billingEnabled": "unknown",
     "cloudRun": {
       "minScale": "1",
       "maxScale": "20",
