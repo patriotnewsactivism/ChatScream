@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-0045-secretaudit",
-  "action": "secret_audit",
-  "purpose": "Check Secret Manager bindings and enabled version counts without reading secret values"
+  "id": "chat-ops-20260824-1404-launch-trigger",
+  "action": "cost_guard",
+  "purpose": "Force the proven controller path while preparing Facebook production secret installation"
 }
