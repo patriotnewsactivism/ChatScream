@@ -39,15 +39,17 @@ container listens on the Cloud Run-provided `PORT` and includes FFmpeg. Its comm
 From a phone (or any machine without `gcloud`), use the **Deploy backend to Cloud Run** workflow in
 the repository's Actions tab: press "Run workflow", type `deploy` to confirm, and it builds the
 `backend` target, ships a revision, and then verifies that a YouTube destination callback lands on
-`/oauth/callback`. It requires these repository settings once:
+`/oauth/callback`. The production target is built into the workflow: project `chatscream`, service
+`chatscream-backend`, region `us-central1`. The only setting required is one
+repository secret:
 
-| Setting | Kind | Example |
+| Setting | Kind | Value |
 | --- | --- | --- |
-| `GCP_PROJECT_ID` | variable | `chatscream-prod` |
-| `CLOUD_RUN_SERVICE` | variable | `chatscream-api` |
-| `CLOUD_RUN_REGION` | variable | `us-central1` |
-| `ARTIFACT_REGISTRY_REPO` | variable (optional) | defaults to `chatscream` |
-| `GCP_SA_KEY` | secret | service-account JSON with Cloud Run Admin, Artifact Registry Writer, and Service Account User |
+| `GCP_SA_KEY` | secret | service-account JSON with Cloud Run Admin, Artifact Registry Writer, and Service Account User on project `chatscream` |
+
+To retarget without editing the workflow, set repository variables
+`GCP_PROJECT_ID`, `CLOUD_RUN_SERVICE`, `CLOUD_RUN_REGION`, or
+`ARTIFACT_REGISTRY_REPO`; each overrides its built-in default.
 
 Required production configuration:
 
