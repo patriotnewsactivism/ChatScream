@@ -4,9 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/cloud-ops-controller.yml'
-      - 'ops/control-plane/oauth-public.env'
-      - 'ops/control-plane/sealed/**'
       - 'ops/control-plane/request.json'
+      - 'ops/control-plane/bootstrap-gcp-wif.sh'
   pull_request:
     paths:
       - '.github/workflows/cloud-ops-controller.yml'
@@ -14,12 +13,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 env:
-  SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'chatscream-backend' }}
-  REGION: ${{ vars.CLOUD_RUN_REGION || 'us-central1' }}
+  SERVICE: chatscream-backend
+  REGION: us-central1
+  CONTROL_PROJECT: chat-scream
 
 jobs:
   controller:
@@ -27,134 +27,69 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate GCP bridge credential
-        env:
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "$SA_KEY" ]; then
-            echo "::error::GCP_SA_KEY is not configured."
-            exit 1
-          fi
-          printf '%s' "$SA_KEY" | jq -e '.project_id and .private_key and .client_email' >/dev/null
-
-      - name: Derive safe envelope public key
-        env:
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          set -euo pipefail
-          mkdir -p ops/control-plane
-          printf '%s' "$SA_KEY" | jq -r '.private_key' > /tmp/gcp-envelope-private.pem
-          chmod 600 /tmp/gcp-envelope-private.pem
-          openssl pkey -in /tmp/gcp-envelope-private.pem -pubout -out /tmp/gcp-envelope-public.pem
-          cp /tmp/gcp-envelope-public.pem ops/control-plane/gcp-envelope-public.pem
-
-      - name: Upload envelope public key for PR inspection
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: gcp-envelope-public-key
-          path: ops/control-plane/gcp-envelope-public.pem
-          retention-days: 1
-
-      - name: Publish safe envelope public key on main
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          set -euo pipefail
-          if git ls-files --error-unmatch ops/control-plane/gcp-envelope-public.pem >/dev/null 2>&1 && git diff --quiet -- ops/control-plane/gcp-envelope-public.pem; then
-            exit 0
-          fi
-          git config user.name 'ChatScream Cloud Ops'
-          git config user.email 'actions@users.noreply.github.com'
-          git add ops/control-plane/gcp-envelope-public.pem
-          git commit -m 'Publish cloud ops envelope public key [skip ci]'
-          git push
-
-      - name: Authenticate to Google Cloud
-        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+      - name: Authenticate to Google Cloud with short-lived OIDC
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
+          service_account: chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Apply sealed OAuth credentials to Cloud Run
-        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
-        env:
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      - name: Discover the live ChatScream Cloud Run project
         run: |
           set -euo pipefail
-          PROJECT_ID="$(printf '%s' "$SA_KEY" | jq -r '.project_id')"
-          printf '%s' "$SA_KEY" | jq -r '.private_key' > /tmp/gcp-envelope-private.pem
-          chmod 600 /tmp/gcp-envelope-private.pem
-
-          decrypt_secret() {
-            local input="$1"
-            base64 -d "$input" | openssl pkeyutl -decrypt \
-              -inkey /tmp/gcp-envelope-private.pem \
-              -pkeyopt rsa_padding_mode:oaep \
-              -pkeyopt rsa_oaep_md:sha256 \
-              -pkeyopt rsa_mgf1_md:sha256
-          }
-
-          set -a
-          . ops/control-plane/oauth-public.env
-          set +a
-          GOOGLE_CLIENT_SECRET_VALUE="$(decrypt_secret ops/control-plane/sealed/google_client_secret.b64)"
-          YOUTUBE_CLIENT_SECRET_VALUE="$(decrypt_secret ops/control-plane/sealed/youtube_client_secret.b64)"
-
-          if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${YOUTUBE_CLIENT_ID:-}" ]; then
-            echo "::error::Public OAuth client IDs are missing."
+          TARGET_PROJECT=""
+          for candidate in "${GCP_PROJECT_ID:-}" chatscream chat-scream; do
+            [ -n "$candidate" ] || continue
+            if gcloud run services describe "$SERVICE" --region "$REGION" --project "$candidate" >/dev/null 2>&1; then
+              TARGET_PROJECT="$candidate"
+              break
+            fi
+          done
+          if [ -z "$TARGET_PROJECT" ]; then
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if gcloud run services describe "$SERVICE" --region "$REGION" --project "$candidate" >/dev/null 2>&1; then
+                TARGET_PROJECT="$candidate"
+                break
+              fi
+            done < <(gcloud projects list --format='value(projectId)')
+          fi
+          if [ -z "$TARGET_PROJECT" ]; then
+            echo "::error::Could not find chatscream-backend. Run ops/control-plane/bootstrap-gcp-wif.sh once from Google Cloud Shell."
             exit 1
           fi
+          echo "TARGET_PROJECT=$TARGET_PROJECT" >> "$GITHUB_ENV"
+          echo "Cloud Run target: $TARGET_PROJECT/$REGION/$SERVICE"
 
-          gcloud config set project "$PROJECT_ID" >/dev/null
-          gcloud services enable run.googleapis.com secretmanager.googleapis.com --project "$PROJECT_ID" --quiet
-
-          ensure_secret() {
-            local name="$1"
-            local value="$2"
-            if ! gcloud secrets describe "$name" --project "$PROJECT_ID" >/dev/null 2>&1; then
-              gcloud secrets create "$name" --replication-policy=automatic --project "$PROJECT_ID" --quiet
-            fi
-            printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- --project "$PROJECT_ID" --quiet >/dev/null
-          }
-
-          ensure_secret chatscream-google-client-secret "$GOOGLE_CLIENT_SECRET_VALUE"
-          ensure_secret chatscream-youtube-client-secret "$YOUTUBE_CLIENT_SECRET_VALUE"
-
-          RUNTIME_SA="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT_ID" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
-          if [ -z "$RUNTIME_SA" ]; then
-            PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
-            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-          fi
-
-          for secret in chatscream-google-client-secret chatscream-youtube-client-secret; do
-            gcloud secrets add-iam-policy-binding "$secret" \
-              --project "$PROJECT_ID" \
-              --member "serviceAccount:${RUNTIME_SA}" \
-              --role roles/secretmanager.secretAccessor \
-              --quiet >/dev/null
-          done
-
-          gcloud run services update "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --update-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}" \
-            --update-secrets "GOOGLE_CLIENT_SECRET=chatscream-google-client-secret:latest,YOUTUBE_CLIENT_SECRET=chatscream-youtube-client-secret:latest" \
-            --quiet
-
-          unset GOOGLE_CLIENT_SECRET_VALUE YOUTUBE_CLIENT_SECRET_VALUE
-          rm -f /tmp/gcp-envelope-private.pem
-
-      - name: Verify production OAuth config
-        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+      - name: Verify keyless access and OAuth configuration
         run: |
           set -euo pipefail
+          gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$TARGET_PROJECT" \
+            --format='table(metadata.name,status.url,status.latestReadyRevisionName)'
+
+          GOOGLE_ID="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$TARGET_PROJECT" --format='value(spec.template.spec.containers[0].env[?name=GOOGLE_CLIENT_ID].value)' || true)"
+          YOUTUBE_ID="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$TARGET_PROJECT" --format='value(spec.template.spec.containers[0].env[?name=YOUTUBE_CLIENT_ID].value)' || true)"
+
+          test "$GOOGLE_ID" = '584450564662-vvlnooo2oe25ltstet0mkqajm4ta80d8.apps.googleusercontent.com' || {
+            echo "::error::GOOGLE_CLIENT_ID is not the expected dedicated Google sign-in client."
+            exit 1
+          }
+          test "$YOUTUBE_ID" = '584450564662-ek0a4ibt01t9ho6guc7sfqp59dq0vrs5.apps.googleusercontent.com' || {
+            echo "::error::YOUTUBE_CLIENT_ID is not the expected dedicated YouTube client."
+            exit 1
+          }
+
           response="$(curl -fsS --max-time 30 https://api.chatscream.live/api/public/oauth-debug || true)"
           printf '%s\n' "$response" | jq . || true
-          echo "$response" | grep -q '584450564662' || {
-            echo "::warning::OAuth debug endpoint did not expose the expected redacted client ID prefix; inspect the deployed revision."
-          }
+
+      - name: Show controller request
+        run: |
+          if [ -f ops/control-plane/request.json ]; then
+            jq . ops/control-plane/request.json
+          else
+            echo '{"action":"verify"}'
+          fi
