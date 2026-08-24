@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-prune-oauth-secrets",
-  "action": "prune_secret_versions",
-  "purpose": "Disable superseded enabled Google, YouTube, and Facebook OAuth secret versions while retaining the latest active versions"
+  "id": "chat-ops-20260824-launch-audit",
+  "action": "launch_audit",
+  "purpose": "Verify all core production Cloud Run environment, OAuth, persistence, security, scaling, and public health settings before launch"
 }
