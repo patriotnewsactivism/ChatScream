@@ -1,25 +1,14 @@
 {
-  "requestId": "chat-ops-20260824-0028-status",
-  "action": "status",
+  "requestId": "chat-ops-20260824-0033-oauth",
+  "action": "oauth_verify",
   "success": true,
-  "message": "Cloud Run and production API are healthy.",
-  "startedAt": "2026-08-24T05:32:07Z",
-  "completedAt": "2026-08-24T05:32:10Z",
+  "message": "Google and YouTube OAuth pairs are separated and correctly bound.",
+  "startedAt": "2026-08-24T05:34:06Z",
+  "completedAt": "2026-08-24T05:34:08Z",
   "details": {
-    "project": "chatscream",
-    "service": "chatscream-backend",
-    "region": "us-central1",
-    "url": "https://chatscream-backend-54mn5objnq-uc.a.run.app",
-    "latestReadyRevision": "chatscream-backend-00022-dw6",
-    "billingEnabled": "unknown",
-    "http": {
-      "health": "200",
-      "ready": "200",
-      "capabilities": "200"
-    },
-    "secretBindings": {
-      "google": "chatscream-google-client-secret",
-      "youtube": "chatscream-youtube-client-secret"
-    }
+    "googleClientIdCorrect": true,
+    "youtubeClientIdCorrect": true,
+    "googleSecretManagerBindingCorrect": true,
+    "youtubeSecretManagerBindingCorrect": true
   }
 }
