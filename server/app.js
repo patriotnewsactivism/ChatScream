@@ -626,6 +626,33 @@ const getServerBaseUrl = (req) => {
   return `${protocol}://${host || 'localhost'}`;
 };
 
+// The API's canonical public origin. OAuth redirect URIs have to match what is
+// registered with the provider byte for byte, so they must never be derived
+// from the request's Host header: reaching the same service through its
+// *.run.app URL (or any other alias) would otherwise build a redirect_uri that
+// Google has never seen and fail the whole sign-in with redirect_uri_mismatch.
+const CANONICAL_API_BASE_URL = 'https://api.chatscream.live';
+
+const isLocalHostBaseUrl = (value) => {
+  try {
+    const { hostname } = new URL(value);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+};
+
+const getOAuthRedirectBaseUrl = (req) => {
+  const configured = String(process.env.SERVER_BASE_URL || process.env.API_BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
+
+  // Local development still needs the real origin so the loopback callback works.
+  const derived = getServerBaseUrl(req);
+  if (isLocalHostBaseUrl(derived)) return derived;
+
+  return CANONICAL_API_BASE_URL;
+};
+
 const getFrontendOAuthCallbackUrl = (req) =>
   resolveFrontendOAuthCallbackUrl({
     explicitRedirectUrl: process.env.AUTH_REDIRECT_URL || process.env.VITE_OAUTH_REDIRECT_URI || '',
@@ -1493,7 +1520,7 @@ app.get(
       return;
     }
 
-    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/google/callback`;
+    const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/google/callback`;
     const tokenBody = new URLSearchParams({
       code,
       client_id: clientId,
@@ -1658,7 +1685,7 @@ app.get(
       return;
     }
 
-    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/facebook/callback`;
+    const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/facebook/callback`;
     const tokenRes = await fetch(
       `https://graph.facebook.com/v18.0/oauth/access_token?` +
         new URLSearchParams({
@@ -1779,7 +1806,7 @@ app.get(
           .json({ message: 'Facebook sign-in is not configured. Set FACEBOOK_APP_ID.' });
         return;
       }
-      const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/facebook/callback`;
+      const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/facebook/callback`;
       const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
       authUrl.searchParams.set('client_id', facebookAppId);
       authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -1806,7 +1833,7 @@ app.get(
       return;
     }
 
-    const redirectUri = `${getServerBaseUrl(req)}/api/auth/oauth/google/callback`;
+    const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/google/callback`;
     const authUrl = new URL(GOOGLE_AUTH_ENDPOINT);
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
