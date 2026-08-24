@@ -1,0 +1,1 @@
+verify OAuth secret binding types after Cloud Run migration
