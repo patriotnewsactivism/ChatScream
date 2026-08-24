@@ -1,17 +1,9 @@
 {
-  "requestId": "chat-ops-20260824-facebook-install",
-  "action": "facebook_install",
+  "requestId": "chat-ops-20260824-prune-oauth-secrets",
+  "action": "prune_secret_versions",
   "success": true,
-  "message": "Facebook production OAuth configuration installed and verified.",
-  "startedAt": "2026-08-24T19:22:01Z",
-  "completedAt": "2026-08-24T19:22:55Z",
-  "details": {
-    "facebookAppId": "1768608743830353",
-    "facebookSecretBinding": "chatscream-facebook-app-secret",
-    "graphApiVersion": "v26.0",
-    "http": {
-      "health": "200",
-      "capabilities": "200"
-    }
-  }
+  "message": "Superseded enabled OAuth secret versions were disabled; latest versions remain active.",
+  "startedAt": "2026-08-24T19:24:01Z",
+  "completedAt": "2026-08-24T19:24:11Z",
+  "details": {}
 }
