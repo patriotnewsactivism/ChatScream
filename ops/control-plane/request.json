@@ -1,7 +1,5 @@
 {
-  "id": "chat-ops-20260824-facebook-install",
-  "action": "facebook_install",
-  "envelopeSecret": "chatscream-facebook-envelope-private-v3",
-  "ciphertextBase64": "Nh01mpfJa7zbyAI1VSazmQKcPYl9JvYWzpg8oygqmZdliqoHhLKwGxaGosVwlKlVJHH1gZWYQqsxKCgEq8xs68265a3YDFrZodQA3cvB2kb/mioOXu5kHQB2XE4w7OFT6Cm05U2t5QPzkvpJuEj9vMaif+TkB4/M+4Enj/TbhgSFios5tvsZrsmoVkwFDGt7xKI/Gdx8SHsqtJTfxqydbGIqawXkphm4NEac99s0wCyx84aDjI2rNI8GE2vKU+nCjOWyJq9cVkoBr01AHva6t2VpLPuFWm2W7Ya+mNGvmQZc+nc4DVkCMkYtIZqq02sDi/M0DCVBni+U3tDS11VNzJg+46dkZ4H7byUGorX4XQUuScll7YVOumqZ4M/KjB2Qzc+U9JC7nX+LrO5Rqk2GTxYWdjRDl3OlYAWb8ITfMcYlxDmb1+UeOXeMrBmlSnkpHe/klWZIf7VnHgCTWj2BOWbrhqt3VV4ttJNpl/yyUkuH2Gfw0TUN69iSpRth0cw6",
-  "purpose": "Install Meta App Secret into Google Secret Manager and bind Facebook OAuth production configuration"
+  "id": "chat-ops-20260824-prune-oauth-secrets",
+  "action": "prune_secret_versions",
+  "purpose": "Disable superseded enabled Google, YouTube, and Facebook OAuth secret versions while retaining the latest active versions"
 }
