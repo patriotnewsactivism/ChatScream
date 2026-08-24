@@ -669,19 +669,32 @@ const redirectToFrontendOAuth = (req, res, params = {}) => {
   res.redirect(302, target.toString());
 };
 
+// A client ID and its secret are a matched pair belonging to one OAuth client.
+// ChatScream runs two Google clients — one for account sign-in, one for the
+// YouTube streaming destination — so these must be resolved together. Letting
+// the ID and the secret fall back independently can pair an ID from one client
+// with a secret from the other, which Google rejects as invalid_client at token
+// exchange, after the user has already approved consent.
 const getGoogleAuthCredentials = () => {
   const oauth = getConfig('oauth') || {};
+  const googleClientId = String(process.env.GOOGLE_CLIENT_ID || oauth.googleClientId || '').trim();
+  const googleClientSecret = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  if (googleClientId && googleClientSecret) {
+    return { clientId: googleClientId, clientSecret: googleClientSecret };
+  }
+
+  // Single-client deployments configure only YOUTUBE_*. Adopt that pair whole
+  // rather than borrowing half of it.
+  const youtube = getYouTubeOAuthCredentials();
+  if (youtube.clientId && youtube.clientSecret) {
+    return youtube;
+  }
+
+  // Nothing complete: report whatever is present so callers surface a precise
+  // "not configured" error instead of a confusing rejection from Google.
   return {
-    clientId: String(
-      process.env.GOOGLE_CLIENT_ID ||
-        oauth.googleClientId ||
-        process.env.YOUTUBE_CLIENT_ID ||
-        oauth.youtubeClientId ||
-        '',
-    ).trim(),
-    clientSecret: String(
-      process.env.GOOGLE_CLIENT_SECRET || process.env.YOUTUBE_CLIENT_SECRET || '',
-    ).trim(),
+    clientId: googleClientId || youtube.clientId,
+    clientSecret: googleClientSecret || youtube.clientSecret,
   };
 };
 
