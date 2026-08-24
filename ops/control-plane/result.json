@@ -1,18 +1,12 @@
 {
-  "requestId": "chat-ops-20260824-1404-launch-trigger",
-  "action": "cost_guard",
+  "requestId": "chat-ops-20260824-1415-facebook-prepare",
+  "action": "facebook_prepare",
   "success": true,
-  "message": "Cost guard passed: Cloud Run can scale to zero.",
-  "startedAt": "2026-08-24T19:18:15Z",
-  "completedAt": "2026-08-24T19:18:16Z",
+  "message": "Facebook one-time encryption envelope is ready.",
+  "startedAt": "2026-08-24T19:18:44Z",
+  "completedAt": "2026-08-24T19:18:48Z",
   "details": {
-    "cloudRun": {
-      "serviceMinScale": "0",
-      "revisionMinScale": "0",
-      "serviceMaxScale": "20",
-      "revisionMaxScale": "20",
-      "cpuLimit": "1000m",
-      "memoryLimit": "512Mi"
-    }
+    "envelopeSecret": "chatscream-facebook-envelope-private-v3",
+    "publicKeyPemBase64": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF3Z2ZlYmZQbWxQY0RGNEs0RlMzTApFN0pTaVp5bGZiYkdrMEMxd3pGRVVwU3A0SzBlVlBtTCtzMTVDVXM4dlVkZkRESWpNQmFVNXVQVWhpRFpPZ3pSCkh2YlhYU0h5WGRkS0hMWDhxRHRQd1NxVnlLdW9KamFNZ2k3TVpENHJuaWN3bmNkODhYOE1kS0hhek5WZG9UUzkKclVqWGR5eU5NU1FWSXZqOGdma25EdGNhMTQ2Yjh0a2p6TDFPRVRWazVmOENZOEJxalZBNjdBS0dTZE9xYTkxVgoxOUhFQnRQaVBqV0tZN0NBcEpoazZ5aWkyVjYycmYyaHA0L3o5cjkvSVRWTmdXRXZxUFJvYXZjS0RxWHliYitYCjdUT0crQTYxS1d6U3dwRjBGYmh6VTZKU0V0U1VhK0E2WWJPNmVmbmpyNVZkcG5ha1RQem5qMktKRkllQ1B5NS8KMUNXanpvSDlxYzM5Y2xsNFdvMjNHMjdqZGxnUmhRaURLS080QVh3SUhLNkc3N3dlVG1hRURaK2pKclpYblQ1VApGRjFWSUNrQlN4Q2JWUzJqV1hROTZScGgrc3V6N1FuTTVOSXZwOWJMSW4rWGkxb21HVldhSk9JQmdUMnVrWHZICklFMFMvckErRTJFUldOV2JMQTFZVHdjNlJNL3k0S3BWVG9jWXViUEFYTUszQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
   }
 }
