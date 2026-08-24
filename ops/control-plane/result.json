@@ -1,0 +1,8 @@
+{
+  "requestId": "unknown",
+  "action": "unknown",
+  "success": false,
+  "message": "Controller failed before a sanitized result could be produced.",
+  "completedAt": "2026-08-24T05:31:01Z",
+  "details": {}
+}
