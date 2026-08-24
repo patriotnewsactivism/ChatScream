@@ -225,20 +225,8 @@ jobs:
             git push origin main
           fi
 
-      - name: Mark failed operation
-        if: always()
-        shell: bash
-        run: |
-          test -f /tmp/cloud-ops-result.json
-          jq -e '.success == true' /tmp/cloud-ops-result.json >/dev/null
-
-  facebook-secret-bootstrap:
-    needs: controller
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Read Facebook bootstrap request
+        if: always()
         id: fbrequest
         shell: bash
         run: |
@@ -249,19 +237,6 @@ jobs:
           fi
           case "$ACTION" in prepare|install|idle) ;; *) echo "::error::Unsupported Facebook bootstrap action: $ACTION"; exit 2 ;; esac
           echo "action=$ACTION" >> "$GITHUB_OUTPUT"
-
-      - name: Authenticate to Google Cloud with short-lived OIDC
-        if: steps.fbrequest.outputs.action != 'idle'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.OPS_SERVICE_ACCOUNT }}
-
-      - name: Set up gcloud
-        if: steps.fbrequest.outputs.action != 'idle'
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.TARGET_PROJECT }}
 
       - name: Prepare one-time Facebook secret envelope
         if: steps.fbrequest.outputs.action == 'prepare'
@@ -275,9 +250,6 @@ jobs:
             gcloud secrets create "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
           fi
           gcloud secrets versions add "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --data-file=/tmp/facebook-envelope-private.pem --quiet >/dev/null
-
-          git config user.name 'ChatScream Cloud Ops'
-          git config user.email 'actions@users.noreply.github.com'
           git fetch origin main
           git checkout -B main origin/main
           mkdir -p ops/control-plane
@@ -297,64 +269,35 @@ jobs:
           FACEBOOK_SECRET='chatscream-facebook-app-secret'
           FACEBOOK_APP_ID='1768608743830353'
           test -f ops/control-plane/facebook-app-secret.enc || { echo '::error::Encrypted Facebook secret envelope is missing.'; exit 3; }
-
           gcloud secrets versions access latest --secret "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" > /tmp/facebook-envelope-private.pem
           chmod 600 /tmp/facebook-envelope-private.pem
           base64 -d ops/control-plane/facebook-app-secret.enc > /tmp/facebook-app-secret.bin
-          openssl pkeyutl -decrypt \
-            -inkey /tmp/facebook-envelope-private.pem \
-            -in /tmp/facebook-app-secret.bin \
-            -pkeyopt rsa_padding_mode:oaep \
-            -pkeyopt rsa_oaep_md:sha256 \
-            -pkeyopt rsa_mgf1_md:sha256 \
-            > /tmp/facebook-app-secret.txt
-
+          openssl pkeyutl -decrypt -inkey /tmp/facebook-envelope-private.pem -in /tmp/facebook-app-secret.bin -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 > /tmp/facebook-app-secret.txt
           FACEBOOK_SECRET_VALUE="$(cat /tmp/facebook-app-secret.txt)"
           printf '%s' "$FACEBOOK_SECRET_VALUE" | grep -Eq '^[0-9a-fA-F]{32}$' || { echo '::error::Decrypted Facebook App Secret failed validation.'; exit 4; }
-
           if ! gcloud secrets describe "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
             gcloud secrets create "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
           fi
           printf '%s' "$FACEBOOK_SECRET_VALUE" | gcloud secrets versions add "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --data-file=- --quiet >/dev/null
-
           SERVICE_JSON="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
           RUNTIME_SA="$(jq -r '.spec.template.spec.serviceAccountName // empty' <<<"$SERVICE_JSON")"
-          if [ -z "$RUNTIME_SA" ]; then
-            PROJECT_NUMBER="$(gcloud projects describe "$TARGET_PROJECT" --format='value(projectNumber)')"
-            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-          fi
+          if [ -z "$RUNTIME_SA" ]; then PROJECT_NUMBER="$(gcloud projects describe "$TARGET_PROJECT" --format='value(projectNumber)')"; RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"; fi
           gcloud secrets add-iam-policy-binding "$FACEBOOK_SECRET" --project "$TARGET_PROJECT" --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
-
           CURRENT_FB_TYPE="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_SECRET")][0] | if .valueFrom then "secretRef" elif .value then "literal" else "missing" end' <<<"$SERVICE_JSON")"
-          if [ "$CURRENT_FB_TYPE" = 'literal' ]; then
-            gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars FACEBOOK_APP_SECRET --quiet >/dev/null
-          fi
-
-          gcloud run services update "$SERVICE" \
-            --project "$TARGET_PROJECT" \
-            --region "$REGION" \
+          if [ "$CURRENT_FB_TYPE" = 'literal' ]; then gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars FACEBOOK_APP_SECRET --quiet >/dev/null; fi
+          gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" \
             --update-env-vars '^@^FACEBOOK_APP_ID=1768608743830353@FACEBOOK_GRAPH_API_VERSION=v26.0@APP_BASE_URL=https://www.chatscream.live@VITE_OAUTH_REDIRECT_URI=https://www.chatscream.live/oauth/callback@CORS_ORIGINS=https://chatscream.live,https://www.chatscream.live' \
-            --update-secrets "FACEBOOK_APP_SECRET=${FACEBOOK_SECRET}:latest" \
-            --quiet >/dev/null
-
+            --update-secrets "FACEBOOK_APP_SECRET=${FACEBOOK_SECRET}:latest" --quiet >/dev/null
           FINAL_JSON="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
           FB_ID="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_ID")][0].value // ""' <<<"$FINAL_JSON")"
           FB_SECRET_REF="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_APP_SECRET")][0].valueFrom.secretKeyRef.name // ""' <<<"$FINAL_JSON")"
           GRAPH_VERSION="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="FACEBOOK_GRAPH_API_VERSION")][0].value // ""' <<<"$FINAL_JSON")"
           HEALTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.chatscream.live/api/health || printf '000')"
           CAPABILITIES="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.chatscream.live/api/public/capabilities || printf '000')"
-          test "$FB_ID" = "$FACEBOOK_APP_ID"
-          test "$FB_SECRET_REF" = "$FACEBOOK_SECRET"
-          test "$GRAPH_VERSION" = 'v26.0'
-          test "$HEALTH" = '200'
-          test "$CAPABILITIES" = '200'
-
+          test "$FB_ID" = "$FACEBOOK_APP_ID"; test "$FB_SECRET_REF" = "$FACEBOOK_SECRET"; test "$GRAPH_VERSION" = 'v26.0'; test "$HEALTH" = '200'; test "$CAPABILITIES" = '200'
           gcloud secrets delete "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --quiet
           unset FACEBOOK_SECRET_VALUE
           rm -f /tmp/facebook-envelope-private.pem /tmp/facebook-app-secret.bin /tmp/facebook-app-secret.txt
-
-          git config user.name 'ChatScream Cloud Ops'
-          git config user.email 'actions@users.noreply.github.com'
           git fetch origin main
           git checkout -B main origin/main
           jq -n --arg appId "$FB_ID" --arg secretRef "$FB_SECRET_REF" --arg graphVersion "$GRAPH_VERSION" --arg health "$HEALTH" --arg capabilities "$CAPABILITIES" \
@@ -370,14 +313,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'ChatScream Cloud Ops'
-          git config user.email 'actions@users.noreply.github.com'
           git fetch origin main
           git checkout -B main origin/main
           mkdir -p ops/control-plane
-          jq -n --arg action "${{ steps.fbrequest.outputs.action }}" '{action:$action,success:false,message:"Facebook secret bootstrap failed. No secret value was published; inspect the GitHub Actions job for the failing infrastructure step."}' > ops/control-plane/facebook-envelope-result.json
+          jq -n --arg action "${{ steps.fbrequest.outputs.action }}" '{action:$action,success:false,message:"Facebook secret bootstrap failed. No secret value was published."}' > ops/control-plane/facebook-envelope-result.json
           git add ops/control-plane/facebook-envelope-result.json
-          if ! git diff --cached --quiet; then
-            git commit -m 'Record Facebook secret bootstrap failure [skip ci]'
-            git push origin main
-          fi
+          if ! git diff --cached --quiet; then git commit -m 'Record Facebook secret bootstrap failure [skip ci]'; git push origin main; fi
+
+      - name: Mark failed operation
+        if: always()
+        shell: bash
+        run: |
+          test -f /tmp/cloud-ops-result.json
+          jq -e '.success == true' /tmp/cloud-ops-result.json >/dev/null
