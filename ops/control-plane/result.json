@@ -3,8 +3,8 @@
   "action": "cost_guard",
   "success": true,
   "message": "Cost guard passed: service-level and revision-level minimum instances are zero.",
-  "startedAt": "2026-08-24T19:11:45Z",
-  "completedAt": "2026-08-24T19:11:46Z",
+  "startedAt": "2026-08-24T19:13:54Z",
+  "completedAt": "2026-08-24T19:13:55Z",
   "details": {
     "cloudRun": {
       "serviceMinScale": "0",
