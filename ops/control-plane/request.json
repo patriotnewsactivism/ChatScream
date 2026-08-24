@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-0028-status",
-  "action": "status",
-  "purpose": "End-to-end verification of the chat-driven Google Cloud control plane"
+  "id": "chat-ops-20260824-0033-oauth",
+  "action": "oauth_verify",
+  "purpose": "Verify separate Google and YouTube client IDs and Secret Manager bindings"
 }
