@@ -3,8 +3,8 @@
   "action": "secret_audit",
   "success": true,
   "message": "Secret Manager bindings audited without reading secret values.",
-  "startedAt": "2026-08-24T05:46:26Z",
-  "completedAt": "2026-08-24T05:46:28Z",
+  "startedAt": "2026-08-24T19:07:10Z",
+  "completedAt": "2026-08-24T19:07:13Z",
   "details": {
     "bindings": {
       "google": "chatscream-google-client-secret",
