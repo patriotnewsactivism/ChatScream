@@ -7,6 +7,10 @@ on:
       - 'ops/control-plane/oauth-public.env'
       - 'ops/control-plane/sealed/**'
       - 'ops/control-plane/request.json'
+  pull_request:
+    paths:
+      - '.github/workflows/cloud-ops-controller.yml'
+      - 'ops/control-plane/**'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +38,7 @@ jobs:
           fi
           printf '%s' "$SA_KEY" | jq -e '.project_id and .private_key and .client_email' >/dev/null
 
-      - name: Publish safe envelope public key
+      - name: Derive safe envelope public key
         env:
           SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
@@ -43,27 +47,41 @@ jobs:
           printf '%s' "$SA_KEY" | jq -r '.private_key' > /tmp/gcp-envelope-private.pem
           chmod 600 /tmp/gcp-envelope-private.pem
           openssl pkey -in /tmp/gcp-envelope-private.pem -pubout -out /tmp/gcp-envelope-public.pem
-          if [ ! -f ops/control-plane/gcp-envelope-public.pem ] || ! cmp -s /tmp/gcp-envelope-public.pem ops/control-plane/gcp-envelope-public.pem; then
-            cp /tmp/gcp-envelope-public.pem ops/control-plane/gcp-envelope-public.pem
-            git config user.name 'ChatScream Cloud Ops'
-            git config user.email 'actions@users.noreply.github.com'
-            git add ops/control-plane/gcp-envelope-public.pem
-            git commit -m 'Publish cloud ops envelope public key [skip ci]'
-            git push
+          cp /tmp/gcp-envelope-public.pem ops/control-plane/gcp-envelope-public.pem
+
+      - name: Upload envelope public key for PR inspection
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcp-envelope-public-key
+          path: ops/control-plane/gcp-envelope-public.pem
+          retention-days: 1
+
+      - name: Publish safe envelope public key on main
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          set -euo pipefail
+          if git ls-files --error-unmatch ops/control-plane/gcp-envelope-public.pem >/dev/null 2>&1 && git diff --quiet -- ops/control-plane/gcp-envelope-public.pem; then
+            exit 0
           fi
+          git config user.name 'ChatScream Cloud Ops'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/control-plane/gcp-envelope-public.pem
+          git commit -m 'Publish cloud ops envelope public key [skip ci]'
+          git push
 
       - name: Authenticate to Google Cloud
-        if: ${{ hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up gcloud
-        if: ${{ hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Apply sealed OAuth credentials to Cloud Run
-        if: ${{ hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
         env:
           SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
@@ -132,7 +150,7 @@ jobs:
           rm -f /tmp/gcp-envelope-private.pem
 
       - name: Verify production OAuth config
-        if: ${{ hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
+        if: ${{ github.event_name == 'push' && hashFiles('ops/control-plane/sealed/google_client_secret.b64') != '' && hashFiles('ops/control-plane/sealed/youtube_client_secret.b64') != '' && hashFiles('ops/control-plane/oauth-public.env') != '' }}
         run: |
           set -euo pipefail
           response="$(curl -fsS --max-time 30 https://api.chatscream.live/api/public/oauth-debug || true)"
