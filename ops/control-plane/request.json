@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-0033-oauth",
-  "action": "oauth_verify",
-  "purpose": "Verify separate Google and YouTube client IDs and Secret Manager bindings"
+  "id": "chat-ops-20260824-0035-cost",
+  "action": "cost_guard",
+  "purpose": "Verify Cloud Run can scale to zero and report resource limits without exposing secrets"
 }
