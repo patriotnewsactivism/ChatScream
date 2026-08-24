@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-0038-scalezero",
-  "action": "enforce_scale_to_zero",
-  "purpose": "Reduce fixed Cloud Run cost by allowing chatscream-backend to scale to zero"
+  "id": "chat-ops-20260824-0041-costverify",
+  "action": "cost_guard",
+  "purpose": "Independent verification that service-level and revision-level minimum instances are zero"
 }
