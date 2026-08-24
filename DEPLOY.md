@@ -32,7 +32,22 @@ file exists.
 ## Cloud Run backend
 
 Build the Dockerfile's `backend` target and deploy it to the existing Cloud Run service. The
-container listens on the Cloud Run-provided `PORT` and includes FFmpeg.
+container listens on the Cloud Run-provided `PORT` and includes FFmpeg. Its command is
+`node server/entrypoint.js` — start the process there rather than at `server/index.js`, so
+`RELAY_ONLY` and the shared Google OAuth callback wiring are both honoured.
+
+From a phone (or any machine without `gcloud`), use the **Deploy backend to Cloud Run** workflow in
+the repository's Actions tab: press "Run workflow", type `deploy` to confirm, and it builds the
+`backend` target, ships a revision, and then verifies that a YouTube destination callback lands on
+`/oauth/callback`. It requires these repository settings once:
+
+| Setting | Kind | Example |
+| --- | --- | --- |
+| `GCP_PROJECT_ID` | variable | `chatscream-prod` |
+| `CLOUD_RUN_SERVICE` | variable | `chatscream-api` |
+| `CLOUD_RUN_REGION` | variable | `us-central1` |
+| `ARTIFACT_REGISTRY_REPO` | variable (optional) | defaults to `chatscream` |
+| `GCP_SA_KEY` | secret | service-account JSON with Cloud Run Admin, Artifact Registry Writer, and Service Account User |
 
 Required production configuration:
 

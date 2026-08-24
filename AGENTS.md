@@ -23,7 +23,7 @@ ChatScream is a browser-based multi-streaming studio. Creators broadcast from a 
 | `public/`                  | PWA manifest, service worker, icons                                            |
 | `scripts/`                 | Deploy, migrate, autostart helpers                                             |
 
-**Production split:** Vercel hosts the Vite frontend (`dist/`); Google Cloud Run runs `node server/index.js` (API + WebSockets + FFmpeg). See `DEPLOY.md`.
+**Production split:** Vercel hosts the Vite frontend (`dist/`); Google Cloud Run runs `node server/entrypoint.js`, which boots `server/index.js` (API + WebSockets + FFmpeg) or the relay when `RELAY_ONLY=true`. Start the process through `entrypoint.js`, never `index.js` directly. See `DEPLOY.md`.
 
 **Local ports:** Vite `3000` (proxies `/api` → `8787`); API/WebSocket `8787`.
 
