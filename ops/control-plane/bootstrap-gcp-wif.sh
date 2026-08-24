@@ -32,44 +32,83 @@ ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | h
 say "Using Google account: $ACCOUNT"
 gcloud projects describe "$CONTROL_PROJECT" >/dev/null 2>&1 || fail "This Google account cannot access project ${CONTROL_PROJECT}."
 
+billing_enabled() {
+  local project="$1" value
+  value="$(gcloud billing projects describe "$project" --format='value(billingEnabled)' 2>/dev/null || true)"
+  [ "${value,,}" = "true" ]
+}
+
+service_exists() {
+  local project="$1"
+  # A billed project may not have the Run API enabled yet. If it is enabled,
+  # prefer the project that already owns the production service.
+  gcloud run services describe "$SERVICE" --region "$REGION" --project "$project" >/dev/null 2>&1
+}
+
 find_target_project() {
-  local candidate current
+  local candidate current first_billed=""
+
   if [ -n "${GCP_PROJECT_ID:-}" ]; then
+    billing_enabled "$GCP_PROJECT_ID" || fail "GCP_PROJECT_ID=${GCP_PROJECT_ID} does not have billing enabled."
     printf '%s' "$GCP_PROJECT_ID"
     return
   fi
+
   current="$(gcloud config get-value project 2>/dev/null || true)"
-  if [ -n "$current" ] && [ "$current" != "(unset)" ] && \
-     gcloud run services describe "$SERVICE" --region "$REGION" --project "$current" >/dev/null 2>&1; then
-    printf '%s' "$current"
-    return
+  if [ -n "$current" ] && [ "$current" != "(unset)" ] && billing_enabled "$current"; then
+    first_billed="$current"
+    if service_exists "$current"; then
+      printf '%s' "$current"
+      return
+    fi
   fi
+
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
-    if gcloud run services describe "$SERVICE" --region "$REGION" --project "$candidate" >/dev/null 2>&1; then
-      printf '%s' "$candidate"
-      return
+    if billing_enabled "$candidate"; then
+      [ -n "$first_billed" ] || first_billed="$candidate"
+      if service_exists "$candidate"; then
+        printf '%s' "$candidate"
+        return
+      fi
     fi
   done < <(gcloud projects list --format='value(projectId)')
 
-  # Last-resort known candidates.
+  # Prefer the known ChatScream project if it is billed even if the Run API is
+  # currently disabled. Otherwise return the first billing-enabled project so
+  # the script can report exactly what exists without selecting an unbilled one.
   for candidate in chatscream chat-scream; do
-    if gcloud projects describe "$candidate" >/dev/null 2>&1; then
+    if gcloud projects describe "$candidate" >/dev/null 2>&1 && billing_enabled "$candidate"; then
       printf '%s' "$candidate"
       return
     fi
   done
-  return 1
+
+  [ -n "$first_billed" ] && printf '%s' "$first_billed"
 }
 
 TARGET_PROJECT="$(find_target_project || true)"
-[ -n "$TARGET_PROJECT" ] || fail "Could not identify the ChatScream Google Cloud project."
+if [ -z "$TARGET_PROJECT" ]; then
+  cat >&2 <<'EOF'
+
+ERROR: No billing-enabled Google Cloud project is available to this account.
+
+Google Cloud's Free Tier does not require trial credits, but Google still
+requires an active Cloud Billing account to be linked to the project before
+Cloud Run, Secret Manager, and Artifact Registry can be enabled.
+
+Nothing billable was created by this script.
+EOF
+  exit 2
+fi
 TARGET_PROJECT_NUMBER="$(gcloud projects describe "$TARGET_PROJECT" --format='value(projectNumber)')"
 
 say "Control project: ${CONTROL_PROJECT} (${CONTROL_PROJECT_NUMBER})"
-say "Cloud Run target: ${TARGET_PROJECT} (${TARGET_PROJECT_NUMBER})"
+say "Billing-enabled target: ${TARGET_PROJECT} (${TARGET_PROJECT_NUMBER})"
 
 say "Enabling the APIs required for keyless GitHub administration"
+# These identity APIs are already available without attaching billing to the
+# OAuth/control project in normal Google Cloud accounts.
 gcloud services enable \
   iam.googleapis.com \
   iamcredentials.googleapis.com \
@@ -102,6 +141,21 @@ for role in \
     --condition=None \
     --quiet >/dev/null
 done
+
+# Do not silently create a second backend in some unrelated billed project.
+# We only continue when we can identify the existing production Cloud Run service.
+if ! service_exists "$TARGET_PROJECT"; then
+  cat >&2 <<EOF
+
+ERROR: Found billing-enabled project '${TARGET_PROJECT}', but it does not contain
+Cloud Run service '${SERVICE}' in region '${REGION}'.
+
+Nothing was migrated or created automatically because doing so could split the
+production backend. Send this output back to ChatGPT and the next bootstrap will
+identify/migrate the live service safely.
+EOF
+  exit 3
+fi
 
 RUNTIME_SA="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$TARGET_PROJECT" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
 if [ -z "$RUNTIME_SA" ]; then
