@@ -1,0 +1,4 @@
+{
+  "action": "prepare",
+  "purpose": "Create a one-time public-key envelope for installing the Facebook App Secret into Google Secret Manager"
+}
