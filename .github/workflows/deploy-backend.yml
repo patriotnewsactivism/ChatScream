@@ -1,12 +1,7 @@
 name: Deploy backend to Cloud Run
 
-# Manual only — this never fires on a push. Open the Actions tab, pick this
-# workflow, and press "Run workflow". That button works from the GitHub mobile
-# site, which is the point: the API host is Cloud Run and there is otherwise no
-# way to ship a backend change without a terminal.
-#
-# The production service is wired in as defaults below. The only thing that
-# must be configured once is the GCP_SA_KEY secret.
+# Manual phone-friendly deploy. Google authentication is keyless: GitHub exchanges
+# its short-lived OIDC token for the limited chatscream-cloud-ops service account.
 on:
   workflow_dispatch:
     inputs:
@@ -20,12 +15,12 @@ permissions:
   id-token: write
 
 env:
-  # Repository variables override these, so a future project or region change
-  # needs no edit to this file.
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'chatscream' }}
-  SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'chatscream-backend' }}
-  REGION: ${{ vars.CLOUD_RUN_REGION || 'us-central1' }}
-  REPO: ${{ vars.ARTIFACT_REGISTRY_REPO || 'chatscream' }}
+  PROJECT_ID: chatscream
+  SERVICE: chatscream-backend
+  REGION: us-central1
+  REPO: chatscream
+  WIF_PROVIDER: projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
+  OPS_SERVICE_ACCOUNT: chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -37,40 +32,23 @@ jobs:
           echo "::error::Type 'deploy' in the confirmation box to run this workflow."
           exit 1
 
-      - name: Check credentials are configured
-        # Passed through env, never interpolated into the script: the key is
-        # multi-line JSON and would break the shell if inlined.
-        env:
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          if [ -z "$SA_KEY" ]; then
-            echo "::error::Repository secret GCP_SA_KEY is not set. Add it under Settings -> Secrets and variables -> Actions -> Secrets. It needs Cloud Run Admin, Artifact Registry Writer, and Service Account User on project ${PROJECT_ID}."
-            exit 1
-          fi
-          echo "Deploying ${SERVICE} to ${REGION} in project ${PROJECT_ID}."
-
       - uses: actions/checkout@v4
 
-      - uses: google-github-actions/auth@v2
+      - name: Authenticate to Google Cloud with short-lived OIDC
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.OPS_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Ensure Artifact Registry repository exists
+      - name: Verify production Artifact Registry exists
         run: |
-          if ! gcloud artifacts repositories describe "${REPO}" \
-                --location "${REGION}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
-            echo "Creating Artifact Registry repository ${REPO}."
-            gcloud artifacts repositories create "${REPO}" \
-              --repository-format=docker \
-              --location "${REGION}" \
-              --project "${PROJECT_ID}" \
-              --description "ChatScream backend images" \
-              --quiet
-          fi
+          set -euo pipefail
+          gcloud artifacts repositories describe "${REPO}" \
+            --location "${REGION}" --project "${PROJECT_ID}" >/dev/null
 
       - name: Resolve image reference
         id: image
@@ -79,8 +57,6 @@ jobs:
       - name: Authenticate Docker to Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      # DEPLOY.md specifies the Dockerfile's `backend` target: Node + FFmpeg,
-      # no frontend bundle (Vercel serves that).
       - name: Build backend image
         run: docker build --target backend -t "${{ steps.image.outputs.ref }}" .
 
@@ -95,21 +71,20 @@ jobs:
             --project "${PROJECT_ID}" \
             --quiet
 
-      # Fail loudly if the new revision did not actually change the OAuth
-      # behaviour this deploy exists to ship. Probes the public hostname, so it
-      # also catches the domain mapping pointing at a different service.
-      - name: Verify OAuth callback lands on the callback page
+      - name: Verify production health and OAuth callback
         env:
-          API_BASE: ${{ vars.API_BASE_URL || 'https://api.chatscream.live' }}
+          API_BASE: https://api.chatscream.live
         run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "${API_BASE}/api/health" >/dev/null
+          curl -fsS --max-time 30 "${API_BASE}/api/ready" >/dev/null
           state=$(node -e "process.stdout.write(encodeURIComponent(Buffer.from(JSON.stringify({platform:'youtube',userId:'ci',timestamp:Date.now(),nonce:'ci-check',returnOrigin:'https://www.chatscream.live'})).toString('base64')))")
           location=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 30 \
             "${API_BASE}/api/auth/oauth/google/callback?code=ci-probe&state=${state}")
-          echo "Redirect: ${location}"
           case "$location" in
             *"/oauth/callback"*"flow=destination"*)
-              echo "YouTube destination callback routes to Studio." ;;
+              echo "Backend health, readiness, and YouTube destination callback verified." ;;
             *)
-              echo "::error::Expected a redirect to /oauth/callback with flow=destination, got: ${location}"
+              echo "::error::Expected YouTube callback redirect to Studio; got: ${location}"
               exit 1 ;;
           esac
