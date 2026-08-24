@@ -271,10 +271,9 @@ jobs:
           ENVELOPE_SECRET='chatscream-facebook-envelope-private'
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/facebook-envelope-private.pem >/dev/null 2>&1
           openssl pkey -in /tmp/facebook-envelope-private.pem -pubout -out /tmp/facebook-envelope-public.pem
-          if gcloud secrets describe "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
-            gcloud secrets delete "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --quiet
+          if ! gcloud secrets describe "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" >/dev/null 2>&1; then
+            gcloud secrets create "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
           fi
-          gcloud secrets create "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --replication-policy=automatic --quiet
           gcloud secrets versions add "$ENVELOPE_SECRET" --project "$TARGET_PROJECT" --data-file=/tmp/facebook-envelope-private.pem --quiet >/dev/null
 
           git config user.name 'ChatScream Cloud Ops'
@@ -365,3 +364,20 @@ jobs:
           git add -A ops/control-plane/facebook-envelope-result.json ops/control-plane/facebook-envelope-request.json ops/control-plane/facebook-envelope-public.pem ops/control-plane/facebook-app-secret.enc
           git commit -m 'Complete Facebook secret bootstrap [skip ci]'
           git push origin main
+
+      - name: Publish sanitized Facebook bootstrap failure
+        if: failure() && steps.fbrequest.outputs.action != 'idle'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ChatScream Cloud Ops'
+          git config user.email 'actions@users.noreply.github.com'
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p ops/control-plane
+          jq -n --arg action "${{ steps.fbrequest.outputs.action }}" '{action:$action,success:false,message:"Facebook secret bootstrap failed. No secret value was published; inspect the GitHub Actions job for the failing infrastructure step."}' > ops/control-plane/facebook-envelope-result.json
+          git add ops/control-plane/facebook-envelope-result.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record Facebook secret bootstrap failure [skip ci]'
+            git push origin main
+          fi
