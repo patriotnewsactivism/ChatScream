@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-1404-launch-trigger",
-  "action": "cost_guard",
-  "purpose": "Force the proven controller path while preparing Facebook production secret installation"
+  "id": "chat-ops-20260824-1415-facebook-prepare",
+  "action": "facebook_prepare",
+  "purpose": "Create a one-time public-key envelope for the Meta App Secret without committing plaintext"
 }
