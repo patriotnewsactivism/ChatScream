@@ -2099,20 +2099,38 @@ app.get('/api/public/capabilities', (_req, res) => {
   res.json(getBackendCapabilities());
 });
 
-// Diagnostic: non-secret OAuth config for debugging redirect_uri_mismatch
+// Diagnostic: non-secret OAuth config for debugging redirect_uri_mismatch.
+//
+// OAuth client IDs are public by design — they are embedded in the frontend
+// bundle and in every authorization URL — so reporting them in full is safe,
+// and necessary: truncating to 12 characters showed only the shared project
+// number, which made two *different* clients look identical here. Client
+// secrets are never included; only whether one is configured.
 app.get('/api/public/oauth-debug', (req, res) => {
   const oauth = getConfig('oauth') || {};
   const envRedirectUri = String(process.env.VITE_OAUTH_REDIRECT_URI || '').trim();
   const envYtClientId = String(process.env.YOUTUBE_CLIENT_ID || '').trim();
+  const { clientId: googleClientId, clientSecret: googleClientSecret } = getGoogleAuthCredentials();
+  const effectiveYoutubeClientId = envYtClientId || oauth.youtubeClientId || '';
+
   res.json({
     storedRedirectUriBase: oauth.redirectUriBase || null,
     envRedirectUri: envRedirectUri || null,
     effectiveRedirectUri: envRedirectUri || oauth.redirectUriBase || null,
-    storedYoutubeClientId: oauth.youtubeClientId
-      ? `${oauth.youtubeClientId.slice(0, 12)}...`
-      : null,
-    envYoutubeClientId: envYtClientId ? `${envYtClientId.slice(0, 12)}...` : null,
-    effectiveYoutubeClientId: (envYtClientId || oauth.youtubeClientId || '').slice(0, 12) + '...',
+    storedYoutubeClientId: oauth.youtubeClientId || null,
+    envYoutubeClientId: envYtClientId || null,
+    effectiveYoutubeClientId: effectiveYoutubeClientId || null,
+    // The account sign-in flow and the YouTube destination flow can resolve to
+    // different OAuth clients. When they do, a redirect URI registered on one
+    // is not registered on the other, which surfaces as redirect_uri_mismatch.
+    accountSignInClientId: googleClientId || null,
+    clientIdsMatch: Boolean(
+      googleClientId && effectiveYoutubeClientId && googleClientId === effectiveYoutubeClientId,
+    ),
+    hasGoogleClientSecret: Boolean(googleClientSecret),
+    hasYoutubeClientSecret: Boolean(String(process.env.YOUTUBE_CLIENT_SECRET || '').trim()),
+    // The exact redirect URI this deployment sends, to paste into the console.
+    oauthRedirectUri: `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/google/callback`,
   });
 });
 
