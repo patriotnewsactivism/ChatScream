@@ -1,9 +1,30 @@
 {
-  "requestId": "chat-ops-20260824-prune-oauth-secrets",
-  "action": "prune_secret_versions",
-  "success": true,
-  "message": "Superseded enabled OAuth secret versions were disabled; latest versions remain active.",
-  "startedAt": "2026-08-24T19:24:01Z",
-  "completedAt": "2026-08-24T19:24:11Z",
-  "details": {}
+  "requestId": "chat-ops-20260824-launch-audit",
+  "action": "launch_audit",
+  "success": false,
+  "message": "Launch audit found one or more core production configuration gaps.",
+  "startedAt": "2026-08-24T19:25:05Z",
+  "completedAt": "2026-08-24T19:25:07Z",
+  "details": {
+    "configuration": {
+      "nodeProduction": true,
+      "managedIdentity": true,
+      "databaseConfigured": true,
+      "appBaseUrlCorrect": true,
+      "oauthCallbackCorrect": true,
+      "corsCorrect": true,
+      "authStateSecretPresent": true,
+      "sessionSecretPresent": false,
+      "googleOAuthCorrect": true,
+      "youtubeOAuthCorrect": true,
+      "facebookOAuthCorrect": true,
+      "scaleToZero": true,
+      "redisConfigured": true
+    },
+    "http": {
+      "health": "200",
+      "ready": "200",
+      "capabilities": "200"
+    }
+  }
 }
