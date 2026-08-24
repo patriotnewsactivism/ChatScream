@@ -21,3 +21,7 @@ yarn-error.log*
 firebase-debug.log*
 .vercel
 .env*.local
+
+# Google OAuth client credential downloads — these contain a live client_secret
+client_secret*.json
+*.apps.googleusercontent.com.json
