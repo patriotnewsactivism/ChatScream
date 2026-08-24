@@ -1,18 +1,18 @@
 {
-  "requestId": "chat-ops-20260824-0041-costverify",
-  "action": "cost_guard",
+  "requestId": "chat-ops-20260824-0045-secretaudit",
+  "action": "secret_audit",
   "success": true,
-  "message": "Cost guard passed: service-level and revision-level minimum instances are zero.",
-  "startedAt": "2026-08-24T05:41:48Z",
-  "completedAt": "2026-08-24T05:41:50Z",
+  "message": "Secret Manager bindings audited without reading secret values.",
+  "startedAt": "2026-08-24T05:46:26Z",
+  "completedAt": "2026-08-24T05:46:28Z",
   "details": {
-    "cloudRun": {
-      "serviceMinScale": "0",
-      "revisionMinScale": "0",
-      "serviceMaxScale": "20",
-      "revisionMaxScale": "20",
-      "cpuLimit": "1000m",
-      "memoryLimit": "512Mi"
+    "bindings": {
+      "google": "chatscream-google-client-secret",
+      "youtube": "chatscream-youtube-client-secret"
+    },
+    "enabledVersions": {
+      "google": 2,
+      "youtube": 2
     }
   }
 }
