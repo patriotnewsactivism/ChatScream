@@ -1,13 +1,14 @@
 {
   "requestId": "chat-ops-20260824-0038-scalezero",
   "action": "enforce_scale_to_zero",
-  "success": false,
-  "message": "Scale-to-zero update completed but verification failed.",
-  "startedAt": "2026-08-24T05:37:02Z",
-  "completedAt": "2026-08-24T05:37:31Z",
+  "success": true,
+  "message": "Both Cloud Run minimum-instance settings are zero and production health is verified.",
+  "startedAt": "2026-08-24T05:40:14Z",
+  "completedAt": "2026-08-24T05:40:33Z",
   "details": {
-    "minScale": "1",
-    "latestReadyRevision": "chatscream-backend-00032-kbb",
+    "serviceMinScale": "0",
+    "revisionMinScale": "0",
+    "latestReadyRevision": "chatscream-backend-00035-7ds",
     "healthHttp": "200"
   }
 }
