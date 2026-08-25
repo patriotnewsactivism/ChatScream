@@ -44,6 +44,7 @@ export interface OAuthState {
 const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
 const YOUTUBE_PRODUCTION_REDIRECT_URI =
   'https://api.chatscream.live/api/auth/oauth/google/callback';
+const CANONICAL_FRONTEND_CALLBACK = 'https://www.chatscream.live/oauth/callback';
 const oauthStateKey = (platform: OAuthPlatform): string => `${OAUTH_STATE_STORAGE_KEY}_${platform}`;
 
 let oauthPublicConfigCache: {
@@ -69,10 +70,13 @@ const getAuthorizationHeader = (): string | null => {
 };
 
 const getBrowserCallbackUri = (): string => {
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/oauth/callback`;
+  if (typeof window !== 'undefined') {
+    const host = window.location?.hostname || '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.origin}/oauth/callback`;
+    }
   }
-  return 'https://www.chatscream.live/oauth/callback';
+  return CANONICAL_FRONTEND_CALLBACK;
 };
 
 const getYouTubeRedirectUri = (): string => {
@@ -92,7 +96,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
   switch (platform) {
     case 'youtube':
       return {
-        clientId: publicConfig.youtubeClientId || import.meta.env.VITE_YOUTUBE_CLIENT_ID || '',
+        clientId: publicConfig.youtubeClientId || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
         scopes: [
@@ -106,9 +110,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
       };
     case 'facebook':
       return {
-        clientId: publicConfig.facebookAppId || import.meta.env.VITE_FACEBOOK_APP_ID || '',
-        authorizationEndpoint: 'https://www.facebook.com/v18.0/dialog/oauth',
-        tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
+        clientId: publicConfig.facebookAppId || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
+        authorizationEndpoint: 'https://www.facebook.com/v26.0/dialog/oauth',
+        tokenEndpoint: 'https://graph.facebook.com/v26.0/oauth/access_token',
         scopes: [
           'public_profile',
           'email',
@@ -118,7 +122,7 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
           'pages_manage_metadata',
           'publish_video',
         ],
-        redirectUri: publicConfig.redirectUriBase || browserRedirectUri,
+        redirectUri: CANONICAL_FRONTEND_CALLBACK,
       };
     case 'twitch':
       return {

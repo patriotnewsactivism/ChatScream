@@ -34,6 +34,7 @@ const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const { user, loading, refreshProfile } = useAuth();
   const attemptedSessionRestore = useRef(false);
+  const attemptedDestinationCallback = useRef(false);
   const exitScheduled = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -118,6 +119,11 @@ const OAuthCallback: React.FC = () => {
           );
           return;
         }
+
+        // OAuth state is single-use. refreshProfile() can re-render this component,
+        // so never consume the same provider callback twice.
+        if (attemptedDestinationCallback.current) return;
+        attemptedDestinationCallback.current = true;
 
         setStatus('loading');
         setMessage(`Connecting ${platformLabel}...`);
