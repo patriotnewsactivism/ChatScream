@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-launch-audit-2",
-  "action": "launch_audit",
-  "purpose": "Verify all core production Cloud Run environment, OAuth, persistence, security, scaling, and public health settings after auth secret migration"
+  "id": "chat-ops-20260824-deploy-oauth-backend",
+  "action": "deploy_backend",
+  "purpose": "Deploy current main backend so live Google account sign-in and YouTube destination OAuth use the canonical API callback"
 }
