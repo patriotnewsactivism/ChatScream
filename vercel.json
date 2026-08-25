@@ -39,6 +39,17 @@
   ],
   "redirects": [
     {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "chatscream.live"
+        }
+      ],
+      "destination": "https://www.chatscream.live/:path*",
+      "permanent": true
+    },
+    {
       "source": "/api/auth/oauth/:path*",
       "destination": "https://api.chatscream.live/api/auth/oauth/:path*",
       "permanent": false
