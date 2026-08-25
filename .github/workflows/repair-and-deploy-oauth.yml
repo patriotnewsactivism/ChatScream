@@ -1,0 +1,113 @@
+name: Repair and Deploy OAuth Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-and-deploy-oauth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TARGET_PROJECT: chatscream
+  SERVICE: chatscream-backend
+  REGION: us-central1
+  ARTIFACT_REPO: chatscream
+  WIF_PROVIDER: projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
+  OPS_SERVICE_ACCOUNT: chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
+  GOOGLE_CLIENT_ID: 584450564662-vvlnooo2oe25ltstet0mkqajm4ta80d8.apps.googleusercontent.com
+  YOUTUBE_CLIENT_ID: 584450564662-ek0a4ibt01t9ho6guc7sfqp59dq0vrs5.apps.googleusercontent.com
+
+jobs:
+  repair-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.OPS_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.TARGET_PROJECT }}
+
+      - name: Ensure Artifact Registry exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "$ARTIFACT_REPO" \
+              --project "$TARGET_PROJECT" \
+              --location "$REGION" \
+              --repository-format=docker \
+              --description='ChatScream production backend images' \
+              --quiet
+          fi
+
+      - name: Repair Google and YouTube credential bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Remove only the four OAuth variables so type changes (literal <-> secretRef)
+          # cannot block the repair. Preserve every unrelated environment variable.
+          for name in GOOGLE_CLIENT_SECRET YOUTUBE_CLIENT_SECRET; do
+            gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-secrets "$name" --quiet >/dev/null 2>&1 || true
+            gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars "$name" --quiet >/dev/null 2>&1 || true
+          done
+          for name in GOOGLE_CLIENT_ID YOUTUBE_CLIENT_ID; do
+            gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars "$name" --quiet >/dev/null 2>&1 || true
+          done
+
+          gcloud run services update "$SERVICE" \
+            --project "$TARGET_PROJECT" \
+            --region "$REGION" \
+            --update-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}" \
+            --update-secrets "GOOGLE_CLIENT_SECRET=chatscream-google-client-secret:latest,YOUTUBE_CLIENT_SECRET=chatscream-youtube-client-secret:latest" \
+            --quiet
+
+      - name: Build and push current backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${TARGET_PROJECT}/${ARTIFACT_REPO}/${SERVICE}:oauth-fix-${GITHUB_SHA::12}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build --target backend -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy current backend to Cloud Run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --project "$TARGET_PROJECT" \
+            --region "$REGION" \
+            --quiet
+
+      - name: Verify live OAuth wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            debug="$(curl -fsS --max-time 20 https://api.chatscream.live/api/public/oauth-debug 2>/dev/null || true)"
+            health="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://api.chatscream.live/api/health 2>/dev/null || true)"
+            if [ "$health" = '200' ] && [ -n "$debug" ]; then
+              echo "$debug" | jq -e \
+                --arg gid "$GOOGLE_CLIENT_ID" \
+                --arg yid "$YOUTUBE_CLIENT_ID" \
+                '.accountSignInClientId == $gid and .effectiveYoutubeClientId == $yid and .clientIdsMatch == false and .hasGoogleClientSecret == true and .hasYoutubeClientSecret == true and .oauthRedirectUri == "https://api.chatscream.live/api/auth/oauth/google/callback"' \
+                >/dev/null && exit 0
+            fi
+            sleep 5
+          done
+          echo 'Live OAuth verification failed.' >&2
+          exit 1
