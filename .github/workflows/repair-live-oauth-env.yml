@@ -1,0 +1,87 @@
+name: Repair Live OAuth Env
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-live-oauth-env.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TARGET_PROJECT: chatscream
+  SERVICE: chatscream-backend
+  REGION: us-central1
+  WIF_PROVIDER: projects/584450564662/locations/global/workloadIdentityPools/chatscream-github/providers/chatscream-main
+  OPS_SERVICE_ACCOUNT: chatscream-cloud-ops@chat-scream.iam.gserviceaccount.com
+  GOOGLE_CLIENT_ID: 584450564662-vvlnooo2oe25ltstet0mkqajm4ta80d8.apps.googleusercontent.com
+  YOUTUBE_CLIENT_ID: 584450564662-ek0a4ibt01t9ho6guc7sfqp59dq0vrs5.apps.googleusercontent.com
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.OPS_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.TARGET_PROJECT }}
+
+      - name: Repair live OAuth variables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          svc="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
+
+          remove_var() {
+            local name="$1"
+            local has_secret has_literal
+            has_secret="$(jq -r --arg n "$name" 'any(.spec.template.spec.containers[0].env[]?; .name==$n and .valueFrom.secretKeyRef.name != null)' <<<"$svc")"
+            has_literal="$(jq -r --arg n "$name" 'any(.spec.template.spec.containers[0].env[]?; .name==$n and .value != null)' <<<"$svc")"
+            if [ "$has_secret" = true ]; then
+              gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-secrets "$name" --quiet >/dev/null
+            elif [ "$has_literal" = true ]; then
+              gcloud run services update "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --remove-env-vars "$name" --quiet >/dev/null
+            fi
+            svc="$(gcloud run services describe "$SERVICE" --project "$TARGET_PROJECT" --region "$REGION" --format=json)"
+          }
+
+          remove_var GOOGLE_CLIENT_ID
+          remove_var YOUTUBE_CLIENT_ID
+          remove_var GOOGLE_CLIENT_SECRET
+          remove_var YOUTUBE_CLIENT_SECRET
+
+          gcloud run services update "$SERVICE" \
+            --project "$TARGET_PROJECT" \
+            --region "$REGION" \
+            --update-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}" \
+            --update-secrets "GOOGLE_CLIENT_SECRET=chatscream-google-client-secret:latest,YOUTUBE_CLIENT_SECRET=chatscream-youtube-client-secret:latest" \
+            --quiet
+
+      - name: Verify live public OAuth diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            debug="$(curl -fsS --max-time 20 https://api.chatscream.live/api/public/oauth-debug 2>/dev/null || true)"
+            if [ -n "$debug" ] && echo "$debug" | jq -e \
+              --arg gid "$GOOGLE_CLIENT_ID" \
+              --arg yid "$YOUTUBE_CLIENT_ID" \
+              '.accountSignInClientId == $gid and .effectiveYoutubeClientId == $yid and .clientIdsMatch == false and .hasGoogleClientSecret == true and .hasYoutubeClientSecret == true' \
+              >/dev/null; then
+              echo 'Live Google/YouTube OAuth wiring verified.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Live OAuth wiring verification failed.' >&2
+          exit 1
