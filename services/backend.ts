@@ -548,6 +548,7 @@ export interface AccessListConfig {
 export interface OAuthPublicConfig {
   youtubeClientId: string;
   facebookAppId: string;
+  facebookLoginConfigId: string;
   twitchClientId: string;
   tiktokClientKey: string;
   redirectUriBase: string;
@@ -952,6 +953,7 @@ export const getOAuthPublicConfig = async (): Promise<OAuthPublicConfig> => {
   return {
     youtubeClientId: toStringValue(data?.youtubeClientId),
     facebookAppId: toStringValue(data?.facebookAppId),
+    facebookLoginConfigId: toStringValue(data?.facebookLoginConfigId),
     twitchClientId: toStringValue(data?.twitchClientId),
     tiktokClientKey: toStringValue(data?.tiktokClientKey),
     redirectUriBase: toStringValue(data?.redirectUriBase),

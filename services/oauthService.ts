@@ -19,6 +19,10 @@ export interface OAuthConfig {
   tokenEndpoint: string;
   scopes: string[];
   redirectUri: string;
+  // Facebook Login for Business config ID. When set, this replaces `scopes` in the
+  // authorization request — Page/Business permissions can only be granted through a
+  // Login Configuration (config_id), not as raw scope names.
+  configId?: string;
 }
 
 export interface ConnectedAccount {
@@ -104,22 +108,25 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         ],
         redirectUri: getYouTubeRedirectUri(),
       };
-    case 'facebook':
+    case 'facebook': {
+      // Page/Business permissions (pages_show_list, pages_read_engagement, pages_manage_posts,
+      // pages_manage_metadata, publish_video) are no longer grantable as raw OAuth scopes —
+      // Meta rejects them with "Invalid Scopes" on the classic dialog. They must come from a
+      // Facebook Login for Business configuration, referenced by config_id. Until that config
+      // is set up, fall back to the scopes that still work through classic login so sign-in
+      // doesn't break.
+      const configId =
+        publicConfig.facebookLoginConfigId ||
+        (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_LOGIN_CONFIG_ID || '' : '');
       return {
         clientId: publicConfig.facebookAppId || (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
         authorizationEndpoint: FACEBOOK_AUTHORIZATION_ENDPOINT,
         tokenEndpoint: FACEBOOK_TOKEN_ENDPOINT,
-        scopes: [
-          'public_profile',
-          'email',
-          'pages_show_list',
-          'pages_read_engagement',
-          'pages_manage_posts',
-          'pages_manage_metadata',
-          'publish_video',
-        ],
+        scopes: configId ? [] : ['public_profile', 'email'],
         redirectUri: CANONICAL_FRONTEND_CALLBACK,
+        configId: configId || undefined,
       };
+    }
     case 'twitch':
       return {
         clientId: publicConfig.twitchClientId || import.meta.env.VITE_TWITCH_CLIENT_ID || '',
@@ -205,11 +212,17 @@ export const getAuthorizationUrl = async (
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: 'code',
-    scope: config.scopes.join(' '),
     state,
     access_type: 'offline',
     prompt: 'consent',
   });
+
+  if (config.configId) {
+    // Facebook Login for Business: permissions live on the config, not in `scope`.
+    params.set('config_id', config.configId);
+  } else if (config.scopes.length > 0) {
+    params.set('scope', config.scopes.join(' '));
+  }
 
   if (platform === 'youtube') params.set('include_granted_scopes', 'true');
   if (platform === 'twitch') params.set('force_verify', 'true');

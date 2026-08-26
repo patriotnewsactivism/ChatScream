@@ -2097,6 +2097,10 @@ app.get('/api/config/oauth', requireAuth, (_req, res) => {
       oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
     facebookAppId:
       oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
+    facebookLoginConfigId:
+      oauth.facebookLoginConfigId ||
+      String(process.env.FACEBOOK_LOGIN_CONFIG_ID || '').trim() ||
+      undefined,
     twitchClientId:
       oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
     tiktokClientKey:
@@ -2174,6 +2178,10 @@ app.get('/api/oauth/config/public', requireAuth, (req, res) => {
       String(process.env.YOUTUBE_CLIENT_ID || '').trim() || oauth.youtubeClientId || undefined,
     facebookAppId:
       String(process.env.FACEBOOK_APP_ID || '').trim() || oauth.facebookAppId || undefined,
+    facebookLoginConfigId:
+      String(process.env.FACEBOOK_LOGIN_CONFIG_ID || '').trim() ||
+      oauth.facebookLoginConfigId ||
+      undefined,
     twitchClientId:
       String(process.env.TWITCH_CLIENT_ID || '').trim() || oauth.twitchClientId || undefined,
     tiktokClientKey:

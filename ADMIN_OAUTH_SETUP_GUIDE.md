@@ -97,10 +97,10 @@ AUTH_STATE_SECRET=any-random-string-for-csrf-protection
 
 ### Step 3: Add Permissions
 
-Required permissions for live streaming:
+`public_profile` and `email` work through the classic Login dialog as plain OAuth
+scopes. The rest do not — Meta rejects them as "Invalid Scopes" if requested that
+way:
 
-- `public_profile`
-- `email`
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
@@ -108,12 +108,25 @@ Required permissions for live streaming:
 - `publish_video`
 - `live_video`
 
+These Page/Business permissions can only be granted through a **Facebook Login for
+Business** configuration:
+
+1. In the app dashboard, go to **Facebook Login → Configurations**
+2. Create a new configuration, select the permissions above, and save
+3. Copy the generated **Configuration ID**
+4. Submit the app for App Review requesting these permissions (Advanced Access) —
+   until approved, only admins/developers/testers on the app can complete this flow
+
 ### Step 4: Configure
 
 ```env
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
+FACEBOOK_LOGIN_CONFIG_ID=your-login-configuration-id
 ```
+
+Without `FACEBOOK_LOGIN_CONFIG_ID` set, ChatScream falls back to requesting only
+`public_profile` + `email` so basic sign-in keeps working.
 
 ---
 
@@ -201,6 +214,7 @@ YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=your-client-secret
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
+FACEBOOK_LOGIN_CONFIG_ID=your-login-configuration-id
 TWITCH_CLIENT_ID=your-client-id
 TWITCH_CLIENT_SECRET=your-client-secret
 AUTH_STATE_SECRET=your-random-secret
