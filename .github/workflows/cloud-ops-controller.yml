@@ -178,10 +178,25 @@ jobs:
 
             deploy_backend)
               IMAGE="${REGION}-docker.pkg.dev/${TARGET_PROJECT}/${ARTIFACT_REPO}/${SERVICE}:ops-${GITHUB_SHA:0:12}"
-              if gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
+              REGISTRY_CREATED=false
+              if ! gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$TARGET_PROJECT" --location "$REGION" >/dev/null 2>&1; then
+                if gcloud artifacts repositories create "$ARTIFACT_REPO" \
+                  --project "$TARGET_PROJECT" \
+                  --location "$REGION" \
+                  --repository-format docker \
+                  --description 'ChatScream production backend images' \
+                  --quiet >/tmp/registry-create.log 2>&1; then
+                  REGISTRY_CREATED=true
+                else
+                  SUCCESS=false
+                  MESSAGE='Artifact Registry repository is missing and could not be created.'
+                fi
+              fi
+              if $SUCCESS; then
                 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null 2>&1
-                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 && docker push "$IMAGE" >/tmp/push.log 2>&1 && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; jq -n --arg image "$IMAGE" --arg health "$HEALTH" '{image:$image,healthHttp:$health}' > /tmp/details.json; [ "$HEALTH" = 200 ] && MESSAGE='Backend deployed and healthy.' || { SUCCESS=false; MESSAGE='Backend deployed but health probe failed.'; }; else SUCCESS=false; MESSAGE='Backend build, push, or deploy failed; command output was intentionally not published.'; fi
-              else SUCCESS=false; MESSAGE='Artifact Registry repository is missing.'; fi
+                if docker build --target backend -t "$IMAGE" . >/tmp/build.log 2>&1 && docker push "$IMAGE" >/tmp/push.log 2>&1 && gcloud run deploy "$SERVICE" --image "$IMAGE" --project "$TARGET_PROJECT" --region "$REGION" --quiet >/tmp/deploy.log 2>&1; then HEALTH="$(http_code 'https://api.chatscream.live/api/health')"; jq -n --arg image "$IMAGE" --arg health "$HEALTH" --argjson registryCreated "$REGISTRY_CREATED" '{image:$image,healthHttp:$health,artifactRegistryCreated:$registryCreated}' > /tmp/details.json; [ "$HEALTH" = 200 ] && MESSAGE='Backend deployed and healthy.' || { SUCCESS=false; MESSAGE='Backend deployed but health probe failed.'; }; else SUCCESS=false; MESSAGE='Backend build, push, or deploy failed; command output was intentionally not published.'; fi
+              fi
+              rm -f /tmp/registry-create.log
               ;;
 
             facebook_prepare)
