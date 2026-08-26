@@ -235,7 +235,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         platform: Platform.FACEBOOK,
         oauthPlatform: 'facebook' as const,
         label: 'Facebook',
-        description: 'Go live on your personal profile or managed pages with a single click.',
+        description: 'Go live on a managed Facebook Page over Meta-required RTMPS.',
         icon: <Facebook className="text-blue-500" aria-hidden />,
       },
       {
@@ -431,12 +431,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       setFacebookPages(data.pages || []);
       if (!data.pages?.length) {
         setFacebookPickerError(
-          'No Facebook Pages found. You can still stream to your personal profile by selecting "Personal Profile" below.',
+          'No managed Facebook Pages were returned. Reconnect Facebook and approve all Page permissions.',
         );
       }
     } catch {
       setFacebookPickerError(
-        'Could not load Facebook Pages. Reconnect your account or stream to your personal profile.',
+        'Could not load Facebook Pages. Reconnect your account and approve all Page permissions.',
       );
       setFacebookPages([]);
     }
@@ -467,12 +467,12 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, connectedPlatforms]);
 
-  const handleAddFacebookPage = async (pageId: string | null, pageName: string) => {
+  const handleAddFacebookPage = async (pageId: string, pageName: string) => {
     if (!destinationLimit.allowed) {
       safeAlert(destinationLimit.message);
       return;
     }
-    setFacebookPageSelectionPending(pageId ?? 'personal');
+    setFacebookPageSelectionPending(pageId);
     try {
       const data = await apiRequest<{
         streamUrl?: string;
@@ -482,7 +482,7 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
       }>('/api/destinations/facebook/create-live', {
         method: 'POST',
         headers: { Authorization: `Bearer ${getCurrentSessionToken() ?? ''}` },
-        body: pageId ? { pageId } : {},
+        body: { pageId },
       });
       const fallbackParts = data.streamUrl?.match(/^(rtmps?:\/\/[^/]+\/[^/]+)\/(.+)$/);
       const serverUrl = data.serverUrl || fallbackParts?.[1] || '';
@@ -992,19 +992,6 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
 
             {!facebookPagesLoading && (
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleAddFacebookPage(null, 'Personal Profile');
-                  }}
-                  disabled={Boolean(facebookPageSelectionPending)}
-                  className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-dark-900 px-3 py-2 text-left hover:border-brand-500/60 disabled:opacity-60"
-                >
-                  <span className="text-sm truncate">Personal Profile</span>
-                  <span className="text-[11px] text-brand-300 shrink-0">
-                    {facebookPageSelectionPending === 'personal' ? 'Adding...' : 'Use profile'}
-                  </span>
-                </button>
                 {facebookPages.map((page) => (
                   <button
                     key={page.id}

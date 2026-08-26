@@ -6,6 +6,7 @@ import {
   CANONICAL_FRONTEND_CALLBACK,
   FACEBOOK_AUTHORIZATION_ENDPOINT,
   FACEBOOK_GRAPH_API_VERSION,
+  FACEBOOK_PAGE_OAUTH_SCOPES,
   FACEBOOK_TOKEN_ENDPOINT,
   YOUTUBE_PRODUCTION_REDIRECT_URI,
 } from '../oauthProviderConfig';
@@ -15,6 +16,7 @@ const readSource = (relative: string): string =>
 
 const oauthServiceSource = readSource('services/oauthService.ts');
 const providerConfigSource = readSource('services/oauthProviderConfig.ts');
+const sharedFacebookConfigSource = readSource('shared/facebookOAuth.js');
 
 describe('provider callback URLs are exact', () => {
   it('sends YouTube destination authorization to the API callback', () => {
@@ -68,10 +70,13 @@ describe('Facebook Graph API version has one source', () => {
     );
   });
 
-  it('declares the version exactly once, as a literal', () => {
+  it('declares the version exactly once, in the shared browser/server module', () => {
     const declarations =
-      providerConfigSource.match(/FACEBOOK_GRAPH_API_VERSION = '(v[0-9]+\.[0-9]+)'/g) || [];
+      sharedFacebookConfigSource.match(
+        /DEFAULT_FACEBOOK_GRAPH_API_VERSION = '(v[0-9]+\.[0-9]+)'/g,
+      ) || [];
     expect(declarations).toHaveLength(1);
+    expect(providerConfigSource).not.toMatch(/FACEBOOK_GRAPH_API_VERSION = 'v[0-9]+\.[0-9]+'/);
   });
 
   it('hardcodes no Graph version anywhere outside the config module', () => {
@@ -84,6 +89,18 @@ describe('Facebook Graph API version has one source', () => {
     const major = Number(FACEBOOK_GRAPH_API_VERSION.replace(/^v/, '').split('.')[0]);
     // v18.0 (Sep 2023) is long past Meta's 2-year version lifetime.
     expect(major).toBeGreaterThanOrEqual(21);
+  });
+
+  it('requests only permissions used by managed Page Live streaming', () => {
+    expect(FACEBOOK_PAGE_OAUTH_SCOPES).toEqual([
+      'public_profile',
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_manage_posts',
+    ]);
+    expect(FACEBOOK_PAGE_OAUTH_SCOPES).not.toContain('email');
+    expect(FACEBOOK_PAGE_OAUTH_SCOPES).not.toContain('pages_manage_metadata');
+    expect(FACEBOOK_PAGE_OAUTH_SCOPES).not.toContain('publish_video');
   });
 });
 
@@ -104,7 +121,9 @@ describe('account sign-in and YouTube destination clients cannot swap', () => {
   it('only reads a build-time client ID on a loopback host', () => {
     // In production the client ID must come from the backend, so a stale
     // bundle cannot pin an ID that has since been rotated.
-    expect(youtubeCase).toMatch(/isLocalBrowser\(\)\s*\?\s*import\.meta\.env\.VITE_YOUTUBE_CLIENT_ID/);
+    expect(youtubeCase).toMatch(
+      /isLocalBrowser\(\)\s*\?\s*import\.meta\.env\.VITE_YOUTUBE_CLIENT_ID/,
+    );
   });
 });
 
@@ -169,9 +188,7 @@ describe('authorization requests carry an unguessable, single-use state', () => 
     const state = createOAuthState('youtube', 'user-1');
     const decoded = JSON.parse(atob(state));
 
-    const stale = btoa(
-      JSON.stringify({ ...decoded, timestamp: Date.now() - 11 * 60 * 1000 }),
-    );
+    const stale = btoa(JSON.stringify({ ...decoded, timestamp: Date.now() - 11 * 60 * 1000 }));
     expect(verifyOAuthState(stale)).toBeNull();
   });
 });
@@ -222,8 +239,7 @@ describe('exactly one OAuth authorization path exists', () => {
     // which is how the apex host and preview URLs reached Google. Only a
     // binding counts here; AdminPage renders the same string as help text,
     // and describing a URL in UI copy never reaches a provider.
-    const bindsRedirect =
-      /redirect_?[uU]ri["']?\s*[:=]\s*[`'"]?\$\{?\s*window\.location\.origin/;
+    const bindsRedirect = /redirect_?[uU]ri["']?\s*[:=]\s*[`'"]?\$\{?\s*window\.location\.origin/;
     const offenders = sourceFiles
       .filter(([file]) => file !== path.join('services', 'oauthService.ts'))
       .filter(([, source]) => bindsRedirect.test(source))

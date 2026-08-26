@@ -5,10 +5,12 @@ import { buildApiUrl } from './apiClient';
 import { getCurrentSessionToken, getOAuthPublicConfig } from './backend';
 import {
   CANONICAL_FRONTEND_CALLBACK,
-  FACEBOOK_AUTHORIZATION_ENDPOINT,
-  FACEBOOK_TOKEN_ENDPOINT,
+  FACEBOOK_PAGE_OAUTH_SCOPES,
   YOUTUBE_PRODUCTION_REDIRECT_URI,
+  getFacebookAuthorizationEndpoint,
+  getFacebookGraphBaseUrl,
   isLocalDevHost,
+  normalizeFacebookGraphApiVersion,
 } from './oauthProviderConfig';
 
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch' | 'tiktok';
@@ -92,7 +94,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         // Only ever the YouTube streaming client. ChatScream runs two distinct
         // Google clients and the account sign-in one has no YouTube scopes, so
         // borrowing it here fails at consent instead of at configuration time.
-        clientId: publicConfig.youtubeClientId || (isLocalBrowser() ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
+        clientId:
+          publicConfig.youtubeClientId ||
+          (isLocalBrowser() ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
         scopes: [
@@ -104,22 +108,21 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         ],
         redirectUri: getYouTubeRedirectUri(),
       };
-    case 'facebook':
+    case 'facebook': {
+      const graphApiVersion = normalizeFacebookGraphApiVersion(
+        publicConfig.facebookGraphApiVersion,
+      );
+      const graphBaseUrl = getFacebookGraphBaseUrl(graphApiVersion);
       return {
-        clientId: publicConfig.facebookAppId || (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
-        authorizationEndpoint: FACEBOOK_AUTHORIZATION_ENDPOINT,
-        tokenEndpoint: FACEBOOK_TOKEN_ENDPOINT,
-        scopes: [
-          'public_profile',
-          'email',
-          'pages_show_list',
-          'pages_read_engagement',
-          'pages_manage_posts',
-          'pages_manage_metadata',
-          'publish_video',
-        ],
+        clientId:
+          publicConfig.facebookAppId ||
+          (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
+        authorizationEndpoint: getFacebookAuthorizationEndpoint(graphApiVersion),
+        tokenEndpoint: `${graphBaseUrl}/oauth/access_token`,
+        scopes: [...FACEBOOK_PAGE_OAUTH_SCOPES],
         redirectUri: CANONICAL_FRONTEND_CALLBACK,
       };
+    }
     case 'twitch':
       return {
         clientId: publicConfig.twitchClientId || import.meta.env.VITE_TWITCH_CLIENT_ID || '',
@@ -272,7 +275,8 @@ export const disconnectPlatform = async (
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     const authHeader = getAuthorizationHeader();
-    if (!authHeader) return { success: false, error: 'You must be signed in to disconnect accounts.' };
+    if (!authHeader)
+      return { success: false, error: 'You must be signed in to disconnect accounts.' };
 
     await fetch(buildApiUrl('/api/oauth/disconnect'), {
       method: 'POST',
@@ -309,10 +313,13 @@ export const getConnectedPlatforms = async (
   try {
     const authHeader = getAuthorizationHeader();
     if (!authHeader) return {};
-    const response = await fetch(buildApiUrl(`/api/oauth/platforms?userId=${encodeURIComponent(userId)}`), {
-      headers: { Authorization: authHeader },
-      credentials: 'include',
-    });
+    const response = await fetch(
+      buildApiUrl(`/api/oauth/platforms?userId=${encodeURIComponent(userId)}`),
+      {
+        headers: { Authorization: authHeader },
+        credentials: 'include',
+      },
+    );
     if (!response.ok) return {};
     const payload = (await response.json()) as Record<string, any>;
     const data = (payload.platforms || payload.connectedPlatforms || {}) as Record<string, any>;
