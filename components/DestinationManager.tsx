@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Destination, Platform } from '../types';
 import {
   Trash2,
@@ -60,6 +60,60 @@ type OAuthOption = {
   label: string;
   description: string;
   icon: React.ReactNode;
+};
+
+// A destination connect is two steps: authorize the account, then pick the
+// channel/Page that becomes the actual streaming destination. On desktop the
+// OAuth popup posts back and step two runs in the still-live opener. On mobile
+// initiateOAuth navigates the current tab instead, so that page — and its
+// message listener — is destroyed before the provider ever returns. Without a
+// marker that survives the redirect, the user lands back in Studio with the
+// account connected and nothing to stream to.
+const PENDING_CONNECT_KEY = 'chatscream_pending_destination_connect';
+const PENDING_CONNECT_TTL_MS = 10 * 60 * 1000;
+
+const rememberPendingConnect = (platform: OAuthServicePlatform): void => {
+  try {
+    sessionStorage.setItem(
+      PENDING_CONNECT_KEY,
+      JSON.stringify({ platform, timestamp: Date.now() }),
+    );
+  } catch {
+    // Private-mode storage failures only cost the auto-open, not the connect.
+  }
+};
+
+const clearPendingConnect = (): void => {
+  try {
+    sessionStorage.removeItem(PENDING_CONNECT_KEY);
+  } catch {
+    // ignore
+  }
+};
+
+/**
+ * Read the marker without clearing it. The profile that proves the account is
+ * connected may not have loaded on the first render after the redirect, so the
+ * marker has to survive until it can actually be acted on.
+ */
+const readPendingConnect = (): OAuthServicePlatform | null => {
+  try {
+    const raw = sessionStorage.getItem(PENDING_CONNECT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { platform?: string; timestamp?: number };
+    if (!parsed?.platform || !parsed?.timestamp) {
+      clearPendingConnect();
+      return null;
+    }
+    // A stale marker must not pop a picker onto an unrelated later visit.
+    if (Date.now() - parsed.timestamp > PENDING_CONNECT_TTL_MS) {
+      clearPendingConnect();
+      return null;
+    }
+    return parsed.platform as OAuthServicePlatform;
+  } catch {
+    return null;
+  }
 };
 
 const DestinationManager: React.FC<DestinationManagerProps> = ({
@@ -314,6 +368,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
         }
 
         onPlatformConnected?.(platform);
+        // Handled here, so the redirect-return effect must not repeat it.
+        clearPendingConnect();
         // Move directly from account connection to selecting a real destination.
         if (platform === 'youtube') {
           setTimeout(() => openYouTubeChannelPicker(), 500);
@@ -326,6 +382,8 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     // Clean up listener after 5 minutes if OAuth never completes
     setTimeout(() => window.removeEventListener('message', onMessage), 5 * 60 * 1000);
 
+    // Survives the mobile full-page redirect, where the listener above cannot.
+    rememberPendingConnect(platform);
     initiateOAuth(platform, userId);
   };
 
@@ -384,6 +442,30 @@ const DestinationManager: React.FC<DestinationManagerProps> = ({
     }
     setFacebookPagesLoading(false);
   };
+
+  // Resume step two of a connect that crossed a full-page redirect (mobile).
+  // The popup path clears the marker itself, so this only fires when the
+  // listener in handleConnectOAuth never got the chance to run.
+  const resumedPendingConnect = useRef(false);
+  useEffect(() => {
+    if (resumedPendingConnect.current) return;
+    if (!userId || !connectedPlatforms) return;
+
+    const pending = readPendingConnect();
+    if (!pending) return;
+
+    // Wait for the profile to show the account as connected — on the first
+    // render back in Studio it may still be refreshing. A connect that genuinely
+    // failed leaves the marker to expire on its own rather than opening a picker
+    // that could only report an error.
+    if (!connectedPlatforms[pending]) return;
+
+    resumedPendingConnect.current = true;
+    clearPendingConnect();
+    if (pending === 'youtube') void openYouTubeChannelPicker();
+    else if (pending === 'facebook') void openFacebookPagePicker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, connectedPlatforms]);
 
   const handleAddFacebookPage = async (pageId: string | null, pageName: string) => {
     if (!destinationLimit.allowed) {
