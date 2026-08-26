@@ -7,10 +7,17 @@ const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
 
 describe('YouTube destination OAuth redirect', () => {
   it('uses the canonical backend Google callback in production', () => {
-    const source = read('services/oauthService.ts');
-    expect(source).toContain(
+    // The literal lives in services/oauthProviderConfig.ts — the one module
+    // allowed to spell out a provider-facing constant. oauthService must reach
+    // it by import, so a second copy can never drift out of sync.
+    const config = read('services/oauthProviderConfig.ts');
+    expect(config).toContain(
       "'https://api.chatscream.live/api/auth/oauth/google/callback'",
     );
+
+    const source = read('services/oauthService.ts');
+    expect(source).toContain('YOUTUBE_PRODUCTION_REDIRECT_URI');
+    expect(source).toContain("from './oauthProviderConfig'");
     expect(source).toContain('returnOrigin');
     expect(source).toContain("case 'youtube'");
     expect(source).toContain('redirectUri: getYouTubeRedirectUri()');

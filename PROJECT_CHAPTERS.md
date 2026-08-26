@@ -57,7 +57,6 @@
 | `pages/AuthPage.tsx` | Login/signup page |
 | `pages/OAuthCallback.tsx` | OAuth redirect handler |
 | `components/AuthStatusBanner.tsx` | Auth status indicator banner |
-| `components/OAuthSetup.tsx` | OAuth provider configuration UI |
 | `components/ProtectedRoute.tsx` | Route guard for authenticated pages |
 | `services/oauthService.ts` | OAuth flow implementation for streaming platforms |
 

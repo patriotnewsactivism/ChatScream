@@ -3,6 +3,13 @@
 
 import { buildApiUrl } from './apiClient';
 import { getCurrentSessionToken, getOAuthPublicConfig } from './backend';
+import {
+  CANONICAL_FRONTEND_CALLBACK,
+  FACEBOOK_AUTHORIZATION_ENDPOINT,
+  FACEBOOK_TOKEN_ENDPOINT,
+  YOUTUBE_PRODUCTION_REDIRECT_URI,
+  isLocalDevHost,
+} from './oauthProviderConfig';
 
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch' | 'tiktok';
 
@@ -42,9 +49,6 @@ export interface OAuthState {
 }
 
 const OAUTH_STATE_STORAGE_KEY = 'oauth_state';
-const YOUTUBE_PRODUCTION_REDIRECT_URI =
-  'https://api.chatscream.live/api/auth/oauth/google/callback';
-const CANONICAL_FRONTEND_CALLBACK = 'https://www.chatscream.live/oauth/callback';
 const oauthStateKey = (platform: OAuthPlatform): string => `${OAUTH_STATE_STORAGE_KEY}_${platform}`;
 
 let oauthPublicConfigCache: {
@@ -69,25 +73,14 @@ const getAuthorizationHeader = (): string | null => {
   return token ? `Bearer ${token}` : null;
 };
 
-const getBrowserCallbackUri = (): string => {
-  if (typeof window !== 'undefined') {
-    const host = window.location?.hostname || '';
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return `${window.location.origin}/oauth/callback`;
-    }
-  }
-  return CANONICAL_FRONTEND_CALLBACK;
-};
+const isLocalBrowser = (): boolean =>
+  typeof window !== 'undefined' && isLocalDevHost(window.location?.hostname || '');
 
-const getYouTubeRedirectUri = (): string => {
-  if (typeof window !== 'undefined') {
-    const host = window.location?.hostname || '';
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return `${window.location.origin}/oauth/callback`;
-    }
-  }
-  return YOUTUBE_PRODUCTION_REDIRECT_URI;
-};
+const getBrowserCallbackUri = (): string =>
+  isLocalBrowser() ? `${window.location.origin}/oauth/callback` : CANONICAL_FRONTEND_CALLBACK;
+
+const getYouTubeRedirectUri = (): string =>
+  isLocalBrowser() ? `${window.location.origin}/oauth/callback` : YOUTUBE_PRODUCTION_REDIRECT_URI;
 
 export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConfig> => {
   const publicConfig = await readOAuthPublicConfigCached();
@@ -96,7 +89,10 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
   switch (platform) {
     case 'youtube':
       return {
-        clientId: publicConfig.youtubeClientId || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
+        // Only ever the YouTube streaming client. ChatScream runs two distinct
+        // Google clients and the account sign-in one has no YouTube scopes, so
+        // borrowing it here fails at consent instead of at configuration time.
+        clientId: publicConfig.youtubeClientId || (isLocalBrowser() ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
         scopes: [
@@ -110,9 +106,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
       };
     case 'facebook':
       return {
-        clientId: publicConfig.facebookAppId || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
-        authorizationEndpoint: 'https://www.facebook.com/v26.0/dialog/oauth',
-        tokenEndpoint: 'https://graph.facebook.com/v26.0/oauth/access_token',
+        clientId: publicConfig.facebookAppId || (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
+        authorizationEndpoint: FACEBOOK_AUTHORIZATION_ENDPOINT,
+        tokenEndpoint: FACEBOOK_TOKEN_ENDPOINT,
         scopes: [
           'public_profile',
           'email',
