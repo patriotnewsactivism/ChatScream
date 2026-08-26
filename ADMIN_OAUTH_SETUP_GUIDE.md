@@ -92,21 +92,27 @@ AUTH_STATE_SECRET=any-random-string-for-csrf-protection
 1. Add **Facebook Login** product to your app
 2. Settings → Valid OAuth Redirect URIs:
    ```
+   https://www.chatscream.live/oauth/callback
    https://api.chatscream.live/api/auth/oauth/facebook/callback
    ```
+
+The frontend callback is used when a signed-in ChatScream user connects a
+Facebook streaming destination. The API callback is reserved for ChatScream
+account sign-in; do not substitute one for the other.
 
 ### Step 3: Add Permissions
 
 Required permissions for live streaming:
 
 - `public_profile`
-- `email`
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
-- `pages_manage_metadata`
-- `publish_video`
-- `live_video`
+
+Add the **Live Video API** feature separately. `publish_video` is required for
+personal-profile publishing, which ChatScream's automated Facebook flow does
+not offer. `pages_manage_metadata` is not used by the implemented Page Live
+flow.
 
 ### Step 4: Configure
 

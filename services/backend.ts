@@ -548,6 +548,7 @@ export interface AccessListConfig {
 export interface OAuthPublicConfig {
   youtubeClientId: string;
   facebookAppId: string;
+  facebookGraphApiVersion: string;
   twitchClientId: string;
   tiktokClientKey: string;
   redirectUriBase: string;
@@ -593,7 +594,11 @@ const specialAffiliateCodes: Record<string, AffiliateCode> = {
 
 const fallbackProfileFromUser = (user: AuthUser): UserProfile => {
   const email = (user.email || '').trim().toLowerCase();
-  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org', 'patriotnewsactivism@gmail.com'];
+  const adminEmails = [
+    'don@donmatthews.live',
+    'mreardon@wtpnews.org',
+    'patriotnewsactivism@gmail.com',
+  ];
   const isAdmin = adminEmails.includes(email);
   return {
     uid: user.uid,
@@ -627,7 +632,11 @@ const normalizeProfile = (value: unknown): UserProfile | null => {
   const displayName = toStringValue(raw.displayName).trim();
 
   // Admin email override — always grant full access
-  const adminEmails = ['don@donmatthews.live', 'mreardon@wtpnews.org', 'patriotnewsactivism@gmail.com'];
+  const adminEmails = [
+    'don@donmatthews.live',
+    'mreardon@wtpnews.org',
+    'patriotnewsactivism@gmail.com',
+  ];
   const isAdmin = adminEmails.includes(email.toLowerCase());
 
   return {
@@ -952,6 +961,7 @@ export const getOAuthPublicConfig = async (): Promise<OAuthPublicConfig> => {
   return {
     youtubeClientId: toStringValue(data?.youtubeClientId),
     facebookAppId: toStringValue(data?.facebookAppId),
+    facebookGraphApiVersion: toStringValue(data?.facebookGraphApiVersion),
     twitchClientId: toStringValue(data?.twitchClientId),
     tiktokClientKey: toStringValue(data?.tiktokClientKey),
     redirectUriBase: toStringValue(data?.redirectUriBase),

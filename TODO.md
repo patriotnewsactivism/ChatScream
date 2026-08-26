@@ -29,7 +29,7 @@ here — corrected that. Two real bugs were found and fixed:
   `{type: 'retry_destination', destId}` after a destination errors, but
   `server/index.js` never handled that message type — a failed destination
   could never recover without the user removing and re-adding it (which used
-  to restart *every* destination, see next point).
+  to restart _every_ destination, see next point).
 - **One shared FFmpeg process for all destinations.** `server/index.js`
   multiplexed every RTMP output through a single `ffmpeg` invocation. A bad
   stream key on one platform, or any hot-swap of destinations, could take
@@ -86,7 +86,7 @@ The #1 promised feature. OAuth connects and "Go Live" pushes video to YouTube.
 
 - [x] 🔴 **Facebook "Create Live" returns `streamUrl` but no `streamKey`** — `DestinationManager.tsx` parses this into `serverUrl`/`streamKey`.
 - [x] 🔴 **Facebook tokens auto-refresh** — `refreshFacebookTokenIfNeeded()` in `server/app.js` extends the token before any Graph API call needs it (create-live, pages list, ingest config).
-- [x] 🟡 **Facebook Page selection** — Picker UI prompts for Pages vs Personal Profile.
+- [x] 🟡 **Facebook Page selection** — Picker lists managed Pages and creates a Page LiveVideo over RTMPS.
 
 ---
 
@@ -169,7 +169,7 @@ and the alert never made it into the actual broadcast frame. Fixed
 ## 11. 🟢 CLOUD STREAMING (VM-based) — Not implemented, actively wanted
 
 This is a separate feature from the multi-destination relay in §1–4 above
-(which *is* real and working): an always-on, browser-independent cloud
+(which _is_ real and working): an always-on, browser-independent cloud
 encoding session (EC2-backed) so a stream can keep running without a live
 browser tab, with true zero-bandwidth encoding.
 

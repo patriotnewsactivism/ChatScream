@@ -412,8 +412,10 @@ const App: FC = () => {
         setHighlightedCommentId(null);
         setGraphicsState((state) => ({
           ...state,
-          lowerThird:
-            commentPreviousLowerThirdRef.current || { ...state.lowerThird, visible: false },
+          lowerThird: commentPreviousLowerThirdRef.current || {
+            ...state.lowerThird,
+            visible: false,
+          },
         }));
         commentPreviousLowerThirdRef.current = null;
         return;
@@ -816,6 +818,7 @@ const App: FC = () => {
                   ? {
                       accessToken: config.facebook.accessToken,
                       liveVideoId: config.facebook.liveVideoId,
+                      graphApiVersion: config.facebook.graphApiVersion,
                     }
                   : undefined,
             });
@@ -862,11 +865,15 @@ const App: FC = () => {
     }
     lastChatActivityAtRef.current = Date.now();
 
-    const isQuestion = /\?|^(who|what|when|where|why|how|can|could|is|are|do|does|did|will|would)\b/i.test(
-      candidate.content.trim(),
-    );
+    const isQuestion =
+      /\?|^(who|what|when|where|why|how|can|could|is|are|do|does|did|will|would)\b/i.test(
+        candidate.content.trim(),
+      );
     const isMention = /chat\s?scream|ai\s?co-?host|@chatscream/i.test(candidate.content);
-    if ((!isQuestion || !aiModeratorConfig.autoReplyQuestions) && (!isMention || !aiModeratorConfig.respondToMentions)) {
+    if (
+      (!isQuestion || !aiModeratorConfig.autoReplyQuestions) &&
+      (!isMention || !aiModeratorConfig.respondToMentions)
+    ) {
       return;
     }
 
@@ -879,13 +886,14 @@ const App: FC = () => {
       displayName: message.displayName,
       content: message.content,
     }));
-    const streamContext = [
-      activeScene?.name ? `Scene: ${activeScene.name}` : '',
-      branding.tickerText ? `Ticker: ${branding.tickerText}` : '',
-      branding.presenterName ? `Host: ${branding.presenterName}` : '',
-    ]
-      .filter(Boolean)
-      .join(' | ') || 'Live stream';
+    const streamContext =
+      [
+        activeScene?.name ? `Scene: ${activeScene.name}` : '',
+        branding.tickerText ? `Ticker: ${branding.tickerText}` : '',
+        branding.presenterName ? `Host: ${branding.presenterName}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ') || 'Live stream';
     const transcript = streamTranscript.exportTranscript().slice(-5000);
 
     void (async () => {
@@ -912,7 +920,11 @@ const App: FC = () => {
         }
         if (!decision.reply) return;
 
-        if (decision.action === 'suggest' || decision.confidence < 0.62 || !aiModeratorConfig.publicReplies) {
+        if (
+          decision.action === 'suggest' ||
+          decision.confidence < 0.62 ||
+          !aiModeratorConfig.publicReplies
+        ) {
           chatAggregator.injectMessage({
             id: `ai_suggest_${candidate.id}`,
             platform: 'local',
@@ -924,7 +936,10 @@ const App: FC = () => {
         }
 
         if (decision.action === 'reply') {
-          const publicReply = `[AI Co-Host] @${candidate.displayName} ${decision.reply}`.slice(0, 450);
+          const publicReply = `[AI Co-Host] @${candidate.displayName} ${decision.reply}`.slice(
+            0,
+            450,
+          );
           const sent = await chatAggregator.sendMessage(candidate.platform, publicReply);
           if (sent) {
             const sentAt = Date.now();
@@ -1085,7 +1100,9 @@ const App: FC = () => {
         setGraphicsState((current) => ({
           ...current,
           lowerThird:
-            payload.lowerThird === false ? current.lowerThird : { ...current.lowerThird, visible: false },
+            payload.lowerThird === false
+              ? current.lowerThird
+              : { ...current.lowerThird, visible: false },
         }));
         if (payload.ticker !== false) {
           setBranding((current) => ({ ...current, showTicker: false }));
