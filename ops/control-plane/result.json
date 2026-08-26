@@ -1,9 +1,9 @@
 {
-  "requestId": "chat-ops-20260824-deploy-oauth-backend",
+  "requestId": "chat-ops-20260826-facebook-live-oauth",
   "action": "deploy_backend",
   "success": false,
   "message": "Artifact Registry repository is missing.",
-  "startedAt": "2026-08-25T01:30:17Z",
-  "completedAt": "2026-08-25T01:30:19Z",
+  "startedAt": "2026-08-26T23:42:46Z",
+  "completedAt": "2026-08-26T23:42:51Z",
   "details": {}
 }
