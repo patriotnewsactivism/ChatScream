@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260824-deploy-oauth-backend",
+  "id": "chat-ops-20260826-facebook-live-oauth",
   "action": "deploy_backend",
-  "purpose": "Deploy current main backend so live Google account sign-in and YouTube destination OAuth use the canonical API callback"
+  "purpose": "Deploy merged Facebook Page Live OAuth v26 configuration and minimal permission set"
 }
