@@ -12,16 +12,22 @@ interface MediaBinProps {
   onUpload: (file: File, type: MediaType) => void;
   onDelete: (id: string) => void;
   onToggleAsset: (id: string, type: MediaType) => void;
+  onTabChange?: (tab: MediaType) => void;
 }
 
-const MediaBin: React.FC<MediaBinProps> = ({ 
-  assets, 
-  activeAssets, 
-  onUpload, 
-  onDelete, 
-  onToggleAsset 
+const MediaBin: React.FC<MediaBinProps> = ({
+  assets,
+  activeAssets,
+  onUpload,
+  onDelete,
+  onToggleAsset,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<MediaType>('image');
+  const [activeTab, setActiveTabState] = useState<MediaType>('image');
+  const setActiveTab = (tab: MediaType) => {
+    setActiveTabState(tab);
+    onTabChange?.(tab);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

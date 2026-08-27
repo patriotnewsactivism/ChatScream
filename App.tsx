@@ -21,6 +21,7 @@ import { useStreamTranscript } from './hooks/useStreamTranscript';
 import CanvasCompositor, { CanvasRef, CanvasResolution } from './components/CanvasCompositor';
 import ProgramPreview from './components/ProgramPreview';
 import DestinationManager from './components/DestinationManager';
+import MediaPreview from './components/MediaPreview';
 import LayoutSelector from './components/LayoutSelector';
 import MediaBin from './components/MediaBin';
 import AudioMixer from './components/AudioMixer';
@@ -160,6 +161,7 @@ const App: FC = () => {
   const [micVolume, setMicVolume] = useState(1.0);
   const [musicVolume, setMusicVolume] = useState(0.3);
   const [videoVolume, setVideoVolume] = useState(0.8);
+  const [mediaTab, setMediaTab] = useState<MediaType>('image');
   const [isMicMuted, setIsMicMuted] = useState(false);
 
   // branding
@@ -2118,18 +2120,30 @@ const App: FC = () => {
                   onUpload={handleMediaUpload}
                   onDelete={handleMediaDelete}
                   onToggleAsset={handleToggleMedia}
+                  onTabChange={setMediaTab}
                 />
               </div>
-              <div className="flex-1">
-                <MusicPlayer
-                  playlist={assets.filter((a) => a.type === 'audio')}
-                  activeTrackId={activeAudioId}
-                  onTrackSelect={(id) => handleToggleMedia(id!, 'audio')}
-                  volume={musicVolume}
-                  onVolumeChange={setMusicVolume}
-                  onDeleteTrack={handleMediaDelete}
-                  onAudioInit={setMusicElement}
-                />
+              <div className="flex-1 min-w-0">
+                {mediaTab === 'audio' ? (
+                  <MusicPlayer
+                    playlist={assets.filter((a) => a.type === 'audio')}
+                    activeTrackId={activeAudioId}
+                    onTrackSelect={(id) => handleToggleMedia(id!, 'audio')}
+                    volume={musicVolume}
+                    onVolumeChange={setMusicVolume}
+                    onDeleteTrack={handleMediaDelete}
+                    onAudioInit={setMusicElement}
+                  />
+                ) : (
+                  <MediaPreview
+                    kind={mediaTab === 'video' ? 'video' : 'image'}
+                    asset={assets.find(
+                      (a) => a.id === (mediaTab === 'video' ? activeVideoId : activeImageId),
+                    )}
+                    volume={videoVolume}
+                    onVolumeChange={mediaTab === 'video' ? setVideoVolume : undefined}
+                  />
+                )}
               </div>
             </div>
           )}
