@@ -59,7 +59,11 @@ describe('LandingPage admin access controls', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: /admin/i })).toBeInTheDocument();
+    // Navigation to the admin area is a link, not a button — assert it both
+    // renders and actually points at /admin.
+    const adminLink = screen.getByRole('link', { name: /admin/i });
+    expect(adminLink).toBeInTheDocument();
+    expect(adminLink).toHaveAttribute('href', '/admin');
   });
 
   it('does not show the admin button for legacy admin email without admin role', () => {
