@@ -102,23 +102,31 @@ account sign-in; do not substitute one for the other.
 
 ### Step 3: Add Permissions
 
-Required permissions for live streaming:
+The Facebook streaming destination flow (`FACEBOOK_PAGE_OAUTH_SCOPES` in
+`shared/facebookOAuth.js`) requests only:
 
 - `public_profile`
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
 
-Add the **Live Video API** feature separately. `publish_video` is required for
-personal-profile publishing, which ChatScream's automated Facebook flow does
-not offer. `pages_manage_metadata` is not used by the implemented Page Live
-flow.
+Keep this list minimal — requesting a permission the implementation doesn't use
+gets the whole scope list rejected as "Invalid Scopes" by the classic Login
+dialog. `publish_video` (personal-profile publishing) and `pages_manage_metadata`
+(Page settings management) are separate use cases and are intentionally not
+requested; ChatScream's automated flow only lists Pages, reads their engagement,
+and creates a Page Live broadcast.
+
+ChatScream account sign-in (unrelated to streaming destinations) uses its own,
+separate scope set: `public_profile` + `email`
+(`FACEBOOK_ACCOUNT_OAUTH_SCOPES`).
 
 ### Step 4: Configure
 
 ```env
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
+FACEBOOK_GRAPH_API_VERSION=v26.0
 ```
 
 ---
@@ -207,6 +215,7 @@ YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=your-client-secret
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
+FACEBOOK_GRAPH_API_VERSION=v26.0
 TWITCH_CLIENT_ID=your-client-id
 TWITCH_CLIENT_SECRET=your-client-secret
 AUTH_STATE_SECRET=your-random-secret

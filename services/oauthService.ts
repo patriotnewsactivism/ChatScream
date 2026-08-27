@@ -208,11 +208,14 @@ export const getAuthorizationUrl = async (
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: 'code',
-    scope: config.scopes.join(' '),
     state,
     access_type: 'offline',
     prompt: 'consent',
   });
+
+  if (config.scopes.length > 0) {
+    params.set('scope', config.scopes.join(' '));
+  }
 
   if (platform === 'youtube') params.set('include_granted_scopes', 'true');
   if (platform === 'twitch') params.set('force_verify', 'true');
