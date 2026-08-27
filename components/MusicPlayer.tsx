@@ -40,21 +40,37 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const activeTrack = playlist.find((t) => t.id === activeTrackId);
 
+  // Keep isPlaying tied to the element rather than to what we *asked* it to do —
+  // a rejected play() left the transport reading "Now Playing" over silence.
+  useEffect(() => {
+    const audio = audioRef.current;
+    const onPlay = () => setIsPlaying(true);
+    const onStop = () => setIsPlaying(false);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onStop);
+    audio.addEventListener('ended', onStop);
+    return () => {
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onStop);
+      audio.removeEventListener('ended', onStop);
+    };
+  }, []);
+
   useEffect(() => {
     const audio = audioRef.current;
     audio.crossOrigin = 'anonymous';
 
-    if (activeTrack) {
-      if (audio.src !== activeTrack.url) {
-        audio.src = activeTrack.url;
-        if (isPlaying) audio.play().catch((e) => console.warn('Audio play failed', e));
-      }
-    } else {
+    if (!activeTrack) {
       audio.pause();
-      audio.src = '';
-      setIsPlaying(false);
+      audio.removeAttribute('src');
+      audio.load();
+      return;
     }
-  }, [activeTrackId]);
+
+    if (audio.src !== activeTrack.url) audio.src = activeTrack.url;
+    // Selecting a track is the play gesture — the bin already reports it as playing.
+    audio.play().catch((e) => console.warn('Audio play failed', e));
+  }, [activeTrackId, activeTrack?.url]);
 
   useEffect(() => {
     audioRef.current.volume = volume;
@@ -62,12 +78,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const togglePlay = () => {
     if (!activeTrack) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch((e) => console.warn('Audio play failed', e));
-    }
-    setIsPlaying(!isPlaying);
+    if (isPlaying) audioRef.current.pause();
+    else audioRef.current.play().catch((e) => console.warn('Audio play failed', e));
   };
 
   const handleNext = () => {
@@ -75,7 +87,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentIndex = playlist.findIndex((t) => t.id === activeTrackId);
     const nextIndex = (currentIndex + 1) % playlist.length;
     onTrackSelect(playlist[nextIndex].id);
-    setIsPlaying(true);
   };
 
   const handlePrev = () => {
@@ -83,7 +94,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const currentIndex = playlist.findIndex((t) => t.id === activeTrackId);
     const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
     onTrackSelect(playlist[prevIndex].id);
-    setIsPlaying(true);
   };
 
   const toggleHighContrastMode = () => {

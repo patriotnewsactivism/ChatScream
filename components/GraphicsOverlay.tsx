@@ -128,17 +128,20 @@ const GraphicsOverlay: React.FC<GraphicsOverlayProps> = ({ state, onChange, comp
   return (
     <div className="space-y-3">
       {/* Section tabs */}
-      <div className="flex gap-1 bg-dark-800 rounded-lg p-1">
+      {/* Wraps to two rows rather than clipping the last tab when the host
+          column is narrow — this strip lives in a fixed-width sidebar. */}
+      <div className="flex flex-wrap gap-1 bg-dark-800 rounded-lg p-1">
         {sections.map((s) => (
           <button
             key={s.key}
             onClick={() => setActiveSection(s.key)}
-            className={`flex items-center gap-1.5 flex-1 justify-center py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+            title={s.label}
+            className={`flex items-center gap-1.5 flex-1 basis-[calc(50%-0.25rem)] min-w-0 justify-center py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
               activeSection === s.key ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
-            {s.icon}
-            {!compact && s.label}
+            <span className="shrink-0">{s.icon}</span>
+            {!compact && <span className="truncate">{s.label}</span>}
           </button>
         ))}
       </div>
