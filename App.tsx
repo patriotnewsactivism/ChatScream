@@ -18,6 +18,7 @@ import { useResourceGuard } from './hooks/useResourceGuard';
 import { useLocalRecording } from './hooks/useLocalRecording';
 import { useEvidenceMarkers } from './hooks/useEvidenceMarkers';
 import { useStreamTranscript } from './hooks/useStreamTranscript';
+import { useScenes } from './hooks/useScenes';
 import CanvasCompositor, { CanvasRef, CanvasResolution } from './components/CanvasCompositor';
 import ProgramPreview from './components/ProgramPreview';
 import DestinationManager from './components/DestinationManager';
@@ -189,6 +190,18 @@ const App: FC = () => {
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [activeScene, setActiveScene] = useState<Scene | null>(null);
+  const sceneLibrary = useScenes();
+
+  // The live scene is a snapshot, so an edit to its library entry (rename, or a
+  // delete while it is on air) has to be mirrored onto what the canvas renders.
+  useEffect(() => {
+    setActiveScene((current) => {
+      if (!current) return current;
+      const latest = sceneLibrary.scenes.find((s) => s.id === current.id);
+      if (!latest) return null;
+      return latest === current ? current : latest;
+    });
+  }, [sceneLibrary.scenes]);
   const [liveMessages, setLiveMessages] = useState<AggregatedMessage[]>([]);
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
   const commentPreviousLowerThirdRef = useRef<GraphicsState['lowerThird'] | null>(null);
@@ -1197,7 +1210,7 @@ const App: FC = () => {
       {/* HTML/CSS Scream Overlay over multiview */}
       <ScreamOverlay alert={activeScream} onDismiss={() => setActiveScream(null)} />
       {/* Quick controls bar (below multiview) */}
-      <div className="flex items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-xl mx-auto w-fit">
+      <div className="flex flex-wrap items-center justify-center gap-2 max-w-full bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-3xl border border-gray-700 shadow-xl mx-auto w-fit">
         <button
           onClick={toggleCamera}
           className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
@@ -1279,8 +1292,11 @@ const App: FC = () => {
     </div>
   ) : (
     // ── Single canvas (original behavior) ──
+    // On phones the controls sit *below* the canvas instead of floating on it:
+    // wrapped onto three rows they covered most of a 16:9 preview.
+    <div className={`relative w-full ${isMobile ? 'shrink-0 space-y-2' : ''}`}>
     <div
-      className={`relative w-full ${isMobile ? 'shrink-0' : ''}`}
+      className="relative w-full"
       style={{ aspectRatio: '16/9', maxHeight: isMobile ? '45vh' : undefined }}
     >
       <CanvasCompositor
@@ -1330,8 +1346,17 @@ const App: FC = () => {
         </div>
       )}
 
-      {/* Quick controls bar */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 shadow-2xl">
+      </div>
+
+      {/* Quick controls bar. Floats over the canvas on desktop, sits under it on
+          phones, and wraps rather than overflowing at either size. */}
+      <div
+        className={`flex flex-wrap items-center justify-center gap-2 bg-dark-900/85 backdrop-blur-md px-4 py-2 rounded-3xl border border-gray-700 ${
+          isMobile
+            ? 'w-full shadow-lg'
+            : 'absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] shadow-2xl'
+        }`}
+      >
         <button
           onClick={toggleCamera}
           className={`p-2 rounded-full ${cameraStream ? 'bg-brand-500' : 'bg-gray-800 text-gray-400'}`}
@@ -1598,7 +1623,25 @@ const App: FC = () => {
     <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
       {!isMobile && (
         <div className="w-64 border-r border-gray-800 p-4 overflow-y-auto space-y-4">
-          <SceneSelector activeSceneId={activeScene?.id || null} onSceneSelect={setActiveScene} />
+          <SceneSelector
+            scenes={sceneLibrary.scenes}
+            activeSceneId={activeScene?.id || null}
+            onSceneSelect={setActiveScene}
+            cameraStream={cameraStream}
+            screenStream={screenStream}
+            onAddScene={() => setActiveScene(sceneLibrary.addScene())}
+            onDuplicateScene={(id) => {
+              const copy = sceneLibrary.duplicateScene(id);
+              if (copy) setActiveScene(copy);
+            }}
+            onRenameScene={sceneLibrary.renameScene}
+            onDeleteScene={sceneLibrary.deleteScene}
+            onMoveScene={sceneLibrary.moveScene}
+            onResetScenes={() => {
+              sceneLibrary.resetScenes();
+              setActiveScene(null);
+            }}
+          />
           {/* Graphics panel on desktop sidebar */}
           <div className="border-t border-gray-700 pt-3">
             <GraphicsOverlay state={graphicsState} onChange={setGraphicsState} />
@@ -1745,6 +1788,30 @@ const App: FC = () => {
               )}
             </div>
 
+            {/* Scenes — the phone layout left this space empty, and the
+                thumbnail switcher is the thing worth putting in it. */}
+            <div className="border-t border-gray-800 pt-3">
+              <SceneSelector
+                scenes={sceneLibrary.scenes}
+                activeSceneId={activeScene?.id || null}
+                onSceneSelect={setActiveScene}
+                cameraStream={cameraStream}
+                screenStream={screenStream}
+                onAddScene={() => setActiveScene(sceneLibrary.addScene())}
+                onDuplicateScene={(id) => {
+                  const copy = sceneLibrary.duplicateScene(id);
+                  if (copy) setActiveScene(copy);
+                }}
+                onRenameScene={sceneLibrary.renameScene}
+                onDeleteScene={sceneLibrary.deleteScene}
+                onMoveScene={sceneLibrary.moveScene}
+                onResetScenes={() => {
+                  sceneLibrary.resetScenes();
+                  setActiveScene(null);
+                }}
+              />
+            </div>
+
             {/* Slide-up drawer toggle */}
             <button
               onClick={() => setShowMobileDrawer(!showMobileDrawer)}
@@ -1841,10 +1908,11 @@ const App: FC = () => {
             )}
           </div>
         ) : (
-          // Desktop: two-column grid
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
+          // Desktop: two-column grid. Collapses to one column before the
+          // columns get narrow enough to clip the layout row or the mixer.
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
+            <div className="space-y-4 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <LayoutSelector currentLayout={layout} onSelect={setLayout} />
                 <button
                   onClick={() => setMultiviewEnabled((v) => !v)}

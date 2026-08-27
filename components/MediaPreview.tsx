@@ -61,7 +61,11 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({ kind, asset, volume = 1, on
             loop
             playsInline
             controls
-          />
+          >
+            {/* User-supplied clips carry no caption track; the element is a
+                local preview of a file the operator just picked. */}
+            <track kind="captions" />
+          </video>
         )}
         {asset && kind === 'image' && (
           <img src={asset.url} alt={asset.name} className="max-h-full max-w-full rounded" />
