@@ -5,10 +5,12 @@ import { buildApiUrl } from './apiClient';
 import { getCurrentSessionToken, getOAuthPublicConfig } from './backend';
 import {
   CANONICAL_FRONTEND_CALLBACK,
-  FACEBOOK_AUTHORIZATION_ENDPOINT,
-  FACEBOOK_TOKEN_ENDPOINT,
+  FACEBOOK_PAGE_OAUTH_SCOPES,
   YOUTUBE_PRODUCTION_REDIRECT_URI,
+  getFacebookAuthorizationEndpoint,
+  getFacebookGraphBaseUrl,
   isLocalDevHost,
+  normalizeFacebookGraphApiVersion,
 } from './oauthProviderConfig';
 
 export type OAuthPlatform = 'youtube' | 'facebook' | 'twitch' | 'tiktok';
@@ -19,10 +21,6 @@ export interface OAuthConfig {
   tokenEndpoint: string;
   scopes: string[];
   redirectUri: string;
-  // Facebook Login for Business config ID. When set, this replaces `scopes` in the
-  // authorization request — Page/Business permissions can only be granted through a
-  // Login Configuration (config_id), not as raw scope names.
-  configId?: string;
 }
 
 export interface ConnectedAccount {
@@ -96,7 +94,9 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         // Only ever the YouTube streaming client. ChatScream runs two distinct
         // Google clients and the account sign-in one has no YouTube scopes, so
         // borrowing it here fails at consent instead of at configuration time.
-        clientId: publicConfig.youtubeClientId || (isLocalBrowser() ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
+        clientId:
+          publicConfig.youtubeClientId ||
+          (isLocalBrowser() ? import.meta.env.VITE_YOUTUBE_CLIENT_ID || '' : ''),
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
         scopes: [
@@ -109,22 +109,18 @@ export const getOAuthConfig = async (platform: OAuthPlatform): Promise<OAuthConf
         redirectUri: getYouTubeRedirectUri(),
       };
     case 'facebook': {
-      // Page/Business permissions (pages_show_list, pages_read_engagement, pages_manage_posts,
-      // pages_manage_metadata, publish_video) are no longer grantable as raw OAuth scopes —
-      // Meta rejects them with "Invalid Scopes" on the classic dialog. They must come from a
-      // Facebook Login for Business configuration, referenced by config_id. Until that config
-      // is set up, fall back to the scopes that still work through classic login so sign-in
-      // doesn't break.
-      const configId =
-        publicConfig.facebookLoginConfigId ||
-        (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_LOGIN_CONFIG_ID || '' : '');
+      const graphApiVersion = normalizeFacebookGraphApiVersion(
+        publicConfig.facebookGraphApiVersion,
+      );
+      const graphBaseUrl = getFacebookGraphBaseUrl(graphApiVersion);
       return {
-        clientId: publicConfig.facebookAppId || (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
-        authorizationEndpoint: FACEBOOK_AUTHORIZATION_ENDPOINT,
-        tokenEndpoint: FACEBOOK_TOKEN_ENDPOINT,
-        scopes: configId ? [] : ['public_profile', 'email'],
+        clientId:
+          publicConfig.facebookAppId ||
+          (isLocalBrowser() ? import.meta.env.VITE_FACEBOOK_APP_ID || '' : ''),
+        authorizationEndpoint: getFacebookAuthorizationEndpoint(graphApiVersion),
+        tokenEndpoint: `${graphBaseUrl}/oauth/access_token`,
+        scopes: [...FACEBOOK_PAGE_OAUTH_SCOPES],
         redirectUri: CANONICAL_FRONTEND_CALLBACK,
-        configId: configId || undefined,
       };
     }
     case 'twitch':
@@ -217,10 +213,7 @@ export const getAuthorizationUrl = async (
     prompt: 'consent',
   });
 
-  if (config.configId) {
-    // Facebook Login for Business: permissions live on the config, not in `scope`.
-    params.set('config_id', config.configId);
-  } else if (config.scopes.length > 0) {
+  if (config.scopes.length > 0) {
     params.set('scope', config.scopes.join(' '));
   }
 
@@ -285,7 +278,8 @@ export const disconnectPlatform = async (
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     const authHeader = getAuthorizationHeader();
-    if (!authHeader) return { success: false, error: 'You must be signed in to disconnect accounts.' };
+    if (!authHeader)
+      return { success: false, error: 'You must be signed in to disconnect accounts.' };
 
     await fetch(buildApiUrl('/api/oauth/disconnect'), {
       method: 'POST',
@@ -322,10 +316,13 @@ export const getConnectedPlatforms = async (
   try {
     const authHeader = getAuthorizationHeader();
     if (!authHeader) return {};
-    const response = await fetch(buildApiUrl(`/api/oauth/platforms?userId=${encodeURIComponent(userId)}`), {
-      headers: { Authorization: authHeader },
-      credentials: 'include',
-    });
+    const response = await fetch(
+      buildApiUrl(`/api/oauth/platforms?userId=${encodeURIComponent(userId)}`),
+      {
+        headers: { Authorization: authHeader },
+        credentials: 'include',
+      },
+    );
     if (!response.ok) return {};
     const payload = (await response.json()) as Record<string, any>;
     const data = (payload.platforms || payload.connectedPlatforms || {}) as Record<string, any>;

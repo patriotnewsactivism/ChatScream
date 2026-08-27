@@ -92,41 +92,42 @@ AUTH_STATE_SECRET=any-random-string-for-csrf-protection
 1. Add **Facebook Login** product to your app
 2. Settings → Valid OAuth Redirect URIs:
    ```
+   https://www.chatscream.live/oauth/callback
    https://api.chatscream.live/api/auth/oauth/facebook/callback
    ```
 
+The frontend callback is used when a signed-in ChatScream user connects a
+Facebook streaming destination. The API callback is reserved for ChatScream
+account sign-in; do not substitute one for the other.
+
 ### Step 3: Add Permissions
 
-`public_profile` and `email` work through the classic Login dialog as plain OAuth
-scopes. The rest do not — Meta rejects them as "Invalid Scopes" if requested that
-way:
+The Facebook streaming destination flow (`FACEBOOK_PAGE_OAUTH_SCOPES` in
+`shared/facebookOAuth.js`) requests only:
 
+- `public_profile`
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
-- `pages_manage_metadata`
-- `publish_video`
-- `live_video`
 
-These Page/Business permissions can only be granted through a **Facebook Login for
-Business** configuration:
+Keep this list minimal — requesting a permission the implementation doesn't use
+gets the whole scope list rejected as "Invalid Scopes" by the classic Login
+dialog. `publish_video` (personal-profile publishing) and `pages_manage_metadata`
+(Page settings management) are separate use cases and are intentionally not
+requested; ChatScream's automated flow only lists Pages, reads their engagement,
+and creates a Page Live broadcast.
 
-1. In the app dashboard, go to **Facebook Login → Configurations**
-2. Create a new configuration, select the permissions above, and save
-3. Copy the generated **Configuration ID**
-4. Submit the app for App Review requesting these permissions (Advanced Access) —
-   until approved, only admins/developers/testers on the app can complete this flow
+ChatScream account sign-in (unrelated to streaming destinations) uses its own,
+separate scope set: `public_profile` + `email`
+(`FACEBOOK_ACCOUNT_OAUTH_SCOPES`).
 
 ### Step 4: Configure
 
 ```env
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
-FACEBOOK_LOGIN_CONFIG_ID=your-login-configuration-id
+FACEBOOK_GRAPH_API_VERSION=v26.0
 ```
-
-Without `FACEBOOK_LOGIN_CONFIG_ID` set, ChatScream falls back to requesting only
-`public_profile` + `email` so basic sign-in keeps working.
 
 ---
 
@@ -214,7 +215,7 @@ YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=your-client-secret
 FACEBOOK_APP_ID=your-app-id
 FACEBOOK_APP_SECRET=your-app-secret
-FACEBOOK_LOGIN_CONFIG_ID=your-login-configuration-id
+FACEBOOK_GRAPH_API_VERSION=v26.0
 TWITCH_CLIENT_ID=your-client-id
 TWITCH_CLIENT_SECRET=your-client-secret
 AUTH_STATE_SECRET=your-random-secret

@@ -11,6 +11,8 @@
  * platform connector is active and authenticated.
  */
 
+import { getFacebookGraphBaseUrl } from '../shared/facebookOAuth.js';
+
 export type ChatPlatform = 'youtube' | 'twitch' | 'facebook' | 'local';
 
 export interface AggregatedMessage {
@@ -70,20 +72,23 @@ class YouTubeChatConnector {
   async sendMessage(content: string): Promise<boolean> {
     const messageText = sanitizeOutbound(content, 200);
     if (!messageText || this.disposed) return false;
-    const res = await fetch('https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.config.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        snippet: {
-          liveChatId: this.config.liveChatId,
-          type: 'textMessageEvent',
-          textMessageDetails: { messageText },
+    const res = await fetch(
+      'https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.config.accessToken}`,
+          'Content-Type': 'application/json',
         },
-      }),
-    });
+        body: JSON.stringify({
+          snippet: {
+            liveChatId: this.config.liveChatId,
+            type: 'textMessageEvent',
+            textMessageDetails: { messageText },
+          },
+        }),
+      },
+    );
     if (!res.ok) {
       console.warn('[YouTube Chat] Send failed:', res.status);
       return false;
@@ -101,10 +106,9 @@ class YouTubeChatConnector {
       });
       if (this.nextPageToken) params.set('pageToken', this.nextPageToken);
 
-      const res = await fetch(
-        `https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`,
-        { headers: { Authorization: `Bearer ${this.config.accessToken}` } },
-      );
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`, {
+        headers: { Authorization: `Bearer ${this.config.accessToken}` },
+      });
 
       if (!res.ok) {
         console.warn('[YouTube Chat] Poll failed:', res.status);
@@ -174,7 +178,8 @@ class TwitchChatConnector {
 
   async sendMessage(content: string): Promise<boolean> {
     const message = sanitizeOutbound(content, 450);
-    if (!message || this.disposed || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if (!message || this.disposed || !this.ws || this.ws.readyState !== WebSocket.OPEN)
+      return false;
     this.ws.send(`PRIVMSG #${this.config.channel.toLowerCase()} :${message}`);
     return true;
   }
@@ -255,6 +260,7 @@ class TwitchChatConnector {
 interface FacebookConfig {
   accessToken: string;
   liveVideoId: string;
+  graphApiVersion?: string;
 }
 
 class FacebookChatConnector {
@@ -285,7 +291,7 @@ class FacebookChatConnector {
     if (!message || this.disposed) return false;
     const body = new URLSearchParams({ message, access_token: this.config.accessToken });
     const res = await fetch(
-      `https://graph.facebook.com/v18.0/${encodeURIComponent(this.config.liveVideoId)}/comments`,
+      `${getFacebookGraphBaseUrl(this.config.graphApiVersion)}/${encodeURIComponent(this.config.liveVideoId)}/comments`,
       { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body },
     );
     if (!res.ok) {
@@ -306,7 +312,7 @@ class FacebookChatConnector {
       });
 
       const res = await fetch(
-        `https://graph.facebook.com/v18.0/${this.config.liveVideoId}/comments?${params}`,
+        `${getFacebookGraphBaseUrl(this.config.graphApiVersion)}/${encodeURIComponent(this.config.liveVideoId)}/comments?${params}`,
       );
 
       if (res.ok) {
@@ -401,7 +407,8 @@ export class ChatAggregator {
   async sendMessage(platform: ChatPlatform, content: string): Promise<boolean> {
     if (platform === 'youtube') return (await this.youtubeConnector?.sendMessage(content)) ?? false;
     if (platform === 'twitch') return (await this.twitchConnector?.sendMessage(content)) ?? false;
-    if (platform === 'facebook') return (await this.facebookConnector?.sendMessage(content)) ?? false;
+    if (platform === 'facebook')
+      return (await this.facebookConnector?.sendMessage(content)) ?? false;
     if (platform === 'local') return true;
     return false;
   }

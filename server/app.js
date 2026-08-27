@@ -80,6 +80,21 @@ import {
 } from './commercial/affiliate.js';
 import { buildYouTubeDestinationRedirectTarget } from './youtubeDestinationOAuthCallback.js';
 import { resolveFrontendOAuthCallbackUrl } from './frontendOAuthRedirect.js';
+import {
+  FACEBOOK_ACCOUNT_OAUTH_SCOPES,
+  getFacebookAuthorizationEndpoint,
+  getFacebookGraphBaseUrl,
+  normalizeFacebookGraphApiVersion,
+} from '../shared/facebookOAuth.js';
+
+const FACEBOOK_GRAPH_API_VERSION = normalizeFacebookGraphApiVersion(
+  process.env.FACEBOOK_GRAPH_API_VERSION,
+);
+const FACEBOOK_AUTHORIZATION_ENDPOINT = getFacebookAuthorizationEndpoint(
+  FACEBOOK_GRAPH_API_VERSION,
+);
+const FACEBOOK_BASE_URL = getFacebookGraphBaseUrl(FACEBOOK_GRAPH_API_VERSION);
+const FACEBOOK_TOKEN_ENDPOINT = `${FACEBOOK_BASE_URL}/oauth/access_token`;
 
 const app = express();
 app.set('trust proxy', true);
@@ -1700,7 +1715,7 @@ app.get(
 
     const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/facebook/callback`;
     const tokenRes = await fetch(
-      `https://graph.facebook.com/v18.0/oauth/access_token?` +
+      `${FACEBOOK_TOKEN_ENDPOINT}?` +
         new URLSearchParams({
           client_id: facebookAppId,
           client_secret: facebookAppSecret,
@@ -1717,9 +1732,9 @@ app.get(
       return;
     }
 
-    const meRes = await fetch(
-      `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${tokenData.access_token}`,
-    );
+    const meRes = await fetch(`${FACEBOOK_BASE_URL}/me?fields=id,name,email,picture.type(large)`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
     const me = await parseJsonResponse(meRes);
     if (!meRes.ok) {
       redirectToFrontendOAuth(req, res, {
@@ -1820,11 +1835,11 @@ app.get(
         return;
       }
       const redirectUri = `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/facebook/callback`;
-      const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
+      const authUrl = new URL(FACEBOOK_AUTHORIZATION_ENDPOINT);
       authUrl.searchParams.set('client_id', facebookAppId);
       authUrl.searchParams.set('redirect_uri', redirectUri);
       authUrl.searchParams.set('response_type', 'code');
-      authUrl.searchParams.set('scope', 'public_profile,email');
+      authUrl.searchParams.set('scope', FACEBOOK_ACCOUNT_OAUTH_SCOPES.join(','));
       authUrl.searchParams.set('state', state);
       return res.redirect(302, authUrl.toString());
     }
@@ -2097,10 +2112,7 @@ app.get('/api/config/oauth', requireAuth, (_req, res) => {
       oauth.youtubeClientId || String(process.env.YOUTUBE_CLIENT_ID || '').trim() || undefined,
     facebookAppId:
       oauth.facebookAppId || String(process.env.FACEBOOK_APP_ID || '').trim() || undefined,
-    facebookLoginConfigId:
-      oauth.facebookLoginConfigId ||
-      String(process.env.FACEBOOK_LOGIN_CONFIG_ID || '').trim() ||
-      undefined,
+    facebookGraphApiVersion: FACEBOOK_GRAPH_API_VERSION,
     twitchClientId:
       oauth.twitchClientId || String(process.env.TWITCH_CLIENT_ID || '').trim() || undefined,
     tiktokClientKey:
@@ -2148,6 +2160,8 @@ app.get('/api/public/oauth-debug', (req, res) => {
     hasYoutubeClientSecret: Boolean(String(process.env.YOUTUBE_CLIENT_SECRET || '').trim()),
     // The exact redirect URI this deployment sends, to paste into the console.
     oauthRedirectUri: `${getOAuthRedirectBaseUrl(req)}/api/auth/oauth/google/callback`,
+    facebookGraphApiVersion: FACEBOOK_GRAPH_API_VERSION,
+    facebookDestinationRedirectUri: getFrontendOAuthCallbackUrl(req),
   });
 });
 
@@ -2178,10 +2192,7 @@ app.get('/api/oauth/config/public', requireAuth, (req, res) => {
       String(process.env.YOUTUBE_CLIENT_ID || '').trim() || oauth.youtubeClientId || undefined,
     facebookAppId:
       String(process.env.FACEBOOK_APP_ID || '').trim() || oauth.facebookAppId || undefined,
-    facebookLoginConfigId:
-      String(process.env.FACEBOOK_LOGIN_CONFIG_ID || '').trim() ||
-      oauth.facebookLoginConfigId ||
-      undefined,
+    facebookGraphApiVersion: FACEBOOK_GRAPH_API_VERSION,
     twitchClientId:
       String(process.env.TWITCH_CLIENT_ID || '').trim() || oauth.twitchClientId || undefined,
     tiktokClientKey:
@@ -2762,14 +2773,6 @@ const tiktokApiRequest = async (accessToken) => {
 };
 
 // --- FACEBOOK OAUTH ---
-const configuredFacebookGraphVersion = String(
-  process.env.FACEBOOK_GRAPH_API_VERSION || 'v26.0',
-).trim();
-const FACEBOOK_GRAPH_API_VERSION = /^v\d+\.\d+$/.test(configuredFacebookGraphVersion)
-  ? configuredFacebookGraphVersion
-  : 'v26.0';
-const FACEBOOK_BASE_URL = `https://graph.facebook.com/${FACEBOOK_GRAPH_API_VERSION}`;
-const FACEBOOK_TOKEN_ENDPOINT = `${FACEBOOK_BASE_URL}/oauth/access_token`;
 
 /**
  * Auto-extend a Facebook user token via fb_exchange_token grant.
@@ -3158,29 +3161,37 @@ app.post(
     // Auto-refresh token before API calls so expired short-lived tokens don't block streaming
     fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, fb);
 
-    // Use page token if a page is selected, otherwise fall back to user token
-    const pageId = String(req.body?.pageId || fb.pageId || '').trim();
-    let streamToken = fb.accessToken;
-    let liveEndpoint = `${FACEBOOK_BASE_URL}/me/live_videos`;
-
-    if (pageId) {
-      // Fetch page access token
-      const pagesRes = await fetch(`${FACEBOOK_BASE_URL}/me/accounts?fields=id,name,access_token`, {
-        headers: { Authorization: `Bearer ${fb.accessToken}` },
-      });
-      const pagesData = await pagesRes.json();
-      const page = Array.isArray(pagesData?.data)
-        ? pagesData.data.find((p) => p.id === pageId)
-        : null;
-      if (!page?.access_token) {
-        return res.status(400).json({
-          message:
-            'The selected Facebook Page is unavailable. Reconnect Facebook and approve Page permissions.',
-        });
-      }
-      streamToken = page.access_token;
-      liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
+    // The automated flow is deliberately Page-only. Personal-profile live
+    // publishing is a different Meta permission/review path (`publish_video`)
+    // and must not be silently requested as part of Page streaming.
+    const pageId = String(req.body?.pageId || '').trim();
+    if (!pageId) {
+      return res.status(400).json({ message: 'Select a managed Facebook Page to go live.' });
     }
+
+    const pagesRes = await fetch(`${FACEBOOK_BASE_URL}/me/accounts?fields=id,name,access_token`, {
+      headers: { Authorization: `Bearer ${fb.accessToken}` },
+    });
+    const pagesData = await pagesRes.json();
+    if (!pagesRes.ok || pagesData?.error) {
+      return res.status(400).json({
+        message:
+          pagesData?.error?.message ||
+          'Facebook Pages could not be loaded. Reconnect Facebook and approve Page permissions.',
+      });
+    }
+    const page = Array.isArray(pagesData?.data)
+      ? pagesData.data.find((candidate) => candidate.id === pageId)
+      : null;
+    if (!page?.access_token) {
+      return res.status(400).json({
+        message:
+          'The selected Facebook Page is unavailable. Reconnect Facebook and approve Page permissions.',
+      });
+    }
+
+    const streamToken = page.access_token;
+    const liveEndpoint = `${FACEBOOK_BASE_URL}/${pageId}/live_videos`;
 
     const fbRes = await fetch(liveEndpoint, {
       method: 'POST',
@@ -3357,6 +3368,7 @@ app.get(
       const fb = await refreshFacebookTokenIfNeeded(req.auth.profile.uid, platforms.facebook);
       config.facebook = {
         accessToken: fb.accessToken,
+        graphApiVersion: FACEBOOK_GRAPH_API_VERSION,
         // liveVideoId is provided by the client as a query param if available
         liveVideoId: String(req.query.facebookLiveVideoId || '').trim() || null,
       };
