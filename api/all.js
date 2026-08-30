@@ -51,29 +51,3 @@ export default (req, res) => {
 
   return app(req, res);
 };
-
-// New route for handling message reactions
-app.post('/api/messages/:messageId/react', async (req, res) => {
-  const { messageId } = req.params;
-  const { reaction } = req.body;
-
-  try {
-    const message = await db.chatMessages.findOne({ where: { id: messageId } });
-    if (!message) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-
-    const reactions = message.reactions || {};
-    reactions[reaction] = (reactions[reaction] || 0) + 1;
-
-    await db.chatMessages.update({
-      where: { id: messageId },
-      data: { reactions },
-    });
-
-    return res.status(200).json({ message: 'Reaction added successfully' });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
