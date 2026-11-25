@@ -60,7 +60,7 @@ CLOUD_RUN_JOB_NAME=chatscream-url-worker
 CLOUD_WORKER_CALLBACK_URL=https://api.chatscream.live
 ```
 
-The backend's service account needs permission to run the job and read its
+The backend service account needs permission to run the job and read its
 executions (`roles/run.invoker` on the job, plus `run.executions.get` /
 `run.executions.cancel`). Auth uses Application Default Credentials, so on Cloud
 Run the attached service account is used and no key material is stored.
@@ -70,7 +70,7 @@ Run the attached service account is used and no key material is stored.
 `server/commercial/cloudRunWorker.js` is the client:
 
 - `startJob({ jobId, payload, callbackToken })` → runs the job with overrides
-- `getJob(executionId)` → maps Cloud Run's counters to a status
+- `getJob(executionId)` → maps Cloud Run counters to a status
 - `stopJob(executionId)` → cancels the execution
 - `health()` → whether the job exists and is reachable
 
@@ -93,9 +93,30 @@ of that file about what it does and does not prove.
 deliberate: a live broadcast that died is over, and silently restarting it would
 push a second stream at the destinations minutes after the fact.
 
+## Wired up
+
+The control plane now chooses Cloud Run Jobs as the worker provider and
+accepts the status callback (branch `cloud-broadcast-cloud-run`):
+
+- `server/commercial/cloudProvider.js` — provider abstraction. Cloud Run
+  Jobs is primary; the AWS external orchestrator remains the fallback while
+  `CLOUD_WORKER_API_URL`/`CLOUD_WORKER_API_TOKEN` are configured. Generates
+  a per-job callback token and persists only its SHA-256 hash.
+- `POST /api/cloud-v2/sessions/start` → creates a job execution with the
+  payload above and a per-job callback token (`server/commercial/router.js`).
+- `POST /api/cloud-v2/jobs/:jobId/status` → verifies the per-job callback
+  token, updates session state, ends sessions on terminal status
+  (`server/commercial/cloudJobCallback.js`, intercepted in
+  `server/entrypoint.js` before the requireAuth gate).
+- Periodic reconciliation against the Cloud Run executions API covers a
+  missed callback (`server/commercial/router.js`).
+
 ## Not done yet
 
-The control plane still needs wiring to choose this backend over the AWS one and
-to accept the status callback at
-`POST /api/cloud-v2/jobs/:jobId/status`. Until that lands, cloud broadcasting
-stays off and the landing page continues to describe it as in development.
+- Deploy the job with `deploy.sh` in this directory, set the backend env
+  vars (`GCP_PROJECT_ID`, `CLOUD_RUN_JOB_REGION`, `CLOUD_RUN_JOB_NAME`,
+  `CLOUD_WORKER_CALLBACK_URL`), and grant the backend service account
+  `run.invoker` plus executions `get`/`cancel` on the job.
+- A live end-to-end test: start a cloud broadcast, confirm the worker
+  reaches `running`, and confirm the session ends and billing closes on
+  `completed`.
