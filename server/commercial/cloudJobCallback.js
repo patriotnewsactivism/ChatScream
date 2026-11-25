@@ -69,6 +69,14 @@ const readJsonBody = (req) =>
     req.on("error", reject);
   });
 
+// The worker sends `at` as an ISO string. The usage ledger bills from a
+// millisecond timestamp, so convert here; the worker record keeps the ISO
+// form (consistent with getCloudWorkerJob).
+const parseCallbackAt = (value) => {
+  const ms = new Date(String(value || "")).getTime();
+  return Number.isFinite(ms) ? ms : Date.now();
+};
+
 const handleCloudJobCallback = async (req, res, jobId) => {
   try {
     const body = await readJsonBody(req);
@@ -92,11 +100,12 @@ const handleCloudJobCallback = async (req, res, jobId) => {
       sendJson(res, 400, { success: false, message: "Invalid callback status." });
       return;
     }
-    const endedAt =
-      body?.at || (TERMINAL_STATUSES.has(status) ? new Date().toISOString() : undefined);
-    await updateActiveCloudSessionWorker({ uid: owner.uid, sessionId: jobId, state: status, endedAt });
-    if (TERMINAL_STATUSES.has(status)) {
-      await endDurableCloudSession({ uid: owner.uid, sessionId: jobId, endedAt });
+    const isTerminal = TERMINAL_STATUSES.has(status);
+    const endedAtIso = body?.at || (isTerminal ? new Date().toISOString() : undefined);
+    const endedAtMs = body?.at ? parseCallbackAt(body.at) : isTerminal ? Date.now() : undefined;
+    await updateActiveCloudSessionWorker({ uid: owner.uid, sessionId: jobId, state: status, endedAt: endedAtIso });
+    if (isTerminal) {
+      await endDurableCloudSession({ uid: owner.uid, sessionId: jobId, endedAt: endedAtMs });
     }
     sendJson(res, 200, { success: true, status });
   } catch (error) {
