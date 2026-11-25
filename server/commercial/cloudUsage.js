@@ -1,4 +1,4 @@
-import { getUserByUid, putUser } from '../store.js';
+import { getUserByUid, listUsers, putUser } from "../store.js";
 
 export const PLAN_CLOUD_HOURS = Object.freeze({
   free: 0,
@@ -25,9 +25,9 @@ export const OVERAGE_RATES_CENTS_PER_HOUR = Object.freeze({
 const nowIso = () => new Date().toISOString();
 const roundHours = (value) => Math.round((Number(value) || 0) * 10000) / 10000;
 
-export const cloudHoursForPlan = (plan) => PLAN_CLOUD_HOURS[String(plan || 'free')] ?? 0;
+export const cloudHoursForPlan = (plan) => PLAN_CLOUD_HOURS[String(plan || "free")] ?? 0;
 export const destinationsForPlan = (plan) =>
-  PLAN_DESTINATION_LIMITS[String(plan || 'free')] ?? PLAN_DESTINATION_LIMITS.free;
+  PLAN_DESTINATION_LIMITS[String(plan || "free")] ?? PLAN_DESTINATION_LIMITS.free;
 
 export const overageRateCentsPerHour = (destinationCount) => {
   const count = Math.max(1, Number(destinationCount) || 1);
@@ -37,10 +37,10 @@ export const overageRateCentsPerHour = (destinationCount) => {
 };
 
 const getPeriodKey = (record) => {
-  const periodEnd = String(record?.profile?.subscription?.currentPeriodEnd || '').trim();
+  const periodEnd = String(record?.profile?.subscription?.currentPeriodEnd || "").trim();
   if (periodEnd) return `stripe:${periodEnd}`;
   const now = new Date();
-  return `calendar:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  return `calendar:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
 const freshUsage = (periodKey) => ({
@@ -140,17 +140,17 @@ export const startDurableCloudSession = async ({
 
 export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.now() }) => {
   const record = await getUserByUid(uid);
-  if (!record) return { ended: false, reason: 'user_not_found' };
+  if (!record) return { ended: false, reason: "user_not_found" };
   const usage = normalizeUsage(record);
   const active = usage.activeCloudSession;
   if (!active || active.sessionId !== sessionId) {
-    return { ended: false, reason: 'session_not_found', usage };
+    return { ended: false, reason: "session_not_found", usage };
   }
 
   const startMs = new Date(active.startTime || endedAt).getTime();
   const minutesUsed = Math.max(1, Math.ceil((endedAt - startMs) / 60000));
   const sessionHours = minutesUsed / 60;
-  const plan = String(record.profile?.subscription?.plan || 'free');
+  const plan = String(record.profile?.subscription?.plan || "free");
   const includedLimit = cloudHoursForPlan(plan);
   const priorHours = Math.max(0, Number(usage.cloudHoursUsed) || 0);
   const includedRemaining = Math.max(0, includedLimit - priorHours);
@@ -175,7 +175,7 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
     overageRateCentsPerHour: rate,
     overageAmountCents,
     meteringStatus:
-      overageAmountCents > 0 ? 'pending' : unbilledGraceHours > 0 ? 'capped_unbilled' : 'included',
+      overageAmountCents > 0 ? "pending" : unbilledGraceHours > 0 ? "capped_unbilled" : "included",
   };
 
   const next = {
@@ -207,6 +207,47 @@ export const endDurableCloudSession = async ({ uid, sessionId, endedAt = Date.no
     usage: next,
     session,
   };
+};
+
+// Find the owner of a durable active cloud session by its session id. Used
+// by the Cloud Run worker status callback
+// (server/commercial/cloudJobCallback.js) to authenticate and apply a
+// worker status without a user session.
+export const findUserByActiveCloudSession = async (sessionId) => {
+  if (!sessionId) return null;
+  const users = await listUsers();
+  for (const user of users || []) {
+    const usage = normalizeUsage(user);
+    const active = usage?.activeCloudSession;
+    if (active && active.sessionId === sessionId) {
+      return { uid: user.uid, record: user, usage };
+    }
+  }
+  return null;
+};
+
+// Update the worker record on a durable active cloud session (state and
+// end time). Used by the worker callback to reflect a running/finished
+// job between reconciliations.
+export const updateActiveCloudSessionWorker = async ({ uid, sessionId, state, endedAt }) => {
+  const record = await getUserByUid(uid);
+  if (!record) return null;
+  const usage = normalizeUsage(record);
+  const active = usage.activeCloudSession;
+  if (!active || active.sessionId !== sessionId) return null;
+  const next = {
+    ...usage,
+    activeCloudSession: {
+      ...active,
+      worker: {
+        ...(active.worker || {}),
+        state,
+        ...(endedAt ? { endedAt } : {}),
+      },
+    },
+  };
+  await saveUsage(record, next);
+  return next;
 };
 
 export const resetDurableCloudUsage = async (uid) => {
