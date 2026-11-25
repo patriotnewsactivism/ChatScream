@@ -1,5 +1,5 @@
 {
-  "id": "chat-ops-20260826-facebook-live-oauth",
-  "action": "deploy_backend",
-  "purpose": "Deploy merged Facebook Page Live OAuth v26 configuration and minimal permission set"
+  "id": "chat-ops-20261125-health-check",
+  "action": "health_check",
+  "purpose": "Diagnose backend 503 on /api/health — check Cloud Run service, latest ready revision, and health/ready/capabilities probes"
 }
