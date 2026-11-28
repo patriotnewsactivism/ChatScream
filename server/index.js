@@ -6,10 +6,34 @@ import app from './app.js';
 import {
   closeIdentityStorage,
   flushState,
+  getSession,
   initIdentityStorage,
   seedLeaderboard,
   setScreamBroadcaster,
 } from './store.js';
+
+// Validate a Bearer session token the same way requireAuth does (in-process:
+// the session store is local, so no HTTP round-trip is needed). Returns the
+// session's uid, or null when the token is missing, expired, or unknown.
+const verifyWsToken = async (token) => {
+  if (!token) return null;
+  try {
+    const session = await getSession(token);
+    return session?.uid ? String(session.uid) : null;
+  } catch (error) {
+    console.error('[WS] Session verification failed:', error.message);
+    return null;
+  }
+};
+
+const readWsToken = (req) => {
+  try {
+    const url = new URL(req.url || '/', 'http://ws.local');
+    return url.searchParams.get('token') || '';
+  } catch {
+    return '';
+  }
+};
 
 const port = Number(process.env.PORT || 8787);
 const server = http.createServer(app);
@@ -54,7 +78,11 @@ const broadcast = (roomId, msg, exclude) => {
 };
 
 wss.on('connection', (ws, req) => {
-  // Route /ws/signal/:roomId to the signaling handler
+  // Route /ws/signal/:roomId to the signaling handler.
+  // NOTE: signaling rooms stay open by design — WebRTC guests join by room
+  // link without an account, so the unguessable roomId is the invite secret.
+  // No server resources are spawned here (messages are only relayed between
+  // peers already in the room), unlike the ingest handler below.
   const url = req.url || '';
   const signalMatch = url.match(/^\/ws\/signal\/([^/?]+)/);
   if (signalMatch) {
@@ -84,16 +112,24 @@ wss.on('connection', (ws, req) => {
   }
 
   // ── Scream room: /ws/scream/:streamerUid ────────────────────────────────
+  // Only the streamer themself may listen: the token in ?token= must belong
+  // to the streamerUid in the path. Anyone else gets a 4401 and no alerts.
   const screamMatch = url.match(/^\/ws\/scream\/([^/?]+)/);
   if (screamMatch) {
     const streamerUid = screamMatch[1];
-    const room = getScreamRoom(streamerUid);
-    room.add(ws);
-    console.log(`🔔 Scream listener joined for streamer ${streamerUid} (${room.size} listeners)`);
+    verifyWsToken(readWsToken(req)).then((uid) => {
+      if (uid !== streamerUid) {
+        ws.close(4401, 'Authentication required.');
+        return;
+      }
+      const room = getScreamRoom(streamerUid);
+      room.add(ws);
+      console.log(`🔔 Scream listener joined for streamer ${streamerUid} (${room.size} listeners)`);
 
-    ws.on('close', () => {
-      room.delete(ws);
-      if (room.size === 0) screamRooms.delete(streamerUid);
+      ws.on('close', () => {
+        room.delete(ws);
+        if (room.size === 0) screamRooms.delete(streamerUid);
+      });
     });
 
     return; // Don't fall through to the RTMP ingest handler
@@ -106,6 +142,15 @@ wss.on('connection', (ws, req) => {
   // destination can be retried/hot-swapped without disturbing the rest.
   if (!url.startsWith('/ws/signal')) {
     console.log('🔌 New ingest WebSocket connection');
+
+    // Auth-first (mirrors the relay in server/relay.js): no destination,
+    // command, or media byte is accepted until the client proves a session
+    // with { type: 'auth', token }. Without this, anyone could spawn FFmpeg
+    // processes pointed at arbitrary RTMP targets.
+    let authenticated = false;
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) ws.close(4403, 'Authentication timeout.');
+    }, 15000);
 
     /** @type {Map<string, import('node:child_process').ChildProcess>} */
     const procs = new Map();
@@ -297,6 +342,28 @@ wss.on('connection', (ws, req) => {
     };
 
     ws.on('message', (data, isBinary) => {
+      if (!authenticated) {
+        // Only the auth handshake is accepted before authentication.
+        if (isBinary) return;
+        let msg;
+        try {
+          msg = JSON.parse(data.toString());
+        } catch {
+          return;
+        }
+        if (msg.type !== 'auth') return;
+        verifyWsToken(msg.token).then((uid) => {
+          if (!uid) {
+            ws.close(4401, 'Authentication required.');
+            return;
+          }
+          authenticated = true;
+          clearTimeout(authTimeout);
+          ws.send(JSON.stringify({ type: 'authenticated', uid }));
+        });
+        return;
+      }
+
       if (!isBinary) {
         try {
           const msg = JSON.parse(data.toString());
@@ -353,6 +420,7 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
       console.log('🔌 Ingest WebSocket connection closed');
+      clearTimeout(authTimeout);
       clearInterval(statsInterval);
       for (const [destId, proc] of procs) {
         intentionalKills.add(destId);

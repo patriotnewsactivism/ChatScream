@@ -28,6 +28,9 @@ RUN apk add --no-cache ffmpeg
 COPY package*.json ./
 RUN npm install --omit=dev
 COPY server ./server
+# server/app.js statically imports ../shared/facebookOAuth.js — without this
+# the stock image crashes on boot with ERR_MODULE_NOT_FOUND.
+COPY shared ./shared
 RUN mkdir -p uploads
 EXPOSE 8787
 
