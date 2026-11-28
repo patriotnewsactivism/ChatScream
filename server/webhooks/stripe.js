@@ -13,7 +13,8 @@ import {
 const STRIPE_WEBHOOK_SECRET = () => String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 
 // Internal plan IDs are intentionally stable so grandfathered subscribers keep their entitlements.
-const LIVE_PRICE_TO_PLAN = Object.freeze({
+// Exported so the billing routes use the same price -> plan map (single source of truth).
+export const LIVE_PRICE_TO_PLAN = Object.freeze({
   // Starter $19
   price_1U4uH8Q38lVRBBaogRLIp28w: 'pro',
   // Creator legacy $29 + current $39
@@ -36,6 +37,58 @@ const getInvoiceSubscriptionId = (invoice) =>
   objectId(invoice?.subscription) ||
   objectId(invoice?.parent?.subscription_details?.subscription) ||
   objectId(invoice?.subscription_details?.subscription);
+
+// Lazily constructed Stripe client (the webhook itself verifies signatures
+// with hand-rolled HMAC and does not need the SDK; plan resolution does).
+let stripeClient = null;
+const getStripeClient = async () => {
+  const secret = String(process.env.STRIPE_SECRET_KEY || '').trim();
+  if (!secret) return null;
+  if (!stripeClient) {
+    const { default: Stripe } = await import('stripe');
+    stripeClient = new Stripe(secret);
+  }
+  return stripeClient;
+};
+
+/**
+ * Resolve the purchased plan for a checkout.session.completed event.
+ * The webhook payload does NOT include line_items unless expanded, so the
+ * previous code read session.line_items (almost always empty) and left paid
+ * users on the Free plan. Prefer the subscription object (it carries its
+ * items); otherwise re-fetch the session with line_items expanded.
+ */
+const resolvePlanFromCheckoutSession = async (session) => {
+  const fromPriceId = (priceId) => getPlanFromPriceId(priceId);
+
+  const stripe = await getStripeClient();
+  if (stripe) {
+    try {
+      const subscriptionId = objectId(session.subscription);
+      if (subscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const plan = fromPriceId(subscription?.items?.data?.[0]?.price?.id);
+        if (plan) return plan;
+      }
+      const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+        expand: ['line_items'],
+      });
+      for (const item of fullSession?.line_items?.data || []) {
+        const plan = fromPriceId(item.price?.id);
+        if (plan) return plan;
+      }
+    } catch (error) {
+      console.error('[Stripe Webhook] Failed to resolve plan from Stripe API:', error.message);
+    }
+  }
+
+  // Fallback: whatever line items the payload itself carried (usually none).
+  for (const item of session.line_items?.data || []) {
+    const plan = fromPriceId(item.price?.id);
+    if (plan) return plan;
+  }
+  return null;
+};
 
 // Map Stripe price IDs to ChatScream plan tiers.
 const getPlanFromPriceId = (priceId) => {
@@ -196,12 +249,7 @@ async function handleCheckoutCompleted(session, { getUserByUid, putUser }) {
     return;
   }
 
-  const lineItems = session.line_items?.data || [];
-  let plan = null;
-  for (const item of lineItems) {
-    plan = getPlanFromPriceId(item.price?.id);
-    if (plan) break;
-  }
+  const plan = await resolvePlanFromCheckoutSession(session);
 
   const profile = {
     ...record.profile,

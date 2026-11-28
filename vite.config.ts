@@ -61,6 +61,9 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID': JSON.stringify(
         env.VITE_STRIPE_ENTERPRISE_PRICE_ID || '',
       ),
+      'import.meta.env.VITE_STRIPE_BUSINESS_PRICE_ID': JSON.stringify(
+        env.VITE_STRIPE_BUSINESS_PRICE_ID || '',
+      ),
     },
     resolve: {
       alias: {

@@ -70,7 +70,7 @@
       "destination": "/api/all"
     },
     {
-      "source": "/((?!api|assets|sw.js|manifest.json|favicon|icons).*)",
+      "source": "/((?!api|assets|sw.js|manifest.json|favicon|icons|robots.txt|sitemap.xml).*)",
       "destination": "/index.html"
     }
   ]

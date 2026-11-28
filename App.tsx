@@ -54,7 +54,7 @@ import {
 import { useAuth } from './contexts/AuthContext';
 import { createScreamAlert, ScreamAlert, calculateScreamDuration } from './services/chatScreamer';
 import ScreamOverlay from './components/ScreamOverlay';
-import { apiRequest, ApiRequestError, buildApiUrl } from './services/apiClient';
+import { apiRequest, ApiRequestError, buildApiUrl, buildWsUrl } from './services/apiClient';
 import { chatAggregator, AggregatedMessage } from './services/chatAggregator';
 import { isAdminEmail } from './services/stripe';
 import { getInternalStudioBridgeState } from './services/internalStudioBridge';
@@ -262,58 +262,67 @@ const App: FC = () => {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Connect to the scream WebSocket room for this streamer
-    const apiBase = buildApiUrl('').replace(/\/$/, '');
-    const wsBase = apiBase.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:');
-    const screamWsUrl = `${wsBase}/ws/scream/${user.uid}`;
+    // Connect to the scream WebSocket room for this streamer. The server
+    // only admits the streamer themself (the token must belong to the uid
+    // in the path). buildWsUrl maps http -> ws correctly; the old hand-rolled
+    // replace turned http origins into wss:// and broke local/dev sockets.
+    let closed = false;
+    let reconnectTimer: number | undefined;
 
-    try {
-      const ws = new WebSocket(screamWsUrl);
-      screamWsRef.current = ws;
+    const connect = () => {
+      const token = getCurrentSessionToken();
+      if (!token) return;
+      const screamWsUrl = `${buildWsUrl(`/ws/scream/${user.uid}`)}?token=${encodeURIComponent(token)}`;
 
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'scream_alert' && msg.alert) {
-            const alert = createScreamAlert(
-              msg.alert.donorName || 'Anonymous',
-              Number(msg.alert.amount) || 5,
-              msg.alert.message || '',
-              user.uid,
-            );
-            if (alert) {
-              setActiveScream(alert);
-              // Play sound effect
-              import('./services/chatScreamer').then(({ playScreamSound }) => {
-                playScreamSound(alert.tier);
-              });
+      try {
+        const ws = new WebSocket(screamWsUrl);
+        screamWsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'scream_alert' && msg.alert) {
+              const alert = createScreamAlert(
+                msg.alert.donorName || 'Anonymous',
+                Number(msg.alert.amount) || 5,
+                msg.alert.message || '',
+                user.uid,
+              );
+              if (alert) {
+                setActiveScream(alert);
+                // Play sound effect
+                import('./services/chatScreamer').then(({ playScreamSound }) => {
+                  playScreamSound(alert.tier);
+                });
+              }
             }
+          } catch {
+            // Bad message — ignore
           }
-        } catch {
-          // Bad message — ignore
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        // Reconnect after 5 seconds if still streaming
-        setTimeout(() => {
-          if (screamWsRef.current === ws && user?.uid) {
-            try {
-              screamWsRef.current = new WebSocket(screamWsUrl);
-            } catch {
-              // Give up silently
-            }
-          }
-        }, 5000);
-      };
+        ws.onclose = () => {
+          // Reconnect through connect() so onmessage/onclose are reattached.
+          // A bare `new WebSocket(...)` here used to leave the studio
+          // permanently deaf to donation alerts after the first disconnect.
+          if (closed) return;
+          reconnectTimer = window.setTimeout(() => {
+            if (!closed && user?.uid) connect();
+          }, 5000);
+        };
+      } catch {
+        // WebSocket not available
+      }
+    };
 
-      return () => {
-        ws.close();
-        screamWsRef.current = null;
-      };
-    } catch {
-      // WebSocket not available
-    }
+    connect();
+
+    return () => {
+      closed = true;
+      window.clearTimeout(reconnectTimer);
+      screamWsRef.current?.close();
+      screamWsRef.current = null;
+    };
   }, [user?.uid]);
   const [showPostStream, setShowPostStream] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);

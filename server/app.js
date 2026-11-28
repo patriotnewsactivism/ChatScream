@@ -287,6 +287,60 @@ app.use('/api/ai-moderator', rateLimiter(60), requireAuth, aiModeratorRouter);
 app.use('/api/internal-studio/ingress', rateLimiter(60), internalStudioIngressRouter);
 app.use('/api/internal-studio/admin', rateLimiter(60), requireAuth, internalStudioAdminRouter);
 
+// ── Stripe billing (checkout / portal / ChatScream donations) ────────────
+// The billing router enforces requireAuth on the account routes itself;
+// /api/billing/chatscream stays open so viewers can donate anonymously.
+app.use(
+  '/api/billing',
+  (() => {
+    let router = null;
+    return async (req, res, next) => {
+      if (!router) {
+        try {
+          const { createBillingRouter } = await import('./billing.js');
+          router = createBillingRouter({ getUserByUid, putUser, requireAuth });
+        } catch (err) {
+          console.error('Failed to load billing router:', err);
+          return res.status(500).json({ message: 'Billing is not available' });
+        }
+      }
+      return router(req, res, next);
+    };
+  })(),
+);
+
+// ── Leaderboard (public read; the landing page polls this every 30s) ─────
+// The landing page reads `data.entries`; the dashboard reads the per-streamer
+// stats shape. Both come from the same store state the Stripe webhook keeps.
+app.get(
+  '/api/leaderboard',
+  asyncHandler(async (_req, res) => {
+    const entries = loadState().leaderboard || [];
+    res.json({ entries });
+  }),
+);
+
+app.get(
+  '/api/leaderboard/stats',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const streamerUid = String(req.query.streamerUid || req.auth.profile.uid || '');
+    const entries = loadState().leaderboard || [];
+    const entry = entries.find((e) => e.uid === streamerUid || e.username === streamerUid);
+    const winners = typeof getWeeklyWinners === 'function' ? getWeeklyWinners() || [] : [];
+    const previousWins = winners.filter((w) => w.uid === streamerUid || w.username === streamerUid).length;
+    res.json({
+      streamerUid,
+      streamerName: entry?.username || streamerUid,
+      rank: entry?.rank || 0,
+      screams: entry?.screams || 0,
+      donated: entry?.donated || 0,
+      totalEntries: entries.length,
+      previousWins,
+    });
+  }),
+);
+
 // Multer Setup
 const uploadDir = process.env.VERCEL
   ? path.join('/tmp', 'uploads')
@@ -301,15 +355,28 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    // Sanitize the client-supplied name: strip any path separators so a
+    // crafted originalname can never escape uploadDir.
+    const safeName = path
+      .basename(String(file.originalname || 'file'))
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .slice(0, 100);
+    cb(null, `${uniqueSuffix}-${safeName || 'file'}`);
   },
 });
+
+// Media assets are user uploads served back publicly: only image/video/audio
+// are accepted, and all three routes require a signed-in account.
+const MEDIA_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
+const isMediaMimeType = (mimetype) =>
+  MEDIA_MIME_PREFIXES.some((prefix) => String(mimetype || '').startsWith(prefix));
 
 const upload = multer({ storage });
 app.use('/uploads', express.static(uploadDir));
 
 app.get(
   '/api/media/list',
+  requireAuth,
   asyncHandler(async (req, res) => {
     const assets = listMediaAssets();
     res.json({ assets });
@@ -318,10 +385,21 @@ app.get(
 
 app.post(
   '/api/media/upload',
+  requireAuth,
   upload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) {
       res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+
+    if (!isMediaMimeType(req.file.mimetype)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {
+        // Best effort cleanup of the rejected upload.
+      }
+      res.status(400).json({ message: 'Only image, video, and audio uploads are allowed.' });
       return;
     }
 
@@ -464,13 +542,16 @@ app.post(
 
 app.delete(
   '/api/media/:id',
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const assets = listMediaAssets();
     const asset = assets.find((a) => a.id === id);
     if (asset && asset.filename) {
-      const filePath = path.join(uploadDir, asset.filename);
-      if (fs.existsSync(filePath)) {
+      // Resolve inside uploadDir: a stored filename must never delete
+      // outside the uploads directory (e.g. a legacy unsanitized name).
+      const filePath = path.resolve(uploadDir, path.basename(String(asset.filename)));
+      if (filePath.startsWith(path.resolve(uploadDir) + path.sep) && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
@@ -1452,11 +1533,10 @@ app.post(
     }
 
     const payload = getGenericResetResponse();
-    if (
-      (process.env.NODE_ENV === 'test' ||
-        String(process.env.AUTH_INCLUDE_RESET_TOKEN_IN_RESPONSE || '').toLowerCase() === 'true') &&
-      result.token
-    ) {
+    // The live reset token is only ever returned in test runs. There is no
+    // production reason to echo it: the endpoint is unauthenticated, so
+    // returning the token here would let anyone take over the account.
+    if (process.env.NODE_ENV === 'test' && result.token) {
       payload.resetToken = result.token;
       payload.expiresAt = result.expiresAt;
     }
@@ -1823,7 +1903,12 @@ app.get(
       ref: referral,
     });
     if (!state) {
-      res.status(500).json({ message: 'Failed to initialize secure sign-in state.' });
+      // createAuthState fails exactly when no state-signing secret exists;
+      // that is missing configuration, not a server error.
+      res.status(503).json({
+        message:
+          'Sign-in is not configured. Set AUTH_STATE_SECRET (or GOOGLE_CLIENT_SECRET) on the API server.',
+      });
       return;
     }
 
@@ -1831,7 +1916,7 @@ app.get(
       const facebookAppId = String(process.env.FACEBOOK_APP_ID || '').trim();
       if (!facebookAppId) {
         res
-          .status(500)
+          .status(503)
           .json({ message: 'Facebook sign-in is not configured. Set FACEBOOK_APP_ID.' });
         return;
       }
@@ -1848,14 +1933,14 @@ app.get(
     // Google
     const { clientId, clientSecret } = getGoogleAuthCredentials();
     if (!clientId || !clientSecret) {
-      res.status(500).json({
+      res.status(503).json({
         message: 'Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
       });
       return;
     }
 
     if (!getAuthStateSecret()) {
-      res.status(500).json({
+      res.status(503).json({
         message:
           'Google sign-in state secret is missing. Set AUTH_STATE_SECRET (or GOOGLE_CLIENT_SECRET).',
       });

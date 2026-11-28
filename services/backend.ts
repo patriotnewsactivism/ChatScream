@@ -149,7 +149,10 @@ const buildAuthUser = (session: StoredSession): AuthUser => ({
     } else if (!ensureActiveSession()) {
       await withTimeout(hydrateSessionFromServer(), 5000, null);
     }
-    return ensureActiveSession()?.token || session.token || '';
+    // Never fall back to the captured (possibly expired) session token:
+    // after a failed refresh the caller must re-authenticate instead of
+    // sending a dead token and collecting 401s.
+    return ensureActiveSession()?.token || '';
   },
   getIdTokenResult: async (forceRefresh = false) => {
     // Only hit the network if explicitly asked or session is truly expired
@@ -160,8 +163,8 @@ const buildAuthUser = (session: StoredSession): AuthUser => ({
     }
     const activeSession = ensureActiveSession();
     return {
-      token: activeSession?.token || session.token || '',
-      expirationTime: activeSession?.expiresAt || session.expiresAt || defaultExpirationTime(),
+      token: activeSession?.token || '',
+      expirationTime: activeSession?.expiresAt || new Date(0).toISOString(),
     };
   },
 });
@@ -754,10 +757,26 @@ export const signInWithEmail = async (email: string, password: string): Promise<
 export const completeRedirectSignIn = async (): Promise<{ processed: boolean }> => {
   const sessionFromUrl = parseSessionFromRedirectUrl();
   if (sessionFromUrl) {
-    setCurrentSession(sessionFromUrl);
+    // Never trust URL params as a session. The token in the URL is only a
+    // bearer claim: validate it against the server and take the identity
+    // from the server's response, never from the URL. A crafted link
+    // carrying an attacker's token can no longer plant the attacker's
+    // identity (or any spoofed uid/email/displayName) in the victim's
+    // browser. Params are cleared either way so the token never lingers
+    // in the address bar or history.
     clearRedirectSessionParams();
     consumePendingReferral();
-    return { processed: true };
+    try {
+      const validated = await apiRequest<unknown>('/api/auth/session', {
+        method: 'GET',
+        token: sessionFromUrl.token,
+      });
+      const serverSession = applySessionFromResponse(validated);
+      if (serverSession) return { processed: true };
+    } catch {
+      // Invalid/expired token in the URL — fall through to the stored
+      // session below instead of storing anything from the link.
+    }
   }
 
   const hydrated = await hydrateSessionFromServer();

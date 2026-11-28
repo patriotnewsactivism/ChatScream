@@ -139,7 +139,7 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const apiBase = import.meta.env.VITE_API_URL || '';
+        const apiBase = import.meta.env.VITE_API_BASE_URL || '';
         const res = await fetch(`${apiBase}/api/leaderboard`);
         if (res.ok) {
           const data = await res.json();
